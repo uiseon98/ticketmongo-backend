@@ -1,0 +1,164 @@
+version: "3.9"  # Docker Compose 버전 정의
+
+services:
+  # Redis 컨테이너 정의 (좌석 캐시 및 분산락 처리) - 초기 개발 ~ 최종 배포까지 계속 사용
+  redis-cache:
+    image: redis:7.0-alpine  # Redis 공식 경량 이미지 사용
+    container_name: redis-cache  # 로컬에서 확인할 컨테이너 이름
+    ports:
+      - "6379:6379"  # 호스트 ↔ 컨테이너 포트 매핑
+    command: redis-server --save 60 1 --appendonly yes  # Redis 서버 실행 시 적용할 명령어(저장 정책 + AOF 영속성 설정)
+    # --save 60 1: 60초 동안 1개 이상의 키가 변경되면 디스크에 저장(스냅샷)
+    # --appendonly yes: 모든 쓰기 명령을 파일에 기록하여 데이터 영속성 강화(AOF)
+    volumes:
+      - redis-data:/data  # 로컬 Docker 볼륨에 데이터 보존('redis-data'라는 Docker 볼륨을 컨테이너의 /data 디렉토리에 마운트합니다. 이를 통해 컨테이너가 삭제되어도 Redis 데이터가 보존됩니다.)
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]  # 헬스체크 - ping → pong
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # LocalStack 컨테이너 (AWS 서비스 모킹: SQS, S3 등) - 초기 개발 ~ AWS 마이그레이션 직전까지
+  localstack:
+    image: localstack/localstack:latest # 사용할 Docker 이미지 (최신 버전의 LocalStack)
+    container_name: localstack  # 컨테이너에 부여할 고유한 이름
+    ports:
+      - "4566:4566"  # LocalStack의 모든 AWS 서비스 공통 포트
+    environment:
+      - SERVICES=sqs  # 사용할 AWS 모킹 서비스만 지정. 필요한 것만 명시하면 더 가볍게 실행됨 (현재 설정: sqs만 사용)  #lambda,s3
+      - AWS_DEFAULT_REGION=ap-northeast-2  # 기본 리전
+      - INIT_SCRIPTS_PATH=/docker-entrypoint-initaws.d  # 초기 실행 스크립트 위치(컨테이너 시작 시 자동으로 실행)
+      - EAGER_SERVICE_LOADING=0  # 느리게 로딩 (불필요한 자원 낭비 방지, 0이 기본값)
+      - DEBUG=0  # 디버깅 비활성화
+    volumes:
+      - ./localstack-init:/docker-entrypoint-initaws.d  # 초기 큐 생성 스크립트 mount
+        # PC의 ./localstack-init 폴더를 컨테이너의 지정된 경로에 마운트합니다.
+      # ./localstack-init 폴더에 쉘 스크립트를 넣어두면, 컨테이너 시작 시 SQS 큐 생성 등을 자동화할 수 있습니다.
+    healthcheck:
+      test: [ "CMD-SHELL", "awslocal sqs list-queues" ]  # SQS 큐 리스트 명령이 실행되면 OK(SQS가 준비되었는지 확인하는 확실한 방법)
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ✅ Nginx 컨테이너 - 프록시(Reverse Proxy) + 로드밸런서 역할 (예정) (통합 게이트웨이)
+  #   - 후기 배포 단계 (AWS 상에서 로드밸런서로 역할할 때 주석 해제)
+  #   → 내부에서 앱 정상 작동하고 나면 프록시 구성 시 해제
+  #  nginx:
+  #    image: nginx:alpine
+  #    container_name: nginx-lb
+  #    ports:
+  #      - "80:80"  # 외부의 80번 포트를 컨테이너의 80번 포트에 연결(외부 포트 → 내부 포트로 모든 HTTP 요청 수신)
+  #    volumes:
+  #      - ./nginx.conf:/etc/nginx/conf.d/default.conf  # 현재 프로젝트 루트에 있는 nginx.conf 컨테이너 내부 경로로 마운트
+  #    depends_on:
+  #      app:
+  #        condition: service_healthy  # app 서비스가 healthy 상태가 된 후에 nginx가 시작
+
+  # 💤 WebSocket 서버 (좌석 현황 실시간 반영) - 중기 통합 테스트 또는 후기 단계에서 구현 여유 있을 시 해제
+  # app-websocket:
+  #   build: .  # 현재 디렉토리에 Dockerfile이 있다고 가정
+  #   container_name: websocket-server
+  #   ports:
+  #     - "8081:8081"  # WebSocket 전용 포트
+  #   environment:
+  ##       - SPRING_PROFILES_ACTIVE=docker
+  ##       - SERVER_PORT=8081
+  ##       - SPRING_DATASOURCE_URL
+  ##       - SPRING_DATASOURCE_USERNAME
+  ##       - SPRING_DATASOURCE_PASSWORD
+  ##       - SPRING_DATA_REDIS_HOST
+  ##       - SPRING_DATA_REDIS_PORT
+  ##       - SQS_ENDPOINT=http://localstack:4566
+  #
+  #   depends_on:
+  #     redis-cache:
+  #       condition: service_healthy
+  #     localstack:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:8081/actuator/health" ]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+
+  # ⚙️ Spring Boot Application (app) (백엔드 서버)
+  #   - 중기 통합 테스트 ~ 후기 배포까지 사용
+  #   → localstack + redis + Aiven 세팅 확인 후 주석 해제
+  app:
+    build: .
+    # 포트포워딩은 Nginx가 담당하므로 여기서는 주석 처리하거나 삭제
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xmx512m -XX:MaxRAMPercentage=50.0   # 메모리 제한 명시적 설정
+
+      # .env 파일에서 아래 변수들의 값을 자동으로 읽어옴
+      #        - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
+      - SERVER_PORT=${SERVER_PORT}
+      - DB_URL=${DB_URL}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SPRING_DATA_REDIS_HOST=${SPRING_DATA_REDIS_HOST}
+      - SPRING_DATA_REDIS_PORT=${SPRING_DATA_REDIS_PORT}
+      - SPRING_DATA_REDIS_USERNAME=${SPRING_DATA_REDIS_USERNAME}
+      - SPRING_DATA_REDIS_PASSWORD=${SPRING_DATA_REDIS_PASSWORD}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_PROFILE_BUCKET=${SUPABASE_PROFILE_BUCKET}
+      - SUPABASE_POSTER_BUCKET=${SUPABASE_POSTER_BUCKET}
+      - SUPABASE_DOCS_BUCKET=${SUPABASE_DOCS_BUCKET}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS}
+      - SQS_ENDPOINT=http://localstack:4566  # 또는 ${SQS_ENDPOINT} 중 택 1
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY}
+
+      # Localstack SQS 엔드포인트
+      - SQS_ENDPOINT=http://localstack:4566
+
+    depends_on:
+      #      mysql-db:
+      #        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 768M
+
+  # ⚠️ MySQL (로컬 개발 및 중기 통합 테스트에서 Aiven 장애 시 임시 대응용으로만 사용)
+  # - Aiven 또는 RDS 사용 시 주석 유지 (사용 안 함)
+  # - AWS 마이그레이션(후기) 단계에서는 완전 제외됨 (RDS -> AWS가 제공하는 완전관리형 DB 서비스)
+  # - 즉, 초기부터 후기까지 대부분 주석 상태 유지 (예외적 상황에만 해제)
+#  mysql-db:
+#    image: mysql:8.0   # 사용할 Docker 이미지 (최신 버전의 MySQL)
+#    container_name: mysql-db   # 컨테이너에 부여할 고유한 이름
+#    ports:
+#      - "3306:3306"    # PC(Host)의 3306 포트와 컨테이너의 3306 포트를 연결
+#    environment:
+#      MYSQL_ROOT_PASSWORD: rootpass    # MySQL root 계정의 비밀번호를 설정
+#      MYSQL_DATABASE: ticketing_db     # 컨테이너 생성 시 자동으로 생성할 데이터베이스 이름을 설정
+#      TZ: Asia/Seoul
+#    volumes:
+#      - mysql-data:/var/lib/mysql
+#    healthcheck:   # 헬스 체크 추가
+#      test: [ "CMD", "mysqladmin", "ping", "-uroot", "-prootpass" ]
+#      interval: 5s
+#      timeout: 3s
+#      retries: 10
+
+# 볼륨 선언부 (삭제 시에도 데이터는 유지)
+volumes:
+  redis-data:  # Redis 데이터 저장용 ('redis-data' 라는 이름의 Docker Named Volume을 선언)
+  mysql-data:  # MySQL 볼륨도 미리 정의 (실제 사용은 안함)
