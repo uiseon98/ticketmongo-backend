@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate             # 운영은 반드시 validate (자동 변경 금지)
+    show-sql: false                  # 운영에서는 SQL 출력 비활성화
+
+  logging:
+    level:
+      root: WARN
+      com.team03: INFO              # 운영 로그는 최소한만 출력
+
+swagger:
+  enabled: false                    # 운영에서는 Swagger 비공개

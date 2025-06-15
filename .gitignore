@@ -1,0 +1,67 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+#-----------------
+
+# 환경 변수 파일
+.env
+
+# 개발 환경에서의 yml
+*-dev.*
+
+# 로그 파일
+*.log
+
+# 운영체제별 숨김 파일
+.DS_Store
+Thumbs.db
+
+# API 키 등 민감 정보 백업 파일
+*.secret
+*.key
+*.pem
+
+# 빌드 산출물 (이미 일부 포함되어 있지만 명확하게 정리)
+target/
+.gradle/
+
+# 테스트 리포트
+/test-output/
+
+# IDE 설정 (이미 포함되어 있지만 재확인)
+.idea/

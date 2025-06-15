@@ -1,0 +1,111 @@
+package com.team03.ticketmon._global.config;
+
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity(
+        securedEnabled = true,
+        prePostEnabled = true,
+        jsr250Enabled = true
+)
+public class SecurityConfig {
+
+    // 🔐 JWT 필터 자리 확보 (JWT 인증 필터는 로그인/토큰 담당자가 구현 예정)
+    // 구현 후 아래 필터 삽입 코드의 주석을 해제하면 Security와 연동됩니다.
+    // private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))  // 프론트엔드 요청(CORS) 허용
+                .csrf(AbstractHttpConfigurer::disable)  // CSRF 토큰 비활성화 (JWT 기반 인증 시스템에서는 사용 안 함)
+                .sessionManagement(session ->   // 세션 사용하지 않는 무상태(stateless) 서버 설정
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                .formLogin(AbstractHttpConfigurer::disable) // 기본 로그인 폼("/login") 비활성화 -> 우리는 자체 로그인 api 사용 예정
+                .httpBasic(AbstractHttpConfigurer::disable) // 브라우저 팝업 로그인 방식 (HTTP Basic 인증)도 비활성화
+                .authorizeHttpRequests(auth -> auth // URL 별 접근 권한 설정
+                                // 인증 없이 접근 허용할 경로들 (프론트 페이지, Swagger 문서, Auth 관련(로그인/회원가입) 등
+                                .requestMatchers("/", "/index.html").permitAll()
+                                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                                .requestMatchers("/api/auth/**").permitAll()
+
+                                // 관리자 전용 경로 (ADMIN 권한 필요)
+                                // 나중에 권한 로직 추가(JWT 구현) 후 권한이 부여되면 주석 해제
+                                // .requestMatchers("/admin/**").hasRole("ADMIN")
+
+                                // 전체 인증 없이 API 테스트 가능(초기 개발 단계 / 추후 JWT 완성 시 주석 처리)
+                                .anyRequest().permitAll()
+                        // 나머지 모든 요청은 인증만 되면 접근 허용 (추후 JWT 완성 시 주석 제거)
+//                        .anyRequest().authenticated()
+                )
+
+                // 인증/인가 실패(인증 실패(401), 권한 부족(403)) 시 반환되는 예외 응답 설정
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);   // 401
+                            response.getWriter().write("Unauthorized: " + authException.getMessage());
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);   // 403
+                            response.getWriter().write("Access Denied: " + accessDeniedException.getMessage());
+                        })
+                )
+
+                // 로그아웃 시 세션 무효화 및 쿠키 삭제 설정 (JWT 기반에서는 토큰 무효화 로직은 따로 구현해야 함)
+                .logout(logout -> logout
+                        .logoutUrl("/logout")   // 로그아웃 요청 경로
+                        .invalidateHttpSession(true)    // 세션 무효화 (거의 의미 없음. JWT라서)
+                        .deleteCookies("JSESSIONID", "jwt_token")   // 쿠키 삭제
+                        .permitAll()
+                );
+
+        // 🔐 JWT 필터 삽입 위치 확보 (로그인/토큰 담당자가 JwtAuthenticationFilter 구현 완료 후 주석 해제)
+        // http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+
+        // 허용할 프론트엔드 도메인 (로컬 개발용)
+        config.setAllowedOrigins(Arrays.asList(
+                "http://localhost:3000",
+                "http://localhost:8080"
+        ));
+
+        // 허용할 HTTP 메서드
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+
+        // 요청 시 허용할 헤더
+        config.setAllowedHeaders(Arrays.asList(
+                "Authorization", "Content-Type", "X-Requested-With", "Accept",
+                "Origin", "X-CSRF-Token", "Cookie", "Set-Cookie"
+        ));
+
+        // 인증 정보 포함한 요청 허용 (credentials: true)
+        config.setAllowCredentials(true);
+
+        // 위 설정을 전체 경로(/)에 적용
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+}
