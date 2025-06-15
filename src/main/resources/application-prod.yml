@@ -9,11 +9,40 @@ spring:
     hibernate:
       ddl-auto: validate             # 운영은 반드시 validate (자동 변경 금지)
     show-sql: false                  # 운영에서는 SQL 출력 비활성화
+  #    properties:
+  #      hibernate:
+  #        format_sql: true
 
-  logging:
-    level:
-      root: WARN
-      com.team03: INFO              # 운영 로그는 최소한만 출력
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+      username: ${SPRING_DATA_REDIS_USERNAME}
+      password: ${SPRING_DATA_REDIS_PASSWORD}
+
+supabase:
+  url: ${SUPABASE_URL}
+  key: ${SUPABASE_KEY}
+  profile-bucket: ${SUPABASE_PROFILE_BUCKET}
+  poster-bucket: ${SUPABASE_POSTER_BUCKET}
+  docs-bucket: ${SUPABASE_DOCS_BUCKET}
+
+jwt:
+  secret: ${JWT_SECRET_KEY}
+  expiration: ${JWT_EXPIRATION_MS}
+
+aws:
+  sqs:
+    endpoint: ${SQS_ENDPOINT}
+    access-key: ${AWS_ACCESS_KEY}
+    secret-key: ${AWS_SECRET_KEY}
+
+logging:
+  level:
+    root: WARN
+    #    com.team03: INFO              # 운영 로그는 최소한만 출력
+    com.team03: WARN              # INFO보다 더 낮춰도 괜찮음
+    # -> 실시간 모니터링 툴이 있지 않다면, 불필요한 로그까지 나오는 걸 방지할 수 있음
 
 swagger:
   enabled: false                    # 운영에서는 Swagger 비공개
