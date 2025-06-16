@@ -65,3 +65,6 @@ target/
 
 # IDE 설정 (이미 포함되어 있지만 재확인)
 .idea/
+
+# Supabase Token
+gradle.properties

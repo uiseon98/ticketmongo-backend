@@ -21,6 +21,14 @@ configurations {
 
 repositories {
     mavenCentral()
+    maven {
+        name = "SupabasePackages"
+        url = uri("https://maven.pkg.github.com/supabase-community/storage-java")
+        credentials {
+            username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_PACKAGES_USER")
+            password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_PACKAGES_TOKEN")
+        }
+    }
 }
 
 dependencies {
@@ -28,6 +36,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'    // SpringDoc: Swagger UI 자동 문서화 도구 (OpenAPI 3 기반)
+    implementation "io.supabase:storage-java:1.1.0" // Supabase Storage 사용을 위한 Java SDK (파일 업로드/조회 등 API 지원)
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'com.mysql:mysql-connector-j'
