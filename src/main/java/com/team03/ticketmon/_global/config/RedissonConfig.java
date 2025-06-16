@@ -37,7 +37,7 @@ public class RedissonConfig {
         Config config = new Config();
 
         // Redis 연결 URL 구성
-        // rediss://default:${PASSWORD}@my-valkey-zxcvbnm856311-fe91.e.aivencloud.com:24692
+        // rediss://${USERNAME}:${PASSWORD}@${HOST}:${PORT}
         String redisUrl = "rediss://%s:%s@%s:%d".formatted(redisUsername, redisPassword, redisHost, redisPort);
 
         // 단일 서버 모드 설정
