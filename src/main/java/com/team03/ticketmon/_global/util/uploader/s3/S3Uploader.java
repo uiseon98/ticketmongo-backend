@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
  * </p>
  */
 // @Component   // S3 마이그레이션 시 주석 해제
+// @Profile("s3")
 public class S3Uploader implements StorageUploader {
     @Override
     public String uploadFile(MultipartFile file, String bucket, String path) {

@@ -4,6 +4,7 @@ import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import io.supabase.StorageClient;
 //import io.supabase.common.SupabaseException;
 import io.supabase.errors.StorageException; // 1.1.0
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -18,6 +19,7 @@ import java.util.concurrent.ExecutionException;
  * <p>{@link StorageUploader} 인터페이스를 구현하여 Supabase 스토리지에 파일을 업로드합니다.</p>
  */
 @Component
+@Profile("supabase") // 개발 단계에선 supabase 사용
 public class SupabaseUploader implements StorageUploader {
 
     private final StorageClient storageClient;

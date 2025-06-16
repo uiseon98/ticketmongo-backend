@@ -38,7 +38,9 @@ dependencies {
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'    // SpringDoc: Swagger UI 자동 문서화 도구 (OpenAPI 3 기반)
     implementation "io.supabase:storage-java:1.1.0" // Supabase Storage 사용을 위한 Java SDK (파일 업로드/조회 등 API 지원)
     // Spring Boot 3.x 환경에서 S3 자동 구성 사용
-    implementation 'io.awspring.cloud:spring-cloud-aws-starter-s3'  // S3 마이그레이션 대비
+    implementation 'io.awspring.cloud:spring-cloud-aws-starter-s3:3.4.0'  // S3 마이그레이션 대비
+//    implementation 'software.amazon.awssdk:s3:2.31.63' // S3Config에서 직접 S3Client 쓸 때 명시적 추가 (IDE 인식 문제 방지)
+
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'com.mysql:mysql-connector-j'

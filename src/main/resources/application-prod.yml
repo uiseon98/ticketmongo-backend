@@ -1,4 +1,6 @@
 spring:
+  profiles:
+    include: s3  # ✅ S3 관련 Bean만 등록되게
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -20,12 +22,29 @@ spring:
       username: ${SPRING_DATA_REDIS_USERNAME}
       password: ${SPRING_DATA_REDIS_PASSWORD}
 
-supabase:
+supabase: # s3로 마이그레이션 시 주석 처리 - 운영 배포 전 (Supabase 사용)
   url: ${SUPABASE_URL}
   key: ${SUPABASE_KEY}
   profile-bucket: ${SUPABASE_PROFILE_BUCKET}
   poster-bucket: ${SUPABASE_POSTER_BUCKET}
   docs-bucket: ${SUPABASE_DOCS_BUCKET}
+
+# s3로 마이그레이션 진행 시 아래 주석 해제 - 마이그레이션 후 (S3 사용)
+#cloud:
+#  aws:
+#    credentials:
+#      access-key: YOUR_AWS_ACCESS_KEY_ID         # 🔒 AWS IAM 사용자 Access Key
+#      secret-key: YOUR_AWS_SECRET_ACCESS_KEY     # 🔒 AWS IAM 사용자 Secret Key
+#    region:
+#      static: ap-northeast-2                     # 예시: 서울 리전 (본인 환경에 맞게 변경)
+#    s3:
+#      bucket: ticketmon-prod-assets         # [권장] 단일 버킷
+#      # prefix(폴더) 기준 관리, supabase → s3 마이그레이션에 최적화
+#      profile-prefix: profile-imgs/        # ex) profile-imgs/{userId}.jpg
+#      poster-prefix: poster-imgs/          # ex) poster-imgs/{posterId}.jpg
+#      seller-docs-prefix: seller-docs/     # ex) seller-docs/{uuid}.pdf
+#      # 실제 Key: {prefix}{파일명}
+#      # 운영 배포시 prod-assets, dev는 dev-assets 등 환경 분리                # S3 버킷 이름 (개발/운영 구분 가능)
 
 jwt:
   secret: ${JWT_SECRET_KEY}
