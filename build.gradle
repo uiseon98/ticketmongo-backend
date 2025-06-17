@@ -26,7 +26,7 @@ repositories {
         url = uri("https://maven.pkg.github.com/supabase-community/storage-java")
         credentials {
             username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_PACKAGES_USER")
-            password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_PACKAGES_TOKEN")
+            password = project.findProperty("gpr.key") ?: System.getenv("GITHUB_PACKAGES_TOKEN")
         }
     }
 }
@@ -40,7 +40,8 @@ dependencies {
     // Spring Boot 3.x 환경에서 S3 자동 구성 사용
     implementation 'io.awspring.cloud:spring-cloud-aws-starter-s3:3.4.0'  // S3 마이그레이션 대비
 //    implementation 'software.amazon.awssdk:s3:2.31.63' // S3Config에서 직접 S3Client 쓸 때 명시적 추가 (IDE 인식 문제 방지)
-
+    // .env 파일 로드를 위한 의존성 추가
+    implementation 'io.github.cdimascio:dotenv-java:3.2.0' // 최신 버전을 확인하고 사용하세요.
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'com.mysql:mysql-connector-j'
