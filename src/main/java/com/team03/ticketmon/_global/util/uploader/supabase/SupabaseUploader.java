@@ -17,9 +17,14 @@ import java.util.concurrent.ExecutionException;
  * Supabase Storage 업로더 구현체
  *
  * <p>{@link StorageUploader} 인터페이스를 구현하여 Supabase 스토리지에 파일을 업로드합니다.</p>
+ *
+ * <p>
+ * 이 클래스는 `@Profile("supabase")` 어노테이션이 적용되어 있어,
+ * 'supabase' 프로필이 활성화될 때 Spring 컨테이너에 빈으로 등록됩니다.
+ * </p>
  */
 @Component
-@Profile("supabase") // 개발 단계에선 supabase 사용
+@Profile("supabase") // 'supabase' 프로필이 활성화될 때 이 업로더를 사용
 public class SupabaseUploader implements StorageUploader {
 
     private final StorageClient storageClient;

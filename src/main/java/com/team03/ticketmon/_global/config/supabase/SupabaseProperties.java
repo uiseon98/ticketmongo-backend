@@ -3,7 +3,7 @@ package com.team03.ticketmon._global.config.supabase;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 /**
  * Supabase 설정 값을 application.yml에서 바인딩해주는 구성 클래스입니다.
@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Getter
 @Setter
-@Configuration
+@Profile("supabase")
 @ConfigurationProperties(prefix = "supabase")
 public class SupabaseProperties {
 

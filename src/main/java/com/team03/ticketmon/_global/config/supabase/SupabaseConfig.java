@@ -5,6 +5,7 @@ import io.supabase.StorageClient;   // 1.1.0
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 /**
  * Supabase Storage SDK를 초기화하고, StorageClient를 스프링 빈으로 등록하는 설정 클래스입니다.
@@ -15,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>✅ 현재 프로젝트는 Supabase Auth를 사용하지 않으며, 모든 요청은 {@code anon} 키 기반의 서버 접근입니다.</p>
  */
 @Configuration
+@Profile("supabase")
 @EnableConfigurationProperties(SupabaseProperties.class)
 public class SupabaseConfig {
 

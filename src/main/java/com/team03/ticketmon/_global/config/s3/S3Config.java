@@ -16,7 +16,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
  * 현재는 사용하지 않지만, S3 마이그레이션 시 @Profile("s3")를 해제하고 사용하세요.
  * </p>
  */
-//@Profile("s3") // 실제 S3 마이그레이션 시 활성화
+@Profile("s3") // S3 마이그레이션 시 yml에 include를 s3로 변경
 @Configuration
 public class S3Config {
 
