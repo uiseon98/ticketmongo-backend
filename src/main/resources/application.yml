@@ -2,7 +2,7 @@ spring:
   application:
     name: ticketmon-go
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:prod}  # .env 값 우선 사용, 없으면 dev 기본값
+    active: ${SPRING_PROFILES_ACTIVE:dev}  # .env 값 우선 사용, 없으면 dev 기본값
     # 🚨 기본값은 'prod'입니다. 로컬 개발 시에만 'dev'로 바꿔주세요.
     include: supabase
   autoconfigure:
