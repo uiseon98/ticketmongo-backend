@@ -1,3 +1,4 @@
+// src/main/java/com/team03/ticketmon/_global/config/RedissonConfig.java
 package com.team03.ticketmon._global.config;
 
 import org.redisson.Redisson;
@@ -30,8 +31,9 @@ public class RedissonConfig {
     /**
      * RedissonClient Bean 설정
      * - Aiven Redis 사용
+     * - destroyMethod = "shutdown" 추가로 애플리케이션 종료 시 안전한 리소스 해제
      */
-    @Bean
+    @Bean(destroyMethod = "shutdown")
     public RedissonClient redissonClient() {
         Config config = new Config();
 
