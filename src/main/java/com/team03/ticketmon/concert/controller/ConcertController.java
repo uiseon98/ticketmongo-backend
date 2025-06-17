@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Concert Controller
@@ -39,19 +40,21 @@ public class ConcertController {
 	}
 
 	/**
-	 * 콘서트 검색
+	 * 콘서트 검색 (타입 안전한 캐시 사용)
 	 */
 	@GetMapping(params = "search")
 	public ResponseEntity<SuccessResponse<List<ConcertDTO>>> searchConcerts(@RequestParam String search) {
-		Object cachedResult = cacheService.getCachedSearchResults(search);
-		if (cachedResult != null) {
-			return ResponseEntity.ok(SuccessResponse.of((List<ConcertDTO>) cachedResult));
+		Optional<List<ConcertDTO>> cachedResult = cacheService.getCachedSearchResults(search);
+		if (cachedResult.isPresent()) {
+			return ResponseEntity.ok(SuccessResponse.of(cachedResult.get()));
 		}
 
+		// 캐시 미스 시 실제 검색
 		ConcertSearchDTO searchDTO = new ConcertSearchDTO();
 		searchDTO.setKeyword(search);
 		List<ConcertDTO> concerts = concertService.searchConcerts(searchDTO);
 
+		// 검색 결과 캐싱
 		cacheService.cacheSearchResults(search, concerts);
 
 		return ResponseEntity.ok(SuccessResponse.of(concerts));
@@ -72,15 +75,16 @@ public class ConcertController {
 	}
 
 	/**
-	 * 콘서트 상세 조회
+	 * 콘서트 상세 조회 (타입 안전한 캐시 사용)
 	 */
 	@GetMapping("/{id}")
 	public ResponseEntity<SuccessResponse<ConcertDTO>> getConcertDetail(@PathVariable Long id) {
-		Object cachedResult = cacheService.getCachedConcertDetail(id);
-		if (cachedResult != null) {
-			return ResponseEntity.ok(SuccessResponse.of((ConcertDTO) cachedResult));
+		Optional<ConcertDTO> cachedResult = cacheService.getCachedConcertDetail(id, ConcertDTO.class);
+		if (cachedResult.isPresent()) {
+			return ResponseEntity.ok(SuccessResponse.of(cachedResult.get()));
 		}
 
+		// 캐시 미스 시 실제 조회
 		return concertService.getConcertById(id)
 			.map(concert -> {
 				cacheService.cacheConcertDetail(id, concert);
