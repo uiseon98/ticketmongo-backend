@@ -89,7 +89,11 @@ public class SupabaseUploader implements StorageUploader {
             // 파일 I/O, 스레드 인터럽트, 비동기 작업 실행 예외 처리
             log.error("❌ 파일 업로드 중 시스템 또는 기타 예외 발생", e);
             throw new RuntimeException("파일 업로드 중 시스템 오류", e);
-        } finally {
+        }
+//        catch (StorageException e) {
+//            throw new RuntimeException("Supabase 업로드 실패", e);
+//        }
+        finally {
             // 임시 파일 삭제
             if (tempFile != null && tempFile.exists()) {
                 boolean deleted = tempFile.delete();
