@@ -29,8 +29,7 @@ public class RedissonConfig {
 
     /**
      * RedissonClient Bean 설정
-     * - 단일 서버 모드로 Redis 연결
-     * - 개발 환경에서는 로컬 Redis, 운영 환경에서는 Aiven Redis 사용
+     * - Aiven Redis 사용
      */
     @Bean
     public RedissonClient redissonClient() {
