@@ -37,7 +37,6 @@ spring:
       username: ${SPRING_DATA_REDIS_USERNAME}
       password: ${SPRING_DATA_REDIS_PASSWORD}
 
-
   security:
     oauth2:
       client:
@@ -81,7 +80,6 @@ spring:
             token-uri: https://kauth.kakao.com/oauth/token
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
-
 
 # Supabase 관련 설정
 # 's3' 프로필을 포함하고 있으므로, Supabase 관련 빈은 운영 환경에서 로드되지 않습니다.
