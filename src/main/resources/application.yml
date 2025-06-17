@@ -2,9 +2,9 @@ spring:
   application:
     name: ticketmon-go
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:prod}  # .env 값 우선 사용, 없으면 dev 기본값
+    active: ${SPRING_PROFILES_ACTIVE:dev}  # .env 값 우선 사용, 없으면 dev 기본값
     # 🚨 기본값은 'prod'입니다. 로컬 개발 시에만 'dev'로 바꿔주세요.
-
+    include: supabase
   autoconfigure:
     exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration  # 임시로 DB 자동 설정 제외 (설정이 없을 경우 에러 방지)
     # 실제 DB 사용 시엔 위 라인 제거. 현재는 데이터소스 수동 설정을 의미
