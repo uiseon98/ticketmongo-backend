@@ -2,20 +2,23 @@ spring:
   application:
     name: ticketmon-go
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev}  # .env 값 우선 사용, 없으면 dev 기본값
-    # 🚨 기본값은 'prod'입니다. 로컬 개발 시에만 'dev'로 바꿔주세요.
-    include: supabase
-  autoconfigure:
-    exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration  # 임시로 DB 자동 설정 제외 (설정이 없을 경우 에러 방지)
+    active: ${SPRING_PROFILES_ACTIVE:dev}  # 환경 변수 'SPRING_PROFILES_ACTIVE' 값(.env) 사용, 없으면 'dev'를 기본값으로 설정
+    # 로컬 개발 시 'dev' 프로필이 기본으로 활성화됩니다. 배포 시에도 변경 X -> .env에서 SPRING_PROFILES_ACTIVE를 prod로 변경
+    include: supabase # 'supabase' 관련 빈(StorageUploader, StorageClient)을 활성화된 프로필과 함께 로드
+  config:
+    import: optional:application-${spring.profiles.active}.yml # 활성화된 프로필에 맞는 추가 설정 파일 로드
+
+    # autoconfigure:
+    #   exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration # (필요시) 특정 자동 설정을 제외하는 경우 사용
+    # 임시로 DB 자동 설정 제외 (설정이 없을 경우 에러 방지)
     # 실제 DB 사용 시엔 위 라인 제거. 현재는 데이터소스 수동 설정을 의미
 
   jackson:
-    time-zone: Asia/Seoul  # [기본 설정] 한국 사용자 대상이므로 KST 기준으로 기본 직렬화 설정함
-    # 추후 글로벌 확장 시 UTC 또는 타임존 동적 처리로 대체 가능
+    time-zone: Asia/Seoul  # 한국 표준시(KST)로 타임존 설정. (글로벌 서비스 시 유연한 처리 필요)
 
 server:
-  port: ${SERVER_PORT:8080}  # .env에서 설정한 포트 사용, 기본은 8080
+  port: ${SERVER_PORT:8080}  # 환경 변수 'SERVER_PORT' 값 사용(.env), 없으면 8080을 기본값으로 설정
 
 logging:
   level:
-    root: ${LOG_LEVEL:INFO}  # 로그 레벨 설정 (INFO / WARN / ERROR)
+    root: ${LOG_LEVEL:INFO}  # 환경 변수 'LOG_LEVEL' 값 사용, 없으면 INFO를 기본 로그 레벨(INFO / WARN / ERROR)로 설정
