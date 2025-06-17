@@ -11,16 +11,16 @@ String uploadFile(MultipartFile file, String bucket, String path);
 }
 ```
 - Supabase / S3 공통 업로드 방식 추상화
-- 추후 S3 마이그레이션 시 `StorageUploader`만 교체하면 기존 코드 그대로 유지 가능
+- 추후 S3 마이그레이션 시 `StorageUploader`만 교체하면 기존 서비스 로직 코드 그대로 유지 가능
 
 
 <br>
 
 ### 🧱 현재 구현체
-|구현체|	설명| 	비고      |
-|-|-|----------|
-|`SupabaseUploader`|	Supabase Storage SDK 기반 업로드| 	현재 사용 중 |
-|`S3Uploader`|	S3 클라이언트 기반 업로드 구현체|	🔒 주석 처리 상태로 미리 구현 완료 (@Profile("s3"))|
+|구현체|	설명| 	비고                                     |
+|-|-|-----------------------------------------|
+|`SupabaseUploader`|	Supabase Storage SDK 기반 업로드| 	("supabase") 적용 (현재 사용 중)              |
+|`S3Uploader`|	S3 클라이언트 기반 업로드 구현체| 	🔒@Profile("s3") 적용 (마이그레이션 대비 구현 완료, 현재 비활성 상태) |
 
 
 <br>
@@ -33,52 +33,14 @@ implementation 'io.supabase:storage-java:1.1.0'
 // AWS Spring Cloud S3 연동 (Spring Boot 3.x 이상)
 implementation 'io.awspring.cloud:spring-cloud-aws-starter-s3:3.4.0'
 ```
+- io.awspring.cloud:spring-cloud-aws-starter-s3는 내부적으로 AWS SDK for S3 (software.amazon.awssdk:s3)를 포함합니다.
 
 <br>
 
 ### ⚙️ 설정 파일 구조
-**🔐 .env.example**
-```env
-# Supabase
-SUPABASE_URL=...
-SUPABASE_KEY=...
-SUPABASE_PROFILE_BUCKET=...
-SUPABASE_POSTER_BUCKET=...
-SUPABASE_DOCS_BUCKET=...
+**🔐 (.env.example)[.env.example]**
 
-# AWS S3 (🔒 주석 처리 상태)
-# AWS_ACCESS_KEY_ID=...
-# AWS_SECRET_ACCESS_KEY=...
-# AWS_REGION=ap-northeast-2
-# AWS_S3_BUCKET=ticketmon-prod-assets
-# AWS_S3_PROFILE_PREFIX=profile-imgs/
-# AWS_S3_POSTER_PREFIX=poster-imgs/
-# AWS_S3_DOCS_PREFIX=seller-docs/
-```
-
-**🔧 application-dev.yml (예시 / application-prod 참고)**
-```yaml
-supabase:
-url: ${SUPABASE_URL}
-key: ${SUPABASE_KEY}
-profile-bucket: ${SUPABASE_PROFILE_BUCKET}
-poster-bucket: ${SUPABASE_POSTER_BUCKET}
-docs-bucket: ${SUPABASE_DOCS_BUCKET}
-
-# 🔒 S3는 마이그레이션 시 사용 예정. 현재는 주석 처리 상태
-# cloud:
-#   aws:
-#     credentials:
-#       access-key: ${AWS_ACCESS_KEY_ID}
-#       secret-key: ${AWS_SECRET_ACCESS_KEY}
-#     region:
-#       static: ${AWS_REGION}
-#     s3:
-#       bucket: ${AWS_S3_BUCKET}
-#       profile-prefix: ${AWS_S3_PROFILE_PREFIX}
-#       poster-prefix: ${AWS_S3_POSTER_PREFIX}
-#       seller-docs-prefix: ${AWS_S3_DOCS_PREFIX}
-```
+**🔧 application-dev.yml ((application-prod)[src/main/resources/application-prod.yml] 참고)**
 
 <br>
 
@@ -92,9 +54,9 @@ docs-bucket: ${SUPABASE_DOCS_BUCKET}
 <br>
 
 ### 🔄 마이그레이션 시 할 일
-1. .env에서 S3 환경변수 활성화
-2. application-prod.yml에서 Supabase 설정 주석 처리, S3 설정 주석 해제
-3. @Profile("s3")로 S3Uploader 활성화
+1. .env에서 AWS S3 환경변수 활성화 및 실제 값 설정
+2. application.yml의 spring.profiles.include를 s3로 변경 (또는 배포 시 SPRING_PROFILES_ACTIVE=prod로 설정하여 application-prod.yml의 include: s3가 적용되도록)
+3. application-prod.yml에서 Supabase 설정 블록 주석 처리 (또는 제거), S3 설정 블록 주석 해제 (또는 활성화)
 4. 필요 시 업로드 경로 변경 (prefix 구조 적용)
 
 <br>
@@ -118,29 +80,33 @@ String imageUrl = storageUploader.uploadFile(file, bucketName, path);
 ```yaml
 # application.yml
 spring:
-profiles:
-active: ${SPRING_PROFILES_ACTIVE:prod}  # 기본값은 prod
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev} # 로컬 개발 기본값 'dev'
+    include: supabase # 어떤 active 프로필이든 supabase 관련 빈 포함
 
 # application-prod.yml
 spring:
-profiles:
-active: s3  # 또는 supabase
+  profiles:
+    # prod 프로필이 활성화되면 's3' 프로필을 포함하여 S3 관련 빈 로드
+    include: s3
 
-# application-dev.yml
-spring:
-profiles:
-active: supabase
+# application-dev.yml (참고용 - 실제 파일에는 include 없음)
+# spring:
+#   profiles:
+#     # application.yml의 'include: supabase'에 의해 자동으로 포함됨
+#     # 여기에 include를 명시하면 InvalidConfigDataPropertyException이 발생할 수 있음
+#     # include: supabase
 ```
-> 💡 prod 환경에선 s3 또는 supabase 중 하나를 선택해서 override
+> 💡 최종 활성 프로필에 따라 Supabase 또는 S3 관련 빈이 조건부로 로드됩니다.
 
 <br>
 
 ### 3. 📍 파일 경로(path) 설계 규칙 예시
-|구분|	설명|	예시|
-|-|-|-|
-|프로필 이미지|	유저 ID 기반 파일명|	profile-imgs/{userId}.jpg|
-|포스터 이미지|	콘서트 ID 기반|	poster-imgs/{concertId}.png|
-|판매자 문서|	UUID 기반 문서|	seller-docs/{uuid}.pdf|
+|구분|	설명| 	예시                          |
+|-|-|------------------------------|
+|프로필 이미지|	유저 ID 기반 파일명| 	profile-imgs/{userId}.jpg   |
+|포스터 이미지|	콘서트 ID 기반| 	poster-imgs/{concertId}.png |
+|판매자 문서|	UUID 기반 문서| 	seller-docs/{docId}.pdf     |
 > ✏️ path는 서비스 로직에서 결정해서 uploadFile() 호출 시 전달해야 함
 
 <br>

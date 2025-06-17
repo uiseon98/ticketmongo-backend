@@ -210,6 +210,7 @@ ErrorCode에 따라 ErrorResponse 생성
 |---------------|------|
 | `spring-app`  | 백엔드 애플리케이션 (Dockerfile 기반) |
 | `redis-cache` | Redis (좌석 캐싱 및 분산락 처리용) |
+|`localstack`|LocalStack (AWS 서비스 모킹: SQS, S3 등 개발용)|
 | `(MySQL)`     | DB는 개발 초기에는 Aiven 사용, 추후 AWS Aurora로 마이그레이션 예정 |
 
 <br>
@@ -220,8 +221,9 @@ ErrorCode에 따라 ErrorResponse 생성
 
 1. Docker Desktop 설치 (https://www.docker.com/products/docker-desktop)
 2. **`.env`, `application-dev.yml` 파일 수령 및 배치**
-  - `application-dev.yml`은 직접 전달 예정
-  - `.env`는 직접 전달하며, `src/main/resources/`에 `application-dev.yml`로 위치시켜야 함
+  - `application-dev.yml`, `.env`은 직접 전달 예정
+  - `application-dev.yml`는 `src/main/resources/`에 `application-dev.yml`로 위치
+  - `.env`는 팀 디스코드 또는 팀원 공유 경로에서 .env 파일을 받아, 프로젝트 루트 디렉토리에 위치
 3. `.env.example`은 참고용으로 제공됩니다.
 
 <br>
@@ -258,9 +260,13 @@ ErrorCode에 따라 ErrorResponse 생성
 |파일명|	설명|
 |-|-|
 |Dockerfile|	Spring Boot 애플리케이션 빌드 및 실행 설정|
-|docker-compose.yml|	전체 서비스(앱 + Redis) 컨테이너 정의|
+|docker-compose.yml|	전체 서비스(앱 + Redis + LocalStack) 컨테이너 정의|
 |.dockerignore|	빌드 시 Docker에 포함하지 않을 파일 목록|
 |.env.example|	환경변수 예시 파일 (민감 정보는 포함되지 않음)|
+|.env|로컬 개발 환경 변수 (실제 민감 정보 포함, Git 추적 제외)|
+|application.yml|Spring 공통 설정 및 프로필 활성화 기준 정의|
+|application-dev.yml|개발 환경 (dev 프로필) 전용 설정|
+|application-prod.yml|운영 환경 (prod 프로필) 전용 설정|
 
 <br>
 
@@ -269,6 +275,7 @@ ErrorCode에 따라 ErrorResponse 생성
 ### 🧪 테스트 포인트
 - localhost:8080에서 백엔드 서비스 확인
 - localhost:6379 Redis 정상 기동 여부 확인
+- LocalStack SQS: docker exec -it localstack awslocal sqs list-queues 명령으로 SQS 서비스 확인
 - Swagger: http://localhost:8080/swagger-ui/index.html
 
 <br>
@@ -290,36 +297,37 @@ ErrorCode에 따라 ErrorResponse 생성
 ---
 
 ### 📁 폴더 및 파일 구성 요약
-|파일명	|설명|
-|-|-|
-|`.env`|	실제 민감 설정 키 (Aiven, Supabase, JWT 등) – ❌ Git 제외 / ✅ Discord 공유|
-|`.env.example`|	키 없이 형식만 제공되는 예시 파일 – ✅ Git 포함|
-|`application.yml`|	Spring 공통 설정|
-|`application-dev.yml`|	개발 환경 설정 (DB, Redis, Supabase 등)|
-|`docker-compose.yml`|	Redis, LocalStack, Spring Boot 실행용 컨테이너 구성|
-|`Dockerfile`|	Spring Boot 앱의 도커 빌드 설정|
+|파일명	| 설명                                                             |
+|-|----------------------------------------------------------------|
+|`.env`| 	실제 민감 설정 키 (Aiven, Supabase, JWT 등) – ❌ Git 제외 / ✅ Discord 공유 |
+|`.env.example`| 	키 없이 형식만 제공되는 예시 파일 – ✅ Git 포함                                |
+|`application.yml`| 	Spring 공통 설정 (프로필 활성화 및 기본 include 포함)                                                 |
+|`application-dev.yml`| 	개발 환경 (dev 프로필) 전용 설정                              |
+|`application-prod.yml`|운영 환경 (prod 프로필) 전용 설정|
+|`docker-compose.yml`| 	Redis, LocalStack, Spring Boot 실행용 컨테이너 구성                    |
+|`Dockerfile`| 	Spring Boot 앱의 도커 빌드 설정                                       |
 
 <br>
 
 ### ✅ 설정 방식 요약
 |항목|	방식|
 |-|-|
-|프로필 적용|	.env → SPRING_PROFILES_ACTIVE=dev → application-dev.yml 로드|
-|.env 연동 방식|	spring.config.import=optional:env[.env] 설정 사용|
-|민감 키 관리|	.env에만 저장 / application-dev.yml에는 변수명만 작성|
-|Docker 실행|	docker-compose up 한 번으로 Redis, LocalStack, Spring Boot 실행 가능|
+|프로필 적용|	application.yml의 ${SPRING_PROFILES_ACTIVE:dev} 변수 참조 → application-dev.yml 또는 application-prod.yml 로드. (application.yml의 include: supabase 설정도 함께 적용)|
+|.env 연동 방식|	application-dev.yml에서 spring.config.import: optional:file:.env[.properties] 설정 사용|
+|민감 키 관리|	.env에만 저장 / application-dev.yml 및 application-prod.yml에는 ${VAR_NAME} 변수명만 작성|
+|Docker 실행|	docker-compose up 한 번으로 Redis, LocalStack, Spring Boot 앱 실행 가능|
 
 <br>
 
 ### ✅ 체크리스트
-|항목|	설명| 	상태                                                  |
-|-|-|------------------------------------------------------|
-|🔄 docker-compose up 후 Redis/LocalStack 기동 확인|	Redis: redis-cli ping → PONG, LocalStack: awslocal sqs list-queues 오류 없이 반환| 	[x]                                                 |
-|📄 .env에 실제 키값 반영|	Discord 등 별도 채널로 공유| 	[] <br> (작성 완료(연동은 추후))                             |
-|🔗 .env → application-dev.yml 연동 확인|	Spring 로그에 Using config data from '.env' 확인| 	☐ <br> (.env 미사용 상태, 추후 spring.config.import 적용 예정) |
-|🌐 Swagger 접속 확인|	http://localhost:8080/swagger-ui/index.html	| [x]                                                  |
-|🪣 Supabase 버킷 생성 + 정책 설정|	wcha-dev-profile-imgs, poster-imgs, seller-docs 등 생성 (2MB 제한 + MIME 필터)| 	☐ (설정 예정 / 키만 연결됨)                                  |
-|🐳 Docker로 Spring Boot 실행 후 .env 반영 확인|	Swagger 정상 접속 + DB 연결 여부| 	[] <br> (현재 .env를 사용하지 않고 있어 확인 불가) |
+|항목| 	설명                                                                                    | 	상태                                            |
+|-|----------------------------------------------------------------------------------------|------------------------------------------------|
+|🔄 docker-compose up 후 Redis/LocalStack 기동 확인| 	Redis: redis-cli ping → PONG 반환, LocalStack: awslocal sqs list-queues 오류 없이 반환        | 	[x]                                           |
+|📄 .env에 실제 키값 반영| 	Discord 등 별도 채널로 공유 (실제 값으로 대체 필요)                                                    | 	[] <br> (작성 완료)                               |
+|🔗 .env → application-dev.yml 연동 확인| 	Spring 로그에 Using config data from 'file:.env[.properties]' 확인                         | 	☐                                             |
+|🌐 Swagger 접속 확인| 	http://localhost:8080/swagger-ui/index.html	                                          | [x]                                            |
+|🪣 Supabase 버킷 생성 + 정책 설정| 	ticketmon-dev-profile-imgs, ticketmon-dev-poster-imgs, ticketmon-dev-seller-docs 등 생성 | 	[x] (설정 완료 / 2MB 제한 + MIME 필터 설정은 구현 단계에서 설정) |
+|🐳 Docker로 Spring Boot 실행 후 .env 반영 확인| 	Swagger 정상 접속 + DB 연결 여부 (로그 확인) | 	[x]|
 
 <!--
 ## ✅ 초기 세팅 체크리스트 (2025-06 기준)
@@ -351,10 +359,9 @@ docker exec -it localstack awslocal sqs list-queues
 <br>
 
 ### 💬 참고 사항
-- 현재는 .env 연동 미완료 상태이며, 키가 직접 dev 설정에 포함되어 있음. 추후 외부화 예정
-- .env는 git에 포함되지 않으며, 형식 제공용 .env.example 파일로 대체됩니다
-- Supabase와 LocalStack을 개발 초기 환경으로 사용하며, S3/SQS는 추후 마이그레이션 예정
-- 현재의 docker-compose.yml은 개발용 설정이며, 운영 환경에서는 별도 설정 예정
+- .env는 Git에 포함되지 않으며, 형식 제공용 .env.example 파일로 대체됩니다
+- Supabase와 LocalStack을 개발 초기 환경으로 사용하며, S3/SQS는 추후 마이그레이션 예정입니다.
+- 현재의 docker-compose.yml은 개발용 설정이며, 운영 환경에서는 별도 설정 예정입니다.
 
 <br>
 <br>
