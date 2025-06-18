@@ -37,36 +37,6 @@ spring:
       username: ${SPRING_DATA_REDIS_USERNAME}
       password: ${SPRING_DATA_REDIS_PASSWORD}
 
-# Supabase 관련 설정
-# 's3' 프로필을 포함하고 있으므로, Supabase 관련 빈은 운영 환경에서 로드되지 않습니다.
-# 따라서 이 설정 블록은 운영 환경에서는 불필요하며, 제거하거나 주석 처리하는 것이 명확합니다.
-# supabase:
-#   url: ${SUPABASE_URL}
-#   key: ${SUPABASE_KEY}
-#   profile-bucket: ${SUPABASE_PROFILE_BUCKET}
-#   poster-bucket: ${SUPABASE_POSTER_BUCKET}
-#   docs-bucket: ${SUPABASE_DOCS_BUCKET}
-
-# AWS S3 관련 설정:
-# 's3' 프로필이 활성화될 때 이 설정이 로드
-# 실제 AWS Access Key, Secret Key는 환경 변수 또는 보안 저장소에서 주입받아야 함
-cloud:
-  aws:
-    credentials:
-      # 액세스 키와 시크릿 키는 환경 변수 (예: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) 또는 보안 저장소에서 주입
-      access-key: ${AWS_ACCESS_KEY_ID}         # 🔒 AWS IAM 사용자 Access Key
-      secret-key: ${AWS_SECRET_ACCESS_KEY}     # 🔒 AWS IAM 사용자 Secret Key
-    region:
-      static: ap-northeast-2                     # 예시: 서울 리전 (실제 운영 환경에 맞게 변경)
-    s3:
-      bucket: ticketmon-prod-assets         # [권장] 운영 환경용 S3 버킷 이름 (개발 환경과 다르게 설정)
-      # prefix(폴더) 기준 관리, supabase → s3 마이그레이션에 최적화
-      profile-prefix: profile-imgs/        # 프로필 이미지 저장 경로 접두사 (예: profile-imgs/{userId}.jpg)
-      poster-prefix: poster-imgs/          # 포스터 이미지 저장 경로 접두사 (예: poster-imgs/{posterId}.jpg)
-      seller-docs-prefix: seller-docs/     # 판매자 서류 저장 경로 접두사 (예: seller-docs/{docId}.pdf)
-      # 실제 Key: {prefix}{파일명}
-      # 운영 배포시 prod-assets, dev는 dev-assets 등 환경 분리   # S3 버킷 이름 (개발/운영 구분 가능)
-
   security:
     oauth2:
       client:
@@ -110,6 +80,36 @@ cloud:
             token-uri: https://kauth.kakao.com/oauth/token
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
+
+# Supabase 관련 설정
+# 's3' 프로필을 포함하고 있으므로, Supabase 관련 빈은 운영 환경에서 로드되지 않습니다.
+# 따라서 이 설정 블록은 운영 환경에서는 불필요하며, 제거하거나 주석 처리하는 것이 명확합니다.
+# supabase:
+#   url: ${SUPABASE_URL}
+#   key: ${SUPABASE_KEY}
+#   profile-bucket: ${SUPABASE_PROFILE_BUCKET}
+#   poster-bucket: ${SUPABASE_POSTER_BUCKET}
+#   docs-bucket: ${SUPABASE_DOCS_BUCKET}
+
+# AWS S3 관련 설정:
+# 's3' 프로필이 활성화될 때 이 설정이 로드
+# 실제 AWS Access Key, Secret Key는 환경 변수 또는 보안 저장소에서 주입받아야 함
+cloud:
+  aws:
+    credentials:
+      # 액세스 키와 시크릿 키는 환경 변수 (예: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) 또는 보안 저장소에서 주입
+      access-key: ${AWS_ACCESS_KEY_ID}         # 🔒 AWS IAM 사용자 Access Key
+      secret-key: ${AWS_SECRET_ACCESS_KEY}     # 🔒 AWS IAM 사용자 Secret Key
+    region:
+      static: ap-northeast-2                     # 예시: 서울 리전 (실제 운영 환경에 맞게 변경)
+    s3:
+      bucket: ticketmon-prod-assets         # [권장] 운영 환경용 S3 버킷 이름 (개발 환경과 다르게 설정)
+      # prefix(폴더) 기준 관리, supabase → s3 마이그레이션에 최적화
+      profile-prefix: profile-imgs/        # 프로필 이미지 저장 경로 접두사 (예: profile-imgs/{userId}.jpg)
+      poster-prefix: poster-imgs/          # 포스터 이미지 저장 경로 접두사 (예: poster-imgs/{posterId}.jpg)
+      seller-docs-prefix: seller-docs/     # 판매자 서류 저장 경로 접두사 (예: seller-docs/{docId}.pdf)
+      # 실제 Key: {prefix}{파일명}
+      # 운영 배포시 prod-assets, dev는 dev-assets 등 환경 분리   # S3 버킷 이름 (개발/운영 구분 가능)
 
 # JWT (JSON Web Token) 관련 설정
 # 모든 값은 환경 변수로부터 주입
