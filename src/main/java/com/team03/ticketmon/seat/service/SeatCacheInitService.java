@@ -162,13 +162,44 @@ public class SeatCacheInitService {
     }
 
     /**
-     * 특정 콘서트의 캐시 삭제
+     * 특정 콘서트의 캐시 삭제 (개선된 버전)
+     * - 캐시 존재 여부 확인
+     * - 적절한 예외 처리
+     * - 명확한 응답 메시지
      */
-    public void clearSeatCache(Long concertId) {
-        String key = SEAT_STATUS_KEY_PREFIX + concertId;
-        RMap<String, SeatStatus> seatMap = redissonClient.getMap(key);
-        seatMap.clear();
+    public String clearSeatCache(Long concertId) {
+        try {
+            String key = SEAT_STATUS_KEY_PREFIX + concertId;
+            RMap<String, SeatStatus> seatMap = redissonClient.getMap(key);
 
-        log.info("좌석 캐시 삭제 완료: concertId={}", concertId);
+            // 1. 캐시 존재 여부 확인
+            if (!seatMap.isExists()) {
+                log.info("삭제할 좌석 캐시가 존재하지 않음: concertId={}, key={}", concertId, key);
+                return "삭제할 캐시가 없습니다.";
+            }
+
+            // 2. 캐시 크기 확인 (삭제 전 로깅용)
+            int cacheSize = seatMap.size();
+
+            // 3. 캐시 삭제 실행
+            seatMap.clear();
+
+            // 4. 삭제 완료 확인
+            boolean isCleared = !seatMap.isExists() || seatMap.size() == 0;
+
+            if (isCleared) {
+                log.info("좌석 캐시 삭제 완료: concertId={}, deletedItems={}, key={}",
+                        concertId, cacheSize, key);
+                return "좌석 캐시 삭제 성공";
+            } else {
+                log.warn("좌석 캐시 삭제 실패 (일부 데이터 남음): concertId={}, remainingItems={}",
+                        concertId, seatMap.size());
+                return "캐시 삭제 중 일부 오류가 발생했습니다.";
+            }
+
+        } catch (Exception e) {
+            log.error("좌석 캐시 삭제 중 예외 발생: concertId={}, error={}", concertId, e.getMessage(), e);
+            throw new RuntimeException("캐시 삭제 처리 중 오류가 발생했습니다: " + e.getMessage(), e);
+        }
     }
 }
