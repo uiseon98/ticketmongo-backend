@@ -1,4 +1,4 @@
-package com.team03.ticketmon.payment.domain.dto;
+package com.team03.ticketmon.payment.dto;
 
 import java.math.BigDecimal;
 

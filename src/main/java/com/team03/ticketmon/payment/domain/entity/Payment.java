@@ -1,4 +1,4 @@
-package com.team03.ticketmon.payment.domain;
+package com.team03.ticketmon.payment.domain.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -77,5 +77,24 @@ public class Payment {
 		this.orderId = orderId;
 		this.amount = amount;
 		this.status = PaymentStatus.PENDING;
+	}
+
+	/**
+	 * 결제 승인이 완료되었을 때 호출됩니다.
+	 * paymentKey를 저장하고, 상태를 DONE으로 변경하며, 승인 시간을 기록합니다.
+	 * @param paymentKey 토스페이먼츠로부터 받은 결제 키
+	 */
+	public void complete(String paymentKey) {
+		this.paymentKey = paymentKey;
+		this.status = PaymentStatus.DONE;
+		this.approvedAt = LocalDateTime.now();
+	}
+
+	/**
+	 * 결제가 실패했을 때 호출됩니다.
+	 * 상태를 FAILED로 변경합니다.
+	 */
+	public void fail() {
+		this.status = PaymentStatus.FAILED;
 	}
 }

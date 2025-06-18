@@ -63,4 +63,17 @@ public class Booking {
 
 	@OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
 	private List<Ticket> tickets;
+
+	// 캡슐화를 위한 상태 변경 메소드 추가
+	public void confirm() {
+		this.status = BookingStatus.CONFIRMED;
+	}
+
+	public void cancel() {
+		this.status = BookingStatus.CANCELED;
+	}
+
+	public void pending() {
+		this.status = BookingStatus.PENDING_PAYMENT;
+	}
 }

@@ -1,4 +1,4 @@
-package com.team03.ticketmon.payment.domain;
+package com.team03.ticketmon.payment.domain.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
