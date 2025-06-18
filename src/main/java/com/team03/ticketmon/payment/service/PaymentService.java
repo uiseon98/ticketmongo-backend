@@ -3,8 +3,10 @@ package com.team03.ticketmon.payment.service;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -23,6 +25,7 @@ import com.team03.ticketmon.payment.domain.enums.PaymentStatus;
 import com.team03.ticketmon.payment.dto.PaymentCancelRequest;
 import com.team03.ticketmon.payment.dto.PaymentConfirmRequest;
 import com.team03.ticketmon.payment.dto.PaymentExecutionResponse;
+import com.team03.ticketmon.payment.dto.PaymentHistoryDto;
 import com.team03.ticketmon.payment.dto.PaymentRequest;
 import com.team03.ticketmon.payment.repository.PaymentCancelHistoryRepository;
 import com.team03.ticketmon.payment.repository.PaymentRepository;
@@ -195,5 +198,42 @@ public class PaymentService {
 		paymentCancelHistoryRepository.save(history);
 
 		log.info("결제 취소 완료: orderId={}", orderId);
+	}
+
+	@Transactional
+	public void updatePaymentStatusByWebhook(String orderId, String status) {
+		Payment payment = paymentRepository.findByOrderId(orderId)
+			.orElseThrow(() -> {
+				log.warn("웹훅 처리: 존재하지 않는 주문 ID 입니다 - {}", orderId);
+				return new IllegalArgumentException("존재하지 않는 주문 ID 입니다: " + orderId);
+			});
+
+		PaymentStatus newStatus = PaymentStatus.valueOf(status);
+
+		if (payment.getStatus() == newStatus) {
+			log.info("웹훅 처리: 주문 ID {}의 상태가 이미 {}입니다. 변경 없음.", orderId, status);
+			return;
+		}
+
+		// 웹훅을 통해 상태 업데이트
+		if (newStatus == PaymentStatus.DONE) {
+			payment.complete(payment.getPaymentKey()); // paymentKey는 이미 있거나, 가상계좌의 경우 별도 조회가 필요할 수 있음
+			payment.getBooking().confirm();
+		} else if (newStatus == PaymentStatus.CANCELED) {
+			payment.cancel();
+			payment.getBooking().cancel();
+		}
+		// 다른 상태에 대한 처리 로직 추가 가능
+
+		log.info("주문 ID {} 의 결제 상태가 웹훅을 통해 {} 로 변경되었습니다.", orderId, status);
+	}
+
+	@Transactional(readOnly = true)
+	public List<PaymentHistoryDto> getPaymentHistoryByUserId(Long userId) {
+		// 사용자 ID로 직접 Payment 목록을 조회 (더 효율적)
+		return paymentRepository.findByBooking_UserId(userId)
+			.stream()
+			.map(PaymentHistoryDto::new)
+			.collect(Collectors.toList());
 	}
 }

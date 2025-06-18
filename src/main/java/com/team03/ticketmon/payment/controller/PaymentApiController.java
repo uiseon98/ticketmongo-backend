@@ -2,6 +2,7 @@ package com.team03.ticketmon.payment.controller;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.util.UriUtils;
 import com.team03.ticketmon.payment.dto.PaymentCancelRequest;
 import com.team03.ticketmon.payment.dto.PaymentConfirmRequest;
 import com.team03.ticketmon.payment.dto.PaymentExecutionResponse;
+import com.team03.ticketmon.payment.dto.PaymentHistoryDto;
 import com.team03.ticketmon.payment.dto.PaymentRequest;
 import com.team03.ticketmon.payment.service.PaymentService;
 
@@ -89,5 +91,13 @@ public class PaymentApiController {
 
 		paymentService.cancelPayment(orderId, cancelRequest);
 		return ResponseEntity.ok().build();
+	}
+
+	@GetMapping("/history")
+	public ResponseEntity<List<PaymentHistoryDto>> getPaymentHistory() {
+		// TODO: 실제로는 Spring Security의 @AuthenticationPrincipal 등으로 현재 로그인된 사용자 ID를 가져와야 합니다.
+		Long currentUserId = 1L; // 임시 사용자 ID
+		List<PaymentHistoryDto> history = paymentService.getPaymentHistoryByUserId(currentUserId);
+		return ResponseEntity.ok(history);
 	}
 }
