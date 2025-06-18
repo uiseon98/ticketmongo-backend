@@ -100,7 +100,11 @@ public class SellerConcertController {
 	}
 
 	/**
-	 * 콘서트 삭제 (취소 처리)
+	 * Cancels (soft deletes) a concert for the specified seller.
+	 *
+	 * @param sellerId the ID of the seller requesting the cancellation
+	 * @param concertId the ID of the concert to be canceled
+	 * @return a response indicating successful cancellation with no content
 	 */
 	@DeleteMapping("/{concertId}")
 	public ResponseEntity<SuccessResponse<Void>> deleteConcert(

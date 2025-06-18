@@ -70,7 +70,13 @@ public class CacheService {
 	}
 
 	/**
-	 * 캐싱된 검색 결과 조회 (타입 안전)
+	 * Retrieves cached search results for the given keyword as a type-safe list.
+	 *
+	 * Returns an {@code Optional<List<T>>} containing the cached search results if present and all elements match the specified type; otherwise, returns {@code Optional.empty()}.
+	 *
+	 * @param keyword the search keyword used as the cache key
+	 * @param elementType the class type of the expected list elements
+	 * @return an {@code Optional} containing a list of elements of type {@code T} if available and type-safe; otherwise, {@code Optional.empty()}
 	 */
 	public <T> Optional<List<T>> getCachedSearchResults(String keyword, Class<T> elementType) {
 		String key = "search:" + keyword.toLowerCase();

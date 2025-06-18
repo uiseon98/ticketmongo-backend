@@ -32,8 +32,9 @@ public class ConcertFilterDTO {
 	private BigDecimal priceMax;
 
 	/**
-	 * 날짜 범위 순서 검증
-	 * 시작 날짜가 종료 날짜보다 늦으면 안됨
+	 * Validates that the start date is not after the end date, if both are provided.
+	 *
+	 * @return true if either date is null or the start date is on or before the end date; false otherwise.
 	 */
 	@AssertTrue(message = "종료 날짜는 시작 날짜와 같거나 늦어야 합니다")
 	public boolean isValidDateRange() {
@@ -46,8 +47,12 @@ public class ConcertFilterDTO {
 	}
 
 	/**
-	 * 가격 범위 순서 검증
-	 * 최소 가격이 최대 가격보다 크면 안됨
+	 * Validates that the minimum price is not greater than the maximum price.
+	 *
+	 * Returns true if either price is null or if the minimum price is less than or equal to the maximum price.
+	 * This ensures logical consistency for optional price range filters.
+	 *
+	 * @return true if the price range is valid or not fully specified; false if the minimum price exceeds the maximum price
 	 */
 	@AssertTrue(message = "최대 가격은 최소 가격보다 크거나 같아야 합니다")
 	public boolean isValidPriceRange() {
@@ -60,8 +65,9 @@ public class ConcertFilterDTO {
 	}
 
 	/**
-	 * 날짜 범위 유효성 검증 (너무 긴 범위 방지)
-	 * 최대 1년까지만 허용
+	 * Validates that the date range between startDate and endDate does not exceed one year (365 days).
+	 *
+	 * @return true if either date is null or the range is within one year; false if the range exceeds one year.
 	 */
 	@AssertTrue(message = "날짜 범위는 1년을 초과할 수 없습니다")
 	public boolean isValidDateRangeLength() {
@@ -73,8 +79,9 @@ public class ConcertFilterDTO {
 	}
 
 	/**
-	 * 가격 범위 유효성 검증 (너무 큰 범위 방지)
-	 * 최대 가격이 최소 가격의 1000배를 초과하면 안됨
+	 * Validates that the price range is not excessively large.
+	 *
+	 * Returns true if either minimum or maximum price is null, if the minimum price is zero and the maximum price does not exceed 10,000,000, or if the maximum price does not exceed 1000 times the minimum price.
 	 */
 	@AssertTrue(message = "가격 범위가 너무 큽니다")
 	public boolean isValidPriceRangeSize() {

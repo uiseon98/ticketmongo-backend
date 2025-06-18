@@ -67,7 +67,9 @@ public class SellerConcertUpdateDTO {
 	private String posterImageUrl;
 
 	/**
-	 * Update DTO 전용: 최소 하나의 필드는 수정되어야 함
+	 * Checks whether at least one field is set for update in the DTO.
+	 *
+	 * @return true if any updatable field is non-null; false if all fields are null.
 	 */
 	@AssertTrue(message = "수정할 항목이 최소 하나는 있어야 합니다")
 	public boolean hasAtLeastOneField() {
@@ -80,7 +82,9 @@ public class SellerConcertUpdateDTO {
 	}
 
 	/**
-	 * 상태 변경 유효성 검증
+	 * Validates that the concert status change is allowed according to business rules.
+	 *
+	 * Returns true if the status is null (no change) or if it is set to CANCELLED, SCHEDULED, or ON_SALE.
 	 */
 	@AssertTrue(message = "유효하지 않은 상태 변경입니다")
 	public boolean isValidStatusChange() {
@@ -96,7 +100,9 @@ public class SellerConcertUpdateDTO {
 	}
 
 	/**
-	 * 공연 시간 순서 검증 (nullable 고려)
+	 * Validates that the concert end time is after the start time, allowing null values for partial updates.
+	 *
+	 * @return true if either startTime or endTime is null, or if endTime is after startTime
 	 */
 	@AssertTrue(message = "종료 시간은 시작 시간보다 늦어야 합니다")
 	public boolean isValidPerformanceTimes() {
@@ -107,7 +113,9 @@ public class SellerConcertUpdateDTO {
 	}
 
 	/**
-	 * 예매 시간 순서 검증 (nullable 고려)
+	 * Validates that the booking end datetime is after the booking start datetime, allowing nulls for partial updates.
+	 *
+	 * @return true if either bookingStartDate or bookingEndDate is null, or if bookingEndDate is after bookingStartDate
 	 */
 	@AssertTrue(message = "예매 종료일시는 예매 시작일시보다 늦어야 합니다")
 	public boolean isValidBookingTimes() {
@@ -118,7 +126,9 @@ public class SellerConcertUpdateDTO {
 	}
 
 	/**
-	 * 예매 기간과 공연 날짜 검증 (nullable 고려)
+	 * Validates that the booking end datetime is before the concert start datetime, allowing null values for partial updates.
+	 *
+	 * @return true if bookingEndDate, concertDate, or startTime is null, or if bookingEndDate is before the concert's start datetime; false otherwise.
 	 */
 	@AssertTrue(message = "예매 종료일시는 공연 시작 전이어야 합니다")
 	public boolean isValidBookingPeriod() {

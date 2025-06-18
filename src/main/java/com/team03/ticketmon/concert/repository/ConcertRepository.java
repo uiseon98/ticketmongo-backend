@@ -80,8 +80,22 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 	List<Concert> findByConcertDateAndStatusOrderByConcertDateAsc(LocalDate concertDate,
 		ConcertStatus status);
 
-	List<Concert> findByStatusInOrderByConcertDateAsc(List<ConcertStatus> statuses);
+	/**
+ * Retrieves a list of concerts whose status is in the specified list, ordered by concert date in ascending order.
+ *
+ * @param statuses the list of concert statuses to filter by
+ * @return a list of concerts matching the given statuses, ordered by concert date ascending
+ */
+List<Concert> findByStatusInOrderByConcertDateAsc(List<ConcertStatus> statuses);
 
+	/**
+	 * Returns a paginated list of concerts whose status is in the specified list, ordered by concert date ascending.
+	 * Associated concert seats are eagerly fetched.
+	 *
+	 * @param statuses the list of concert statuses to filter by
+	 * @param pageable the pagination and sorting information
+	 * @return a page of concerts matching the given statuses, ordered by concert date
+	 */
 	@EntityGraph(attributePaths = {"concertSeats"})
 	Page<Concert> findByStatusInOrderByConcertDateAsc(List<ConcertStatus> statuses, Pageable pageable);
 

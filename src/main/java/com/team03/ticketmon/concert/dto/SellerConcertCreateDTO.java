@@ -77,7 +77,9 @@ public class SellerConcertCreateDTO {
 	private String posterImageUrl;
 
 	/**
-	 * 공연 시간 순서 검증
+	 * Validates that the concert end time is after the start time.
+	 *
+	 * @return true if both start and end times are present and end time is after start time, or if either is null
 	 */
 	@AssertTrue(message = "종료 시간은 시작 시간보다 늦어야 합니다")
 	public boolean isValidPerformanceTimes() {
@@ -88,7 +90,9 @@ public class SellerConcertCreateDTO {
 	}
 
 	/**
-	 * 예매 시간 순서 검증
+	 * Validates that the booking end datetime is after the booking start datetime.
+	 *
+	 * @return true if either bookingStartDate or bookingEndDate is null, or if bookingEndDate is strictly after bookingStartDate; false otherwise.
 	 */
 	@AssertTrue(message = "예매 종료일시는 예매 시작일시보다 늦어야 합니다")
 	public boolean isValidBookingTimes() {
@@ -99,7 +103,9 @@ public class SellerConcertCreateDTO {
 	}
 
 	/**
-	 * 예매 기간과 공연 날짜 검증
+	 * Validates that the booking end datetime occurs before the concert start datetime.
+	 *
+	 * @return true if bookingEndDate, concertDate, or startTime is null, or if bookingEndDate is before the concert's start datetime; false otherwise.
 	 */
 	@AssertTrue(message = "예매 종료일시는 공연 시작 전이어야 합니다")
 	public boolean isValidBookingPeriod() {

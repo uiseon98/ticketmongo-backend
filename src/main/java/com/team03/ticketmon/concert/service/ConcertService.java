@@ -47,7 +47,11 @@ public class ConcertService {
 	private static final int DEFAULT_SIZE = 20;
 
 	/**
-	 * 전체 콘서트 조회 (페이징)
+	 * Retrieves a paginated list of concerts with active statuses.
+	 *
+	 * @param page the page number to retrieve
+	 * @param size the number of concerts per page
+	 * @return a page of active concert DTOs
 	 */
 	public Page<ConcertDTO> getAllConcerts(int page, int size) {
 		// 페이징 파라미터 검증
@@ -58,14 +62,21 @@ public class ConcertService {
 	}
 
 	/**
-	 * 전체 콘서트 조회 (페이징 없음)
+	 * Retrieves all concerts with active statuses without applying pagination.
+	 *
+	 * @return a list of concert DTOs representing all active concerts
 	 */
 	public List<ConcertDTO> getAllConcertsWithoutPaging() {
 		return getConcertsByStatuses(ACTIVE_STATUSES);
 	}
 
 	/**
-	 * 상태별 콘서트 조회 (페이징)
+	 * Retrieves a paginated list of concerts filtered by the specified status.
+	 *
+	 * @param status the concert status to filter by
+	 * @param pageable the pagination information
+	 * @return a page of concerts matching the given status
+	 * @throws BusinessException if the status is null
 	 */
 	public Page<ConcertDTO> getConcertsWithPaging(ConcertStatus status, Pageable pageable) {
 		if (status == null) {
@@ -78,7 +89,10 @@ public class ConcertService {
 	}
 
 	/**
-	 * 키워드로 콘서트 검색
+	 * Searches for concerts that match the given keyword.
+	 *
+	 * @param keyword the search keyword; must not be null or empty
+	 * @return a list of concerts whose attributes match the keyword
 	 */
 	public List<ConcertDTO> searchByKeyword(String keyword) {
 		validateKeyword(keyword);
@@ -91,7 +105,11 @@ public class ConcertService {
 	}
 
 	/**
-	 * 날짜 범위로 콘서트 필터링
+	 * Returns a list of concerts occurring within the specified date range.
+	 *
+	 * @param startDate the start date of the range (inclusive)
+	 * @param endDate the end date of the range (inclusive)
+	 * @return a list of concerts scheduled between the given dates
 	 */
 	public List<ConcertDTO> filterByDateRange(LocalDate startDate, LocalDate endDate) {
 		validateDateRange(startDate, endDate);
@@ -104,7 +122,11 @@ public class ConcertService {
 	}
 
 	/**
-	 * 가격 범위로 콘서트 필터링
+	 * Returns a list of concerts whose prices fall within the specified range.
+	 *
+	 * @param minPrice the minimum price (inclusive)
+	 * @param maxPrice the maximum price (inclusive)
+	 * @return a list of concerts matching the given price range
 	 */
 	public List<ConcertDTO> filterByPriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
 		validatePriceRange(minPrice, maxPrice);
@@ -117,7 +139,13 @@ public class ConcertService {
 	}
 
 	/**
-	 * 날짜와 가격 범위로 콘서트 필터링
+	 * Filters concerts within the specified date and price ranges.
+	 *
+	 * @param startDate the start date of the concert range (inclusive)
+	 * @param endDate the end date of the concert range (inclusive)
+	 * @param minPrice the minimum ticket price (inclusive)
+	 * @param maxPrice the maximum ticket price (inclusive)
+	 * @return a list of concerts matching the given date and price criteria
 	 */
 	public List<ConcertDTO> filterByDateAndPriceRange(
 		LocalDate startDate, LocalDate endDate,
@@ -134,7 +162,13 @@ public class ConcertService {
 	}
 
 	/**
-	 * 필터 조건 적용
+	 * Returns a list of concerts filtered by the criteria specified in the given filter DTO.
+	 *
+	 * If the filter DTO is null or contains no filter criteria, all concerts with active statuses are returned.
+	 * Filters can include date range, price range, or both.
+	 *
+	 * @param filterDTO the filter criteria for concerts, including optional date and price ranges
+	 * @return a list of concerts matching the specified filters, or all active concerts if no filters are provided
 	 */
 	public List<ConcertDTO> applyFilters(ConcertFilterDTO filterDTO) {
 		if (filterDTO == null) {
@@ -198,7 +232,10 @@ public class ConcertService {
 	}
 
 	/**
-	 * ID로 콘서트 조회
+	 * Retrieves a concert by its ID and returns it as an optional DTO.
+	 *
+	 * @param id the unique identifier of the concert
+	 * @return an Optional containing the ConcertDTO if found, or empty if not found
 	 */
 	public Optional<ConcertDTO> getConcertById(Long id) {
 		validateConcertId(id);
@@ -208,7 +245,12 @@ public class ConcertService {
 	}
 
 	/**
-	 * AI 요약 정보 조회
+	 * Retrieves the AI-generated summary for a concert by its ID.
+	 *
+	 * If no summary exists, returns a default message indicating that the AI summary has not yet been generated.
+	 *
+	 * @param id the unique identifier of the concert
+	 * @return the AI-generated summary, or a default message if unavailable
 	 */
 	public String getAiSummary(Long id) {
 		validateConcertId(id);
@@ -222,7 +264,11 @@ public class ConcertService {
 	// ========== Private Helper Methods ==========
 
 	/**
-	 * 상태별 콘서트 조회 (페이징) - 내부 공통 로직
+	 * Retrieves a paginated list of concerts filtered by the specified statuses.
+	 *
+	 * @param statuses the list of concert statuses to filter by
+	 * @param pageable the pagination information
+	 * @return a page of concert DTOs matching the given statuses
 	 */
 	private Page<ConcertDTO> getConcertsByStatuses(List<ConcertStatus> statuses, Pageable pageable) {
 		Page<Concert> concertPage = concertRepository
@@ -232,7 +278,10 @@ public class ConcertService {
 	}
 
 	/**
-	 * 상태별 콘서트 조회 (페이징 없음) - 내부 공통 로직
+	 * Retrieves a list of concerts filtered by the specified statuses, ordered by concert date in ascending order.
+	 *
+	 * @param statuses the list of concert statuses to filter by
+	 * @return a list of concert DTOs matching the given statuses
 	 */
 	private List<ConcertDTO> getConcertsByStatuses(List<ConcertStatus> statuses) {
 		return concertRepository
@@ -243,7 +292,11 @@ public class ConcertService {
 	}
 
 	/**
-	 * 페이징 파라미터 검증
+	 * Validates that the paging parameters are within allowed bounds.
+	 *
+	 * @param page the page number to validate
+	 * @param size the page size to validate
+	 * @throws BusinessException if the page number or size is outside the allowed range
 	 */
 	private void validatePagingParameters(int page, int size) {
 		if (page < MIN_PAGE) {
@@ -255,7 +308,10 @@ public class ConcertService {
 	}
 
 	/**
-	 * 키워드 검증
+	 * Validates that the provided keyword is not null or empty.
+	 *
+	 * @param keyword the search keyword to validate
+	 * @throws BusinessException if the keyword is null or empty
 	 */
 	private void validateKeyword(String keyword) {
 		if (keyword == null || keyword.trim().isEmpty()) {
@@ -264,7 +320,11 @@ public class ConcertService {
 	}
 
 	/**
-	 * 날짜 범위 검증
+	 * Validates that the start date is not after the end date.
+	 *
+	 * @param startDate the start date to validate
+	 * @param endDate the end date to validate
+	 * @throws BusinessException if both dates are provided and the start date is after the end date
 	 */
 	private void validateDateRange(LocalDate startDate, LocalDate endDate) {
 		if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
@@ -273,7 +333,11 @@ public class ConcertService {
 	}
 
 	/**
-	 * 가격 범위 검증
+	 * Validates that the provided price range is non-negative and that the minimum price does not exceed the maximum price.
+	 *
+	 * @param minPrice the minimum price to validate
+	 * @param maxPrice the maximum price to validate
+	 * @throws BusinessException if either price is negative or if minPrice is greater than maxPrice
 	 */
 	private void validatePriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
 		if (minPrice != null && minPrice.compareTo(BigDecimal.ZERO) < 0) {
@@ -288,7 +352,10 @@ public class ConcertService {
 	}
 
 	/**
-	 * 콘서트 ID 검증
+	 * Validates that the concert ID is not null and greater than zero.
+	 *
+	 * @param id the concert ID to validate
+	 * @throws BusinessException if the ID is null or not positive
 	 */
 	private void validateConcertId(Long id) {
 		if (id == null || id <= 0) {
@@ -297,7 +364,10 @@ public class ConcertService {
 	}
 
 	/**
-	 * Entity를 DTO로 변환
+	 * Converts a Concert entity to a ConcertDTO by mapping all relevant fields.
+	 *
+	 * @param concert the Concert entity to convert
+	 * @return a ConcertDTO containing the mapped data from the entity
 	 */
 	private ConcertDTO convertToDTO(Concert concert) {
 		return new ConcertDTO(

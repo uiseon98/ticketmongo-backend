@@ -31,11 +31,25 @@ public @interface ValidConcertTimes {
 	 */
 	class ValidConcertTimesValidator implements ConstraintValidator<ValidConcertTimes, Object> {
 
+		/**
+		 * Initializes the validator for the {@link ValidConcertTimes} annotation.
+		 *
+		 * This implementation does not require any initialization logic.
+		 */
 		@Override
 		public void initialize(ValidConcertTimes constraintAnnotation) {
 			// 초기화 로직 (필요시)
 		}
 
+		/**
+		 * Validates concert and booking time fields on the given object according to custom business rules.
+		 *
+		 * Checks that the concert end time is after the start time, the booking end datetime is after the booking start datetime, both booking datetimes are before the concert start datetime, the concert duration does not exceed 8 hours, and the booking period does not exceed 30 days. Adds specific constraint violation messages for each failed rule.
+		 *
+		 * @param obj the object containing concert and booking time fields to validate
+		 * @param context the validation context for reporting constraint violations
+		 * @return {@code true} if all time-related constraints are satisfied or the object is {@code null}; {@code false} otherwise
+		 */
 		@Override
 		public boolean isValid(Object obj, ConstraintValidatorContext context) {
 			if (obj == null) {
@@ -116,7 +130,13 @@ public @interface ValidConcertTimes {
 		}
 
 		/**
-		 * 리플렉션을 사용하여 DTO에서 필요한 필드들 추출
+		 * Extracts concert-related time fields from the given object using reflection.
+		 *
+		 * Attempts to retrieve values for start time, end time, concert date, booking start date, and booking end date
+		 * by invoking their respective getter methods. If a getter is missing or inaccessible, the corresponding field is left null.
+		 *
+		 * @param obj the object from which to extract time fields
+		 * @return a ConcertTimeFields instance containing the extracted values, with nulls for any unavailable fields
 		 */
 		private ConcertTimeFields extractFields(Object obj) {
 			ConcertTimeFields fields = new ConcertTimeFields();

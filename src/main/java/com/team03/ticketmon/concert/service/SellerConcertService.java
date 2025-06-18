@@ -114,7 +114,11 @@ public class SellerConcertService {
 	}
 
 	/**
-	 * 콘서트 삭제 (취소 처리)
+	 * Cancels a concert by setting its status to CANCELLED after validating seller and concert IDs and verifying seller ownership.
+	 *
+	 * @param sellerId the ID of the seller requesting the cancellation
+	 * @param concertId the ID of the concert to cancel
+	 * @throws BusinessException if the seller or concert ID is invalid, the concert is not found, or the seller does not have permission
 	 */
 	@Transactional
 	public void cancelConcert(Long sellerId, Long concertId) {
