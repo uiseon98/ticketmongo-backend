@@ -35,7 +35,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'    // SpringDoc: Swagger UI 자동 문서화 도구 (OpenAPI 3 기반)
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
+    // SpringDoc: Swagger UI 자동 문서화 도구 (OpenAPI 3 기반)
     implementation "io.supabase:storage-java:1.1.0" // Supabase Storage 사용을 위한 Java SDK (파일 업로드/조회 등 API 지원)
     // Spring Boot 3.x 환경에서 S3 자동 구성 사용
     implementation 'io.awspring.cloud:spring-cloud-aws-starter-s3:3.4.0'  // S3 마이그레이션 대비
@@ -63,15 +64,8 @@ dependencies {
     // 비동기 테스트(Pub/Sub 등)에서 특정 조건이 만족될 때까지 기다리게 해주는 유틸리티
     testImplementation 'org.awaitility:awaitility'
     // webclient 사용하여 비동기 처리
-    implementation 'org.springframework.boot:spring-boot-starter-webflux:3.4.5'
-    // @Valid 어노테이션 관련 Bean Validation API 처리
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
-    // JWT, OAuth2 추가
-    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 }
 
 tasks.named('test') {

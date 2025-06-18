@@ -11,6 +11,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -45,7 +46,12 @@ public class PaymentCancelHistory {
 	// ... 환불 계좌 정보 필드들 ...
 
 	@Column(nullable = false, updatable = false)
-	private final LocalDateTime createdAt = LocalDateTime.now();
+	private LocalDateTime createdAt;
+
+	@PrePersist
+	private void onCreate() {
+		this.createdAt = LocalDateTime.now();
+	}
 
 	@Builder
 	public PaymentCancelHistory(Payment payment, String transactionKey, BigDecimal cancelAmount, String cancelReason,
