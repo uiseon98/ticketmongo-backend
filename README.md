@@ -335,11 +335,11 @@ ErrorCode에 따라 ErrorResponse 생성
 | 항목 | 설명 | 상태 |
 |------|------|------|
 | 🔄 `docker-compose up` 후 Redis/LocalStack 기동 확인 | Redis `PONG` 응답 확인 / LocalStack SQS 명령어 정상 작동 | ✅ 완료 |
-| 📄 `.env`에 실제 키값 반영 | `.env` 파일에는 키가 반영되어 있지만, 현재 application-dev.yml 직접 사용 중 | 🔄 작성 완료 (연동 미완료) |
-| 🔗 `.env → application-dev.yml` 연동 테스트 | `spring.config.import=optional:env[.env]` 방식은 아직 미적용 | ⛔ 미완료 |
+| 📄 `..env`에 실제 키값 반영 | `..env` 파일에는 키가 반영되어 있지만, 현재 application-dev.yml 직접 사용 중 | 🔄 작성 완료 (연동 미완료) |
+| 🔗 `..env → application-dev.yml` 연동 테스트 | `spring.config.import=optional:.env[..env]` 방식은 아직 미적용 | ⛔ 미완료 |
 | 🌐 Swagger 접속 확인 | [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html) 정상 접속 확인 | ✅ 완료 |
 | 🪣 Supabase 버킷 및 정책 설정 | `profile-imgs`, `poster-imgs` 등 버킷 미생성 상태 | ⛔ 미완료 |
-| 🐳 Docker로 실행 시 `.env` 적용 여부 | `.env` → SpringBoot 설정이 미적용 상태라 확인 불가 | ⛔ 미완료 |
+| 🐳 Docker로 실행 시 `..env` 적용 여부 | `..env` → SpringBoot 설정이 미적용 상태라 확인 불가 | ⛔ 미완료 |
 -->
 
 <br>
