@@ -68,7 +68,7 @@
 // .anyRequest().authenticated()
 
 // JWT 필터 자리만 확보 (구현 전)
- // http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+// http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 ```
 
 <br>
@@ -87,22 +87,22 @@
 **❗ 실패(Error) 응답 (`ErrorResponse`)**
 ```json
 {
-"success": false,
-"status": 400,
-"code": "C001",
-"message": "유효하지 않은 입력값입니다."
+  "success": false,
+  "status": 400,
+  "code": "C001",
+  "message": "유효하지 않은 입력값입니다."
 }
 ```
 
 **✅ 성공(Success) 응답 (`SuccessResponse`)**
 ```json
 {
-"success": true,
-"message": "조회 성공",
-"data": {
-"title": "콘서트 A",
-"date": "2025-12-01"
-}
+  "success": true,
+  "message": "조회 성공",
+  "data": {
+    "title": "콘서트 A",
+    "date": "2025-12-01"
+  }
 }
 ```
 
@@ -143,17 +143,17 @@ ErrorCode에 따라 ErrorResponse 생성
 **1. ❗ 비즈니스 예외 발생**
 ```java
    if (seat.isAlreadyBooked()) {
-   throw new BusinessException(ErrorCode.SEAT_ALREADY_TAKEN);
+        throw new BusinessException(ErrorCode.SEAT_ALREADY_TAKEN);
    }
 ```
 → 클라이언트에 아래처럼 반환됨:
 
 ```json
 {
-"success": false,
-"status": 409,
-"code": "B003",
-"message": "이미 선택된 좌석입니다."
+  "success": false,
+  "status": 409,
+  "code": "B003",
+  "message": "이미 선택된 좌석입니다."
 }
 ```
 <br>
@@ -166,12 +166,12 @@ ErrorCode에 따라 ErrorResponse 생성
 
 ```json
 {
-"success": true,
-"message": "등록 성공",
-"data": {
-"concertId": 12,
-"title": "Waiting Cha Live"
-}
+  "success": true,
+  "message": "등록 성공",
+  "data": {
+    "concertId": 12,
+    "title": "Waiting Cha Live"
+  }
 }
 ```
 
@@ -221,9 +221,9 @@ ErrorCode에 따라 ErrorResponse 생성
 
 1. Docker Desktop 설치 (https://www.docker.com/products/docker-desktop)
 2. **`.env`, `application-dev.yml` 파일 수령 및 배치**
-  - `application-dev.yml`, `.env`은 직접 전달 예정
-  - `application-dev.yml`는 `src/main/resources/`에 `application-dev.yml`로 위치
-  - `.env`는 팀 디스코드 또는 팀원 공유 경로에서 .env 파일을 받아, 프로젝트 루트 디렉토리에 위치
+- `application-dev.yml`, `.env`은 직접 전달 예정
+- `application-dev.yml`는 `src/main/resources/`에 `application-dev.yml`로 위치
+- `.env`는 팀 디스코드 또는 팀원 공유 경로에서 .env 파일을 받아, 프로젝트 루트 디렉토리에 위치
 3. `.env.example`은 참고용으로 제공됩니다.
 
 <br>
@@ -335,11 +335,11 @@ ErrorCode에 따라 ErrorResponse 생성
 | 항목 | 설명 | 상태 |
 |------|------|------|
 | 🔄 `docker-compose up` 후 Redis/LocalStack 기동 확인 | Redis `PONG` 응답 확인 / LocalStack SQS 명령어 정상 작동 | ✅ 완료 |
-| 📄 `..env`에 실제 키값 반영 | `..env` 파일에는 키가 반영되어 있지만, 현재 application-dev.yml 직접 사용 중 | 🔄 작성 완료 (연동 미완료) |
-| 🔗 `..env → application-dev.yml` 연동 테스트 | `spring.config.import=optional:.env[..env]` 방식은 아직 미적용 | ⛔ 미완료 |
+| 📄 `.env`에 실제 키값 반영 | `.env` 파일에는 키가 반영되어 있지만, 현재 application-dev.yml 직접 사용 중 | 🔄 작성 완료 (연동 미완료) |
+| 🔗 `.env → application-dev.yml` 연동 테스트 | `spring.config.import=optional:env[.env]` 방식은 아직 미적용 | ⛔ 미완료 |
 | 🌐 Swagger 접속 확인 | [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html) 정상 접속 확인 | ✅ 완료 |
 | 🪣 Supabase 버킷 및 정책 설정 | `profile-imgs`, `poster-imgs` 등 버킷 미생성 상태 | ⛔ 미완료 |
-| 🐳 Docker로 실행 시 `..env` 적용 여부 | `..env` → SpringBoot 설정이 미적용 상태라 확인 불가 | ⛔ 미완료 |
+| 🐳 Docker로 실행 시 `.env` 적용 여부 | `.env` → SpringBoot 설정이 미적용 상태라 확인 불가 | ⛔ 미완료 |
 -->
 
 <br>
