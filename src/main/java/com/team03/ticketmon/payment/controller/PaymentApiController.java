@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.result.view.RedirectView;
 import org.springframework.web.util.UriUtils;
 
+import com.team03.ticketmon.payment.dto.PaymentCancelRequest;
 import com.team03.ticketmon.payment.dto.PaymentConfirmRequest;
 import com.team03.ticketmon.payment.dto.PaymentExecutionResponse;
 import com.team03.ticketmon.payment.dto.PaymentRequest;
@@ -64,5 +66,28 @@ public class PaymentApiController {
 			String encodedMessage = UriUtils.encode(e.getMessage(), StandardCharsets.UTF_8);
 			return new RedirectView("/payment/result/fail?orderId=" + orderId + "&message=" + encodedMessage);
 		}
+	}
+
+	@GetMapping("/fail")
+	public RedirectView handlePaymentFail(
+		@RequestParam String code,
+		@RequestParam String message,
+		@RequestParam String orderId) {
+
+		log.warn("결제 실패 리다이렉트 수신: orderId={}, code={}, message={}", orderId, code, message);
+		paymentService.handlePaymentFailure(orderId, code, message);
+
+		String encodedMessage = UriUtils.encode(message, StandardCharsets.UTF_8);
+		return new RedirectView(
+			"/payment/result/fail?orderId=" + orderId + "&code=" + code + "&message=" + encodedMessage);
+	}
+
+	@PostMapping("/{orderId}/cancel")
+	public ResponseEntity<Void> cancelPayment(
+		@PathVariable String orderId,
+		@Valid @RequestBody PaymentCancelRequest cancelRequest) {
+
+		paymentService.cancelPayment(orderId, cancelRequest);
+		return ResponseEntity.ok().build();
 	}
 }

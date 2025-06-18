@@ -1,5 +1,6 @@
 package com.team03.ticketmon.payment.service;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
@@ -17,9 +18,13 @@ import com.team03.ticketmon.concert.domain.enums.BookingStatus;
 import com.team03.ticketmon.concert.repository.BookingRepository;
 import com.team03.ticketmon.payment.config.TossPaymentsProperties;
 import com.team03.ticketmon.payment.domain.entity.Payment;
+import com.team03.ticketmon.payment.domain.entity.PaymentCancelHistory;
+import com.team03.ticketmon.payment.domain.enums.PaymentStatus;
+import com.team03.ticketmon.payment.dto.PaymentCancelRequest;
 import com.team03.ticketmon.payment.dto.PaymentConfirmRequest;
 import com.team03.ticketmon.payment.dto.PaymentExecutionResponse;
 import com.team03.ticketmon.payment.dto.PaymentRequest;
+import com.team03.ticketmon.payment.repository.PaymentCancelHistoryRepository;
 import com.team03.ticketmon.payment.repository.PaymentRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -36,6 +41,7 @@ public class PaymentService {
 	private final TossPaymentsProperties tossPaymentsProperties;
 	private final AppProperties appProperties;
 	private final WebClient webClient; // webclient 주입추가
+	private final PaymentCancelHistoryRepository paymentCancelHistoryRepository;
 
 	@Transactional
 	public PaymentExecutionResponse initiatePayment(PaymentRequest paymentRequest) {
@@ -122,4 +128,72 @@ public class PaymentService {
 			.block(); // 비동기 작업이 끝날 때까지 대기 (Controller에서 RedirectView를 사용하므로 블로킹 방식 사용)
 	}
 
+	/**
+	 * 결제 실패 시의 비즈니스 로직을 처리합니다.
+	 */
+	@Transactional
+	public void handlePaymentFailure(String orderId, String errorCode, String errorMessage) {
+		Payment payment = paymentRepository.findByOrderId(orderId)
+			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 주문 ID 입니다: " + orderId));
+
+		// 이미 최종 상태(성공 또는 취소)가 아니라면 '실패' 상태로 변경
+		if (payment.getStatus() == PaymentStatus.PENDING) {
+			payment.fail();
+			payment.getBooking().cancel(); // 예매도 취소 상태로 변경
+			log.info("결제 실패 상태로 변경 완료: orderId={}, errorCode={}, errorMessage={}", orderId, errorCode, errorMessage);
+		} else {
+			log.warn("이미 처리된 주문에 대한 실패 처리 요청: orderId={}, 현재 상태: {}", orderId, payment.getStatus());
+		}
+	}
+
+	/**
+	 * 결제를 취소합니다. (사용자 요청 또는 관리자 기능)
+	 */
+	@Transactional
+	public void cancelPayment(String orderId, PaymentCancelRequest cancelRequest) {
+		Payment payment = paymentRepository.findByOrderId(orderId)
+			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 주문 ID 입니다: " + orderId));
+
+		// 이미 취소된 결제인지 확인
+		if (payment.getStatus() == PaymentStatus.CANCELED) {
+			throw new IllegalStateException("이미 취소된 결제입니다.");
+		}
+
+		// 1. 토스페이먼츠 '결제 취소 API' 호출
+		String encodedSecretKey = Base64.getEncoder()
+			.encodeToString((tossPaymentsProperties.secretKey() + ":").getBytes(StandardCharsets.UTF_8));
+
+		// API 호출 (실제 운영에서는 응답 DTO를 만들어 사용하는 것이 좋습니다)
+		Map<String, Object> tossCancelResponse = webClient.post()
+			.uri("https://api.tosspayments.com/v1/payments/" + payment.getPaymentKey() + "/cancel")
+			.header("Authorization", "Basic " + encodedSecretKey)
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(Map.of("cancelReason", cancelRequest.getCancelReason()))
+			.retrieve()
+			.onStatus(HttpStatusCode::isError, response ->
+				response.bodyToMono(String.class)
+					.flatMap(errorBody -> {
+						log.error("토스페이먼츠 취소 API 호출 실패: status={}, body={}", response.statusCode(), errorBody);
+						return Mono.error(new RuntimeException("결제 취소에 실패했습니다."));
+					})
+			)
+			.bodyToMono(Map.class) // Map으로 응답을 받음
+			.block();
+
+		// 2. 우리 시스템 DB 상태 업데이트
+		payment.cancel(); // Payment 상태를 CANCELED로 변경 (새 메소드 필요)
+		payment.getBooking().cancel(); // Booking 상태도 CANCELED로 변경
+
+		// 3. 결제 취소 이력 저장
+		PaymentCancelHistory history = PaymentCancelHistory.builder()
+			.payment(payment)
+			.transactionKey((String)tossCancelResponse.get("transactionKey"))
+			.cancelAmount(new BigDecimal(
+				tossCancelResponse.get("balanceAmount").toString())) // 취소 후 남은 금액이 0이므로, 전체 취소 금액을 계산해야 함
+			.cancelReason(cancelRequest.getCancelReason())
+			.build();
+		paymentCancelHistoryRepository.save(history);
+
+		log.info("결제 취소 완료: orderId={}", orderId);
+	}
 }
