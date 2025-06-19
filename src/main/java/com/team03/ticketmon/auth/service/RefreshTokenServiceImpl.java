@@ -37,6 +37,11 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     }
 
     @Override
+    public boolean existToken(Long userId, String token) {
+        return refreshTokenRepository.existsByUserEntityIdAndToken(userId, token);
+    }
+
+    @Override
     public void deleteRefreshToken(Long userId) {
         refreshTokenRepository.deleteByUserEntityId(userId);
     }
