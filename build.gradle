@@ -65,6 +65,12 @@ dependencies {
     // webclient 사용하여 비동기 처리
     implementation 'org.springframework.boot:spring-boot-starter-webflux:3.4.5'
 
+
+    // JWT, OAuth2 추가
+    // implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 }
 
 tasks.named('test') {

@@ -26,6 +26,9 @@ public enum ErrorCode {
     INVALID_INPUT(400, "C001", "유효하지 않은 입력값입니다."),
     RESOURCE_NOT_FOUND(404, "C002", "리소스를 찾을 수 없습니다."),
     SERVER_ERROR(500, "C003", "서버에 오류가 발생했습니다."),
+    INVALID_PAGE_NUMBER(400, "C004", "페이지 번호는 0 이상이어야 합니다."), // 추가: 페이징 검증
+    INVALID_PAGE_SIZE(400, "C005", "페이지 크기는 1-100 사이여야 합니다."), // 추가: 페이징 검증
+    INVALID_PAGE_REQUEST(400, "C006", "페이징 요청 정보가 유효하지 않습니다."), // 추가: Pageable 검증
 
     // Auth & User (인증 및 사용자 관련)
     LOGIN_FAILED(401, "A001", "아이디 또는 비밀번호가 일치하지 않습니다."),
@@ -47,6 +50,12 @@ public enum ErrorCode {
     INVALID_CONCERT_ID(400, "T007", "유효하지 않은 콘서트 ID입니다."), // 추가: 콘서트 ID 검증
     CONCERT_DATE_REQUIRED(400, "T008", "조회할 날짜를 입력해주세요."), // 추가: 날짜 필수 입력
     SEARCH_CONDITION_REQUIRED(400, "T009", "검색 조건을 입력해주세요."), // 추가: 검색 조건 필수
+
+    // Queue & Access (대기열 및 입장)
+    QUEUE_ALREADY_JOINED(409, "Q001", "이미 대기열에 등록된 사용자입니다."),
+    INVALID_ACCESS_KEY(403, "Q002", "유효하지 않은 접근 키입니다."),
+    STILL_IN_QUEUE(403, "Q003", "아직 입장 순서가 아닙니다. 잠시만 더 기다려주세요."),
+    QUEUE_TOO_MANY_REQUESTS(429, "Q004", "접속 시도가 너무 많습니다. 잠시 후 다시 시도해주세요."),
 
     // Booking & Seat (예매 및 좌석)
     BOOKING_NOT_AVAILABLE(403, "B001", "예매가 가능한 상태가 아닙니다."),
