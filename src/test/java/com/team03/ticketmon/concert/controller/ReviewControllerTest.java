@@ -162,10 +162,10 @@ class ReviewControllerTest {
 	void createReview_ConcertIdMismatchError() throws Exception {
 		// === Given ===
 		Long urlConcertId = 1L;
-		Long bodyMoncertId = 2L; // 다른 값
+		Long bodyConcertId = 2L; // 다른 값
 
 		ReviewDTO requestDTO = createTestReviewRequestDTO();
-		requestDTO.setConcertId(bodyMoncertId); // URL과 다른 concertId
+		requestDTO.setConcertId(bodyConcertId); // URL과 다른 concertId
 
 		// === When & Then ===
 		mockMvc.perform(post("/api/concerts/{concertId}/reviews", urlConcertId)

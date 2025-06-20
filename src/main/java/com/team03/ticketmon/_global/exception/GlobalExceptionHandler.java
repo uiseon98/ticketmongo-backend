@@ -149,16 +149,6 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 🚨 요청 파라미터 누락 예외 처리
-     * sellerId 등 필수 @RequestParam이 누락된 경우 발생
-     */
-    @ExceptionHandler(MissingServletRequestParameterException.class)
-    protected ResponseEntity<ErrorResponse> handleMissingServletRequestParameterException(MissingServletRequestParameterException e) {
-        ErrorResponse response = ErrorResponse.of(ErrorCode.INVALID_INPUT);
-        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-    }
-
-    /**
      * 🚨 타입 변환 예외 처리
      * sellerId="invalid-id" 또는 status="INVALID_STATUS" 등의 경우 발생
      */
