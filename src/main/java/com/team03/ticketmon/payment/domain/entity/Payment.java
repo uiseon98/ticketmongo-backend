@@ -25,7 +25,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "payments") // ERD에 정의된 'payments' 테이블
+@Table(name = "payments")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Payment {
@@ -35,7 +35,7 @@ public class Payment {
 
 	@OneToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "booking_id", nullable = false, unique = true)
-	private Booking booking; // **핵심: 기존 Booking 엔티티와 1:1 연관관계**
+	private Booking booking;
 
 	@Column(nullable = false, unique = true, length = 64)
 	private String orderId;
@@ -79,21 +79,18 @@ public class Payment {
 		this.status = PaymentStatus.PENDING;
 	}
 
-	/**
-	 * 결제 승인이 완료되었을 때 호출됩니다.
-	 * paymentKey를 저장하고, 상태를 DONE으로 변경하며, 승인 시간을 기록합니다.
-	 * @param paymentKey 토스페이먼츠로부터 받은 결제 키
-	 */
 	public void complete(String paymentKey) {
 		this.paymentKey = paymentKey;
 		this.status = PaymentStatus.DONE;
 		this.approvedAt = LocalDateTime.now();
 	}
 
-	/**
-	 * 결제가 실패했을 때 호출됩니다.
-	 * 상태를 FAILED로 변경합니다.
-	 */
+	public void complete(String paymentKey, LocalDateTime approvedAt) { // 💡 [추가/수정]
+		this.paymentKey = paymentKey;
+		this.status = PaymentStatus.DONE;
+		this.approvedAt = approvedAt;
+	}
+
 	public void fail() {
 		this.status = PaymentStatus.FAILED;
 	}
@@ -102,4 +99,3 @@ public class Payment {
 		this.status = PaymentStatus.CANCELED;
 	}
 }
-

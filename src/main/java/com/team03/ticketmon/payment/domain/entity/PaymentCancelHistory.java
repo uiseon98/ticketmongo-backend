@@ -18,6 +18,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+// import com.team03.ticketmon.payment.domain.Payment; // 💡 [확인] 이 임포트가 필요할 수 있습니다.
+
 @Entity
 @Table(name = "payment_cancel_history")
 @Getter
@@ -42,8 +44,6 @@ public class PaymentCancelHistory {
 
 	@Column(nullable = false)
 	private LocalDateTime canceledAt;
-
-	// ... 환불 계좌 정보 필드들 ...
 
 	@Column(nullable = false, updatable = false)
 	private LocalDateTime createdAt;

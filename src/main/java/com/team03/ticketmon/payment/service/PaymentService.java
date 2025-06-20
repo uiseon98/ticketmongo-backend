@@ -2,6 +2,9 @@ package com.team03.ticketmon.payment.service;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -88,7 +91,11 @@ public class PaymentService {
 			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 주문 ID 입니다: " + confirmRequest.getOrderId()));
 
 		// 2. 금액 위변조 확인: 요청된 금액과 DB에 저장된 금액이 일치하는지 검증 (매우 중요)
-		if (!payment.getAmount().equals(confirmRequest.getAmount())) {
+
+		log.info("금액 검증 시작: DB 금액 = {}, 요청 금액 = {}", payment.getAmount(), confirmRequest.getAmount());
+
+		if (payment.getAmount().compareTo(confirmRequest.getAmount()) != 0) {
+			log.error("결제 금액 불일치 오류! DB 금액: {}, 요청 금액: {}", payment.getAmount(), confirmRequest.getAmount());
 			throw new IllegalArgumentException("결제 금액이 일치하지 않습니다.");
 		}
 
@@ -157,16 +164,13 @@ public class PaymentService {
 		Payment payment = paymentRepository.findByOrderId(orderId)
 			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 주문 ID 입니다: " + orderId));
 
-		// 이미 취소된 결제인지 확인
 		if (payment.getStatus() == PaymentStatus.CANCELED) {
 			throw new IllegalStateException("이미 취소된 결제입니다.");
 		}
 
-		// 1. 토스페이먼츠 '결제 취소 API' 호출
 		String encodedSecretKey = Base64.getEncoder()
 			.encodeToString((tossPaymentsProperties.secretKey() + ":").getBytes(StandardCharsets.UTF_8));
 
-		// API 호출 (실제 운영에서는 응답 DTO를 만들어 사용하는 것이 좋습니다)
 		Map<String, Object> tossCancelResponse = webClient.post()
 			.uri("https://api.tosspayments.com/v1/payments/" + payment.getPaymentKey() + "/cancel")
 			.header("Authorization", "Basic " + encodedSecretKey)
@@ -177,23 +181,64 @@ public class PaymentService {
 				response.bodyToMono(String.class)
 					.flatMap(errorBody -> {
 						log.error("토스페이먼츠 취소 API 호출 실패: status={}, body={}", response.statusCode(), errorBody);
-						return Mono.error(new RuntimeException("결제 취소에 실패했습니다."));
+						return Mono.error(new RuntimeException("결제 취소에 실패했습니다. (토스 응답 오류)"));
 					})
 			)
-			.bodyToMono(Map.class) // Map으로 응답을 받음
+			.bodyToMono(Map.class)
 			.block();
 
-		// 2. 우리 시스템 DB 상태 업데이트
-		payment.cancel(); // Payment 상태를 CANCELED로 변경 (새 메소드 필요)
-		payment.getBooking().cancel(); // Booking 상태도 CANCELED로 변경
+		payment.cancel();
+		payment.getBooking().cancel();
 
-		// 3. 결제 취소 이력 저장
+		String transactionKey = null;
+		BigDecimal cancelAmount = BigDecimal.ZERO;
+		LocalDateTime canceledAt = null; // 💡 [추가] 취소 시간을 담을 변수
+
+		List<Map<String, Object>> cancels = (List<Map<String, Object>>)tossCancelResponse.get("cancels");
+		if (cancels != null && !cancels.isEmpty()) {
+			Map<String, Object> lastCancel = cancels.get(cancels.size() - 1);
+			transactionKey = (String)lastCancel.get("transactionKey");
+
+			Object amountObj = lastCancel.get("cancelAmount");
+			if (amountObj instanceof Integer) {
+				cancelAmount = BigDecimal.valueOf((Integer)amountObj);
+			} else if (amountObj instanceof Double) {
+				cancelAmount = BigDecimal.valueOf((Double)amountObj);
+			} else if (amountObj != null) {
+				cancelAmount = new BigDecimal(amountObj.toString());
+			}
+
+			// 💡 [필수 수정] 토스페이먼츠 응답에서 'canceledAt'을 파싱합니다.
+			Object canceledAtObj = lastCancel.get("canceledAt");
+			if (canceledAtObj instanceof String) {
+				try {
+					canceledAt = LocalDateTime.parse((String)canceledAtObj, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+				} catch (DateTimeParseException e) {
+					log.warn("canceledAt 파싱 실패 (ISO_OFFSET_DATE_TIME): {}, 다른 포맷 시도", canceledAtObj);
+					try {
+						canceledAt = LocalDateTime.parse((String)canceledAtObj, DateTimeFormatter.ISO_DATE_TIME);
+					} catch (DateTimeParseException ex) {
+						log.error("canceledAt 파싱 최종 실패: {}", canceledAtObj, ex);
+						canceledAt = LocalDateTime.now(); // 파싱 실패 시 현재 시간으로 대체
+					}
+				}
+			}
+
+		} else {
+			log.warn("토스페이먼츠 취소 응답에 'cancels' 정보가 없거나 비어 있습니다. orderId: {}", payment.getOrderId());
+		}
+
+		// 💡 [필수 수정] 파싱 실패 시를 대비하여, null이면 현재 시간을 사용합니다.
+		if (canceledAt == null) {
+			canceledAt = LocalDateTime.now();
+		}
+
 		PaymentCancelHistory history = PaymentCancelHistory.builder()
 			.payment(payment)
-			.transactionKey((String)tossCancelResponse.get("transactionKey"))
-			.cancelAmount(new BigDecimal(
-				tossCancelResponse.get("balanceAmount").toString())) // 취소 후 남은 금액이 0이므로, 전체 취소 금액을 계산해야 함
+			.transactionKey(transactionKey)
+			.cancelAmount(cancelAmount)
 			.cancelReason(cancelRequest.getCancelReason())
+			.canceledAt(canceledAt) // 💡 [필수 수정] 파싱한 값 또는 현재 시간 사용
 			.build();
 		paymentCancelHistoryRepository.save(history);
 
