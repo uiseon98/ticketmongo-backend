@@ -53,7 +53,6 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     runtimeOnly 'com.h2database:h2'
-    testRuntimeOnly 'com.h2database:h2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'    // ✅ Redis 추가
     // ✅ Redisson, WebSocket 의존성 추가
@@ -67,8 +66,15 @@ dependencies {
     // 비동기 테스트(Pub/Sub 등)에서 특정 조건이 만족될 때까지 기다리게 해주는 유틸리티
     testImplementation 'org.awaitility:awaitility'
     // webclient 사용하여 비동기 처리
-    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux:3.4.5'
+    // @Valid 어노테이션 관련 Bean Validation API 처리
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // JWT, OAuth2 추가
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 }
 
 tasks.named('test') {
