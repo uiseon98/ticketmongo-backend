@@ -3,6 +3,7 @@ package com.team03.ticketmon.payment.service;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Base64;
@@ -20,7 +21,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import com.team03.ticketmon._global.config.AppProperties;
 import com.team03.ticketmon.concert.domain.Booking;
-import com.team03.ticketmon.concert.domain.enums.BookingStatus;
 import com.team03.ticketmon.concert.repository.BookingRepository;
 import com.team03.ticketmon.payment.config.TossPaymentsProperties;
 import com.team03.ticketmon.payment.domain.entity.Payment;
@@ -55,26 +55,25 @@ public class PaymentService {
 		Booking booking = bookingRepository.findByBookingNumber(paymentRequest.getBookingNumber())
 			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 예매 번호입니다."));
 
-		if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
+		if (booking.getStatus() != com.team03.ticketmon.concert.domain.enums.BookingStatus.PENDING_PAYMENT) {
 			throw new IllegalStateException("결제를 진행할 수 없는 예매 상태입니다.");
 		}
 
-		Optional<Payment> existingPaymentOpt = paymentRepository.findByBooking(booking);
-
+		// 💡 [수정] 기존 결제 정보가 PENDING 상태일 때만 재사용
+		Optional<Payment> existingPaymentOpt = paymentRepository.findByBooking(booking)
+			.filter(p -> p.getStatus() == PaymentStatus.PENDING);
 		Payment paymentToUse;
-
 		if (existingPaymentOpt.isPresent()) {
 			paymentToUse = existingPaymentOpt.get();
 			log.info("기존 결제 정보를 재사용합니다. orderId: {}", paymentToUse.getOrderId());
 		} else {
+			log.info("신규 결제 정보를 생성합니다. bookingNumber: {}", booking.getBookingNumber());
 			String orderId = UUID.randomUUID().toString();
-			paymentToUse = Payment.builder()
+			paymentToUse = paymentRepository.save(Payment.builder()
 				.booking(booking)
 				.orderId(orderId)
 				.amount(booking.getTotalAmount())
-				.build();
-			paymentRepository.save(paymentToUse);
-			log.info("신규 결제 정보를 생성합니다. orderId: {}", paymentToUse.getOrderId());
+				.build());
 		}
 
 		return PaymentExecutionResponse.builder()
@@ -100,62 +99,60 @@ public class PaymentService {
 			throw new IllegalArgumentException("결제 금액이 일치하지 않습니다.");
 		}
 
+		// 💡 [수정] 이미 PENDING 상태가 아닌 경우 중복 처리 방지
+		if (payment.getStatus() != PaymentStatus.PENDING) {
+			log.warn("Payment with orderId {} is already processed (status: {}). Ignoring duplicate request.",
+				confirmRequest.getOrderId(), payment.getStatus());
+			return;
+		}
+
+		String encodedSecretKey = Base64.getEncoder()
+			.encodeToString((tossPaymentsProperties.secretKey() + ":").getBytes(StandardCharsets.UTF_8));
+		String idempotencyKey = confirmRequest.getOrderId(); // 멱등성 키로 orderId 사용
+
+		callTossConfirmApi(confirmRequest, encodedSecretKey, idempotencyKey)
+			.doOnSuccess(tossResponse -> {
+				String paymentKey = (String)tossResponse.get("paymentKey");
+				LocalDateTime approvedAt = parseDateTime(tossResponse.get("approvedAt"));
+
+				payment.complete(paymentKey, approvedAt);
+				payment.getBooking().confirm();
+				paymentRepository.save(payment); // 💡 [추가] Dirty checking 외에 명시적 save
+				bookingRepository.save(payment.getBooking()); // 💡 [추가] Dirty checking 외에 명시적 save
+				log.info("결제 승인 완료: orderId={}", payment.getOrderId());
+			})
+			.doOnError(e -> {
+				log.error("결제 승인 API 호출 중 오류 발생: orderId={}, 오류={}", confirmRequest.getOrderId(), e.getMessage());
+				payment.fail();
+				paymentRepository.save(payment); // 💡 [추가] Dirty checking 외에 명시적 save
+				// booking은 실패 시 취소되지 않으므로 save 안함
+				throw new RuntimeException("결제 승인에 실패했습니다.", e);
+			})
+			.block();
+	}
+
+	// 💡 [수정] idempotencyKey 파라미터 추가 및 로깅
+	private Mono<Map> callTossConfirmApi(PaymentConfirmRequest confirmRequest, String encodedSecretKey,
+		String idempotencyKey) {
 		Map<String, Object> requestBody = Map.of(
 			"paymentKey", confirmRequest.getPaymentKey(),
 			"orderId", confirmRequest.getOrderId(),
 			"amount", confirmRequest.getAmount()
 		);
-		String encodedSecretKey = Base64.getEncoder()
-			.encodeToString((tossPaymentsProperties.secretKey() + ":").getBytes(StandardCharsets.UTF_8));
 
-		// 💡 [변경] WebClient 호출 부분을 새로운 메소드로 분리하여 호출합니다.
-		callTossConfirmApi(requestBody, encodedSecretKey)
-			.doOnSuccess(tossResponse -> {
-				String paymentKeyFromToss = (String)tossResponse.get("paymentKey");
-				LocalDateTime approvedAtFromToss = null;
-				Object approvedAtObj = tossResponse.get("approvedAt");
-				if (approvedAtObj instanceof String) {
-					try {
-						approvedAtFromToss = LocalDateTime.parse((String)approvedAtObj,
-							DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-					} catch (Exception e) {
-						try {
-							approvedAtFromToss = LocalDateTime.parse((String)approvedAtObj,
-								DateTimeFormatter.ISO_DATE_TIME);
-						} catch (Exception ex) {
-							log.warn("approvedAt 파싱 실패: {}, 기본 현재 시간 사용", approvedAtObj);
-							approvedAtFromToss = LocalDateTime.now();
-						}
-					}
-				} else {
-					approvedAtFromToss = LocalDateTime.now();
-				}
-
-				payment.complete(paymentKeyFromToss, approvedAtFromToss);
-				payment.getBooking().confirm();
-				log.info("결제 승인 완료: orderId={}", payment.getOrderId());
-			})
-			.block();
-	}
-
-	/**
-	 * 💡 [추가] 토스페이먼츠 결제 승인 API를 호출하는 책임을 분리한 메소드
-	 * 테스트 용이성을 위해 public으로 선언합니다.
-	 */
-	public Mono<Map> callTossConfirmApi(Map<String, Object> requestBody, String encodedSecretKey) {
+		log.info("Calling Toss Payments Confirm API with Idempotency-Key: {}", idempotencyKey);
 		return webClient.post()
 			.uri("https://api.tosspayments.com/v1/payments/confirm")
 			.header("Authorization", "Basic " + encodedSecretKey)
+			.header("Idempotency-Key", idempotencyKey) // 💡 [핵심] 멱등성 키 헤더 추가
 			.contentType(MediaType.APPLICATION_JSON)
 			.bodyValue(requestBody)
 			.retrieve()
-			.onStatus(HttpStatusCode::isError, response ->
-				response.bodyToMono(String.class)
-					.flatMap(errorBody -> {
-						log.error("토스페이먼츠 API 호출 실패: status={}, body={}", response.statusCode(), errorBody);
-						return Mono.error(new RuntimeException("결제 승인에 실패했습니다. (토스 응답 오류)"));
-					})
-			)
+			.onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+				.flatMap(errorBody -> {
+					log.error("토스페이먼츠 API 에러: status={}, body={}", response.statusCode(), errorBody);
+					return Mono.error(new RuntimeException("토스페이먼츠 API 호출 실패: " + errorBody));
+				}))
 			.bodyToMono(Map.class);
 	}
 
@@ -166,7 +163,9 @@ public class PaymentService {
 
 		if (payment.getStatus() == PaymentStatus.PENDING) {
 			payment.fail();
-			payment.getBooking().cancel();
+			payment.getBooking().cancel(); // 예매도 취소
+			paymentRepository.save(payment); // 💡 [추가] 명시적 save
+			bookingRepository.save(payment.getBooking()); // 💡 [추가] 명시적 save
 			log.info("결제 실패 상태로 변경 완료: orderId={}, errorCode={}, errorMessage={}", orderId, errorCode, errorMessage);
 		} else {
 			log.warn("이미 처리된 주문에 대한 실패 처리 요청: orderId={}, 현재 상태: {}", orderId, payment.getStatus());
@@ -181,79 +180,110 @@ public class PaymentService {
 		if (payment.getStatus() == PaymentStatus.CANCELED) {
 			throw new IllegalStateException("이미 취소된 결제입니다.");
 		}
+		if (payment.getStatus() != PaymentStatus.DONE) { // 💡 [추가] DONE 상태에서만 취소 가능하도록
+			throw new IllegalStateException("결제 완료 상태에서만 취소가 가능합니다.");
+		}
 
 		String encodedSecretKey = Base64.getEncoder()
 			.encodeToString((tossPaymentsProperties.secretKey() + ":").getBytes(StandardCharsets.UTF_8));
 
-		Map<String, Object> tossCancelResponse = webClient.post()
-			.uri("https://api.tosspayments.com/v1/payments/" + payment.getPaymentKey() + "/cancel")
+		callTossCancelApi(payment.getPaymentKey(), cancelRequest.getCancelReason(), encodedSecretKey)
+			.doOnSuccess(tossResponse -> {
+				payment.cancel();
+				payment.getBooking().cancel();
+				paymentRepository.save(payment); // 💡 [추가] 명시적 save
+				bookingRepository.save(payment.getBooking()); // 💡 [추가] 명시적 save
+
+				String transactionKey = null;
+				BigDecimal cancelAmount = BigDecimal.ZERO;
+				LocalDateTime canceledAt = null;
+
+				List<Map<String, Object>> cancels = (List<Map<String, Object>>)tossResponse.get("cancels");
+				if (cancels != null && !cancels.isEmpty()) {
+					Map<String, Object> lastCancel = cancels.get(cancels.size() - 1);
+					transactionKey = (String)lastCancel.get("transactionKey");
+
+					Object amountObj = lastCancel.get("cancelAmount");
+					if (amountObj instanceof Integer) {
+						cancelAmount = BigDecimal.valueOf((Integer)amountObj);
+					} else if (amountObj instanceof Double) {
+						cancelAmount = BigDecimal.valueOf((Double)amountObj);
+					} else if (amountObj != null) {
+						cancelAmount = new BigDecimal(amountObj.toString());
+					}
+
+					Object canceledAtObj = lastCancel.get("canceledAt");
+					if (canceledAtObj instanceof String) {
+						try {
+							canceledAt = LocalDateTime.parse((String)canceledAtObj,
+								DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+						} catch (DateTimeParseException e) {
+							log.warn("canceledAt 파싱 실패 (ISO_OFFSET_DATE_TIME): {}, 다른 포맷 시도", canceledAtObj);
+							try {
+								canceledAt = LocalDateTime.parse((String)canceledAtObj,
+									DateTimeFormatter.ISO_DATE_TIME);
+							} catch (DateTimeParseException ex) {
+								log.error("canceledAt 파싱 최종 실패: {}", canceledAtObj, ex);
+								canceledAt = LocalDateTime.now();
+							}
+						}
+					}
+				} else {
+					log.warn("토스페이먼츠 취소 응답에 'cancels' 정보가 없거나 비어 있습니다. orderId: {}", payment.getOrderId());
+				}
+
+				if (canceledAt == null) {
+					canceledAt = LocalDateTime.now();
+				}
+
+				PaymentCancelHistory history = PaymentCancelHistory.builder()
+					.payment(payment)
+					.transactionKey(transactionKey)
+					.cancelAmount(cancelAmount)
+					.cancelReason(cancelRequest.getCancelReason())
+					.canceledAt(canceledAt)
+					.build();
+				paymentCancelHistoryRepository.save(history);
+
+				log.info("결제 취소 완료: orderId={}", orderId);
+			})
+			.doOnError(e -> {
+				log.error("결제 취소 중 오류 발생: orderId={}, 오류={}", orderId, e.getMessage(), e);
+				throw new RuntimeException("결제 취소에 실패했습니다. (내부 오류)", e);
+			})
+			.block();
+	}
+
+	private Mono<Map> callTossCancelApi(String paymentKey, String cancelReason, String encodedSecretKey) {
+		log.info("Calling Toss Payments Cancel API for paymentKey: {}", paymentKey);
+		return webClient.post()
+			.uri("https://api.tosspayments.com/v1/payments/{paymentKey}/cancel", paymentKey)
 			.header("Authorization", "Basic " + encodedSecretKey)
 			.contentType(MediaType.APPLICATION_JSON)
-			.bodyValue(Map.of("cancelReason", cancelRequest.getCancelReason()))
+			.bodyValue(Map.of("cancelReason", cancelReason))
 			.retrieve()
-			.onStatus(HttpStatusCode::isError, response ->
-				response.bodyToMono(String.class)
-					.flatMap(errorBody -> {
-						log.error("토스페이먼츠 취소 API 호출 실패: status={}, body={}", response.statusCode(), errorBody);
-						return Mono.error(new RuntimeException("결제 취소에 실패했습니다. (토스 응답 오류)"));
-					})
-			)
-			.bodyToMono(Map.class)
-			.block();
+			.onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
+				.flatMap(errorBody -> {
+					log.error("토스페이먼츠 취소 API 호출 실패: status={}, body={}", response.statusCode(), errorBody);
+					return Mono.error(new RuntimeException("결제 취소에 실패했습니다. (토스 응답 오류): " + errorBody));
+				}))
+			.bodyToMono(Map.class);
+	}
 
-		payment.cancel();
-		payment.getBooking().cancel();
-
-		String transactionKey = null;
-		BigDecimal cancelAmount = BigDecimal.ZERO;
-		LocalDateTime canceledAt = null;
-
-		List<Map<String, Object>> cancels = (List<Map<String, Object>>)tossCancelResponse.get("cancels");
-		if (cancels != null && !cancels.isEmpty()) {
-			Map<String, Object> lastCancel = cancels.get(cancels.size() - 1);
-			transactionKey = (String)lastCancel.get("transactionKey");
-
-			Object amountObj = lastCancel.get("cancelAmount");
-			if (amountObj instanceof Integer) {
-				cancelAmount = BigDecimal.valueOf((Integer)amountObj);
-			} else if (amountObj instanceof Double) {
-				cancelAmount = BigDecimal.valueOf((Double)amountObj);
-			} else if (amountObj != null) {
-				cancelAmount = new BigDecimal(amountObj.toString());
-			}
-
-			Object canceledAtObj = lastCancel.get("canceledAt");
-			if (canceledAtObj instanceof String) {
+	private LocalDateTime parseDateTime(Object dateTimeObj) {
+		if (dateTimeObj instanceof String dateTimeStr) {
+			try {
+				return OffsetDateTime.parse(dateTimeStr, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toLocalDateTime();
+			} catch (DateTimeParseException e) {
+				log.warn("날짜 파싱 실패 (ISO_OFFSET_DATE_TIME): {}. 다른 포맷 시도.", dateTimeStr);
 				try {
-					canceledAt = LocalDateTime.parse((String)canceledAtObj, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-				} catch (DateTimeParseException e) {
-					log.warn("canceledAt 파싱 실패 (ISO_OFFSET_DATE_TIME): {}, 다른 포맷 시도", canceledAtObj);
-					try {
-						canceledAt = LocalDateTime.parse((String)canceledAtObj, DateTimeFormatter.ISO_DATE_TIME);
-					} catch (DateTimeParseException ex) {
-						log.error("canceledAt 파싱 최종 실패: {}", canceledAtObj, ex);
-						canceledAt = LocalDateTime.now();
-					}
+					return LocalDateTime.parse(dateTimeStr, DateTimeFormatter.ISO_DATE_TIME);
+				} catch (DateTimeParseException ex) {
+					log.error("날짜 파싱 최종 실패: {}", dateTimeStr, ex);
 				}
 			}
-		} else {
-			log.warn("토스페이먼츠 취소 응답에 'cancels' 정보가 없거나 비어 있습니다. orderId: {}", payment.getOrderId());
 		}
-
-		if (canceledAt == null) {
-			canceledAt = LocalDateTime.now();
-		}
-
-		PaymentCancelHistory history = PaymentCancelHistory.builder()
-			.payment(payment)
-			.transactionKey(transactionKey)
-			.cancelAmount(cancelAmount)
-			.cancelReason(cancelRequest.getCancelReason())
-			.canceledAt(canceledAt)
-			.build();
-		paymentCancelHistoryRepository.save(history);
-
-		log.info("결제 취소 완료: orderId={}", orderId);
+		return LocalDateTime.now();
 	}
 
 	@Transactional
@@ -272,7 +302,8 @@ public class PaymentService {
 		}
 
 		if (newStatus == PaymentStatus.DONE) {
-			payment.complete(payment.getPaymentKey(), LocalDateTime.now());
+			payment.complete(payment.getPaymentKey(),
+				LocalDateTime.now()); // 💡 payment.getPaymentKey()와 LocalDateTime.now() 사용
 			payment.getBooking().confirm();
 		} else if (newStatus == PaymentStatus.CANCELED) {
 			payment.cancel();
