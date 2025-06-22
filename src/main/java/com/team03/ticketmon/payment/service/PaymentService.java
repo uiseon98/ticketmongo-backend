@@ -38,28 +38,37 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
-@Slf4j
-@Service
-@RequiredArgsConstructor
+@Slf4j // 로그 출력을 위한 Lombok 어노테이션
+@Service // Spring의 서비스 빈 등록
+@RequiredArgsConstructor // 생성자 주입 자동 생성
 public class PaymentService {
 
+	// 의존성 주입: 결제/예매/취소 이력/환경설정/외부 API 호출 등에 필요한 객체들
 	private final BookingRepository bookingRepository;
 	private final PaymentRepository paymentRepository;
 	private final PaymentCancelHistoryRepository paymentCancelHistoryRepository;
 	private final TossPaymentsProperties tossPaymentsProperties;
 	private final AppProperties appProperties;
-	private final WebClient webClient;
+	private final WebClient webClient; // 비동기 HTTP 통신용
 
+	/**
+	 * 결제 준비(결제 정보 생성 또는 재사용)
+	 * - 예매 번호로 예매 정보 조회
+	 * - 이미 결제(PENDING) 정보가 있으면 재사용, 없으면 새로 생성
+	 * - 결제 준비에 필요한 정보(PaymentExecutionResponse) 반환
+	 */
 	@Transactional
 	public PaymentExecutionResponse initiatePayment(PaymentRequest paymentRequest) {
+		// 1. 예매 정보 조회
 		Booking booking = bookingRepository.findByBookingNumber(paymentRequest.getBookingNumber())
 			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 예매 번호입니다."));
 
+		// 2. 예매 상태가 결제 대기(PENDING_PAYMENT)인지 확인
 		if (booking.getStatus() != com.team03.ticketmon.concert.domain.enums.BookingStatus.PENDING_PAYMENT) {
 			throw new IllegalStateException("결제를 진행할 수 없는 예매 상태입니다.");
 		}
 
-		// 💡 [수정] 기존 결제 정보가 PENDING 상태일 때만 재사용
+		// 3. 기존 결제 정보(PENDING) 있으면 재사용, 없으면 새로 생성
 		Optional<Payment> existingPaymentOpt = paymentRepository.findByBooking(booking)
 			.filter(p -> p.getStatus() == PaymentStatus.PENDING);
 		Payment paymentToUse;
@@ -68,7 +77,7 @@ public class PaymentService {
 			log.info("기존 결제 정보를 재사용합니다. orderId: {}", paymentToUse.getOrderId());
 		} else {
 			log.info("신규 결제 정보를 생성합니다. bookingNumber: {}", booking.getBookingNumber());
-			String orderId = UUID.randomUUID().toString();
+			String orderId = UUID.randomUUID().toString(); // 고유 주문 ID 생성
 			paymentToUse = paymentRepository.save(Payment.builder()
 				.booking(booking)
 				.orderId(orderId)
@@ -76,6 +85,7 @@ public class PaymentService {
 				.build());
 		}
 
+		// 4. 결제 준비 응답 객체 생성 및 반환
 		return PaymentExecutionResponse.builder()
 			.orderId(paymentToUse.getOrderId())
 			.bookingNumber(booking.getBookingNumber())
@@ -88,50 +98,63 @@ public class PaymentService {
 			.build();
 	}
 
+	/**
+	 * 결제 승인 처리
+	 * - 결제 승인 요청이 들어오면, 금액 검증 및 외부(PG사) 결제 승인 API 호출
+	 * - 승인 성공 시 결제/예매 상태 갱신
+	 */
 	@Transactional
 	public void confirmPayment(PaymentConfirmRequest confirmRequest) {
+		// 1. 결제 정보 조회
 		Payment payment = paymentRepository.findByOrderId(confirmRequest.getOrderId())
 			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 주문 ID 입니다: " + confirmRequest.getOrderId()));
 
+		// 2. 결제 금액 검증(DB와 요청 값 비교)
 		log.info("금액 검증 시작: DB 금액 = {}, 요청 금액 = {}", payment.getAmount(), confirmRequest.getAmount());
 		if (payment.getAmount().compareTo(confirmRequest.getAmount()) != 0) {
 			log.error("결제 금액 불일치 오류! DB 금액: {}, 요청 금액: {}", payment.getAmount(), confirmRequest.getAmount());
 			throw new IllegalArgumentException("결제 금액이 일치하지 않습니다.");
 		}
 
-		// 💡 [수정] 이미 PENDING 상태가 아닌 경우 중복 처리 방지
+		// 3. 결제 상태가 이미 처리된 경우 중복 승인 방지
 		if (payment.getStatus() != PaymentStatus.PENDING) {
 			log.warn("Payment with orderId {} is already processed (status: {}). Ignoring duplicate request.",
 				confirmRequest.getOrderId(), payment.getStatus());
 			return;
 		}
 
+		// 4. 토스페이먼츠 API 호출을 위한 인증키 준비
 		String encodedSecretKey = Base64.getEncoder()
 			.encodeToString((tossPaymentsProperties.secretKey() + ":").getBytes(StandardCharsets.UTF_8));
-		String idempotencyKey = confirmRequest.getOrderId(); // 멱등성 키로 orderId 사용
+		String idempotencyKey = confirmRequest.getOrderId(); // 멱등성 키(중복 요청 방지)
 
+		// 5. 외부 결제 승인 API 호출 및 결과 처리
 		callTossConfirmApi(confirmRequest, encodedSecretKey, idempotencyKey)
 			.doOnSuccess(tossResponse -> {
+				// 5-1. 결제 승인 성공 시 결제 정보 갱신
 				String paymentKey = (String)tossResponse.get("paymentKey");
 				LocalDateTime approvedAt = parseDateTime(tossResponse.get("approvedAt"));
 
-				payment.complete(paymentKey, approvedAt);
-				payment.getBooking().confirm();
-				paymentRepository.save(payment); // 💡 [추가] Dirty checking 외에 명시적 save
-				bookingRepository.save(payment.getBooking()); // 💡 [추가] Dirty checking 외에 명시적 save
+				payment.complete(paymentKey, approvedAt); // 결제 완료 처리
+				payment.getBooking().confirm(); // 예매도 확정
+				paymentRepository.save(payment); // 명시적 저장
+				bookingRepository.save(payment.getBooking());
 				log.info("결제 승인 완료: orderId={}", payment.getOrderId());
 			})
 			.doOnError(e -> {
+				// 5-2. 결제 승인 실패 시 상태 갱신 및 예외 발생
 				log.error("결제 승인 API 호출 중 오류 발생: orderId={}, 오류={}", confirmRequest.getOrderId(), e.getMessage());
 				payment.fail();
-				paymentRepository.save(payment); // 💡 [추가] Dirty checking 외에 명시적 save
-				// booking은 실패 시 취소되지 않으므로 save 안함
+				paymentRepository.save(payment);
 				throw new RuntimeException("결제 승인에 실패했습니다.", e);
 			})
-			.block();
+			.block(); // Mono(비동기) -> 동기 처리로 변환(실행)
 	}
 
-	// 💡 [수정] idempotencyKey 파라미터 추가 및 로깅
+	/**
+	 * 토스페이먼츠 결제 승인 API 호출 (비동기)
+	 * - 멱등성 키 사용
+	 */
 	private Mono<Map> callTossConfirmApi(PaymentConfirmRequest confirmRequest, String encodedSecretKey,
 		String idempotencyKey) {
 		Map<String, Object> requestBody = Map.of(
@@ -144,7 +167,7 @@ public class PaymentService {
 		return webClient.post()
 			.uri("https://api.tosspayments.com/v1/payments/confirm")
 			.header("Authorization", "Basic " + encodedSecretKey)
-			.header("Idempotency-Key", idempotencyKey) // 💡 [핵심] 멱등성 키 헤더 추가
+			.header("Idempotency-Key", idempotencyKey) // 중복 요청 방지
 			.contentType(MediaType.APPLICATION_JSON)
 			.bodyValue(requestBody)
 			.retrieve()
@@ -156,44 +179,60 @@ public class PaymentService {
 			.bodyToMono(Map.class);
 	}
 
+	/**
+	 * 결제 실패 처리
+	 * - 결제 실패 시 결제/예매 상태를 실패/취소로 변경
+	 */
 	@Transactional
 	public void handlePaymentFailure(String orderId, String errorCode, String errorMessage) {
 		Payment payment = paymentRepository.findByOrderId(orderId)
 			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 주문 ID 입니다: " + orderId));
 
+		// 결제 상태가 PENDING일 때만 실패 처리
 		if (payment.getStatus() == PaymentStatus.PENDING) {
 			payment.fail();
 			payment.getBooking().cancel(); // 예매도 취소
-			paymentRepository.save(payment); // 💡 [추가] 명시적 save
-			bookingRepository.save(payment.getBooking()); // 💡 [추가] 명시적 save
+			paymentRepository.save(payment);
+			bookingRepository.save(payment.getBooking());
 			log.info("결제 실패 상태로 변경 완료: orderId={}, errorCode={}, errorMessage={}", orderId, errorCode, errorMessage);
 		} else {
 			log.warn("이미 처리된 주문에 대한 실패 처리 요청: orderId={}, 현재 상태: {}", orderId, payment.getStatus());
 		}
 	}
 
+	/**
+	 * 결제 취소 요청 처리
+	 * - 결제 완료(DONE) 상태에서만 취소 가능
+	 * - 외부 결제 취소 API 호출 및 취소 이력 저장
+	 */
 	@Transactional
 	public void cancelPayment(String orderId, PaymentCancelRequest cancelRequest) {
 		Payment payment = paymentRepository.findByOrderId(orderId)
 			.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 주문 ID 입니다: " + orderId));
 
+		// 이미 취소된 결제는 예외
 		if (payment.getStatus() == PaymentStatus.CANCELED) {
 			throw new IllegalStateException("이미 취소된 결제입니다.");
 		}
-		if (payment.getStatus() != PaymentStatus.DONE) { // 💡 [추가] DONE 상태에서만 취소 가능하도록
+		// 결제 완료(DONE) 상태에서만 취소 가능
+		if (payment.getStatus() != PaymentStatus.DONE) {
 			throw new IllegalStateException("결제 완료 상태에서만 취소가 가능합니다.");
 		}
 
+		// 토스페이먼츠 API 인증키 준비
 		String encodedSecretKey = Base64.getEncoder()
 			.encodeToString((tossPaymentsProperties.secretKey() + ":").getBytes(StandardCharsets.UTF_8));
 
+		// 외부 결제 취소 API 호출
 		callTossCancelApi(payment.getPaymentKey(), cancelRequest.getCancelReason(), encodedSecretKey)
 			.doOnSuccess(tossResponse -> {
+				// 결제/예매 상태 취소로 변경
 				payment.cancel();
 				payment.getBooking().cancel();
-				paymentRepository.save(payment); // 💡 [추가] 명시적 save
-				bookingRepository.save(payment.getBooking()); // 💡 [추가] 명시적 save
+				paymentRepository.save(payment);
+				bookingRepository.save(payment.getBooking());
 
+				// 취소 응답에서 취소 이력 정보 추출
 				String transactionKey = null;
 				BigDecimal cancelAmount = BigDecimal.ZERO;
 				LocalDateTime canceledAt = null;
@@ -236,6 +275,7 @@ public class PaymentService {
 					canceledAt = LocalDateTime.now();
 				}
 
+				// 결제 취소 이력 저장
 				PaymentCancelHistory history = PaymentCancelHistory.builder()
 					.payment(payment)
 					.transactionKey(transactionKey)
@@ -254,6 +294,9 @@ public class PaymentService {
 			.block();
 	}
 
+	/**
+	 * 토스페이먼츠 결제 취소 API 호출 (비동기)
+	 */
 	private Mono<Map> callTossCancelApi(String paymentKey, String cancelReason, String encodedSecretKey) {
 		log.info("Calling Toss Payments Cancel API for paymentKey: {}", paymentKey);
 		return webClient.post()
@@ -270,6 +313,10 @@ public class PaymentService {
 			.bodyToMono(Map.class);
 	}
 
+	/**
+	 * ISO 8601 문자열을 LocalDateTime으로 변환
+	 * - 토스 응답의 날짜 포맷 대응
+	 */
 	private LocalDateTime parseDateTime(Object dateTimeObj) {
 		if (dateTimeObj instanceof String dateTimeStr) {
 			try {
@@ -286,6 +333,10 @@ public class PaymentService {
 		return LocalDateTime.now();
 	}
 
+	/**
+	 * 웹훅을 통한 결제 상태 갱신
+	 * - 외부 시스템(토스 등)에서 결제 상태 변경 알림이 오면 상태를 업데이트
+	 */
 	@Transactional
 	public void updatePaymentStatusByWebhook(String orderId, String status) {
 		Payment payment = paymentRepository.findByOrderId(orderId)
@@ -296,14 +347,15 @@ public class PaymentService {
 
 		PaymentStatus newStatus = PaymentStatus.valueOf(status.toUpperCase());
 
+		// 이미 상태가 동일하면 변경 없음
 		if (payment.getStatus() == newStatus) {
 			log.info("웹훅 처리: 주문 ID {}의 상태가 이미 {}입니다. 변경 없음.", orderId, newStatus);
 			return;
 		}
 
+		// 상태에 따라 결제/예매 상태 갱신
 		if (newStatus == PaymentStatus.DONE) {
-			payment.complete(payment.getPaymentKey(),
-				LocalDateTime.now()); // 💡 payment.getPaymentKey()와 LocalDateTime.now() 사용
+			payment.complete(payment.getPaymentKey(), LocalDateTime.now());
 			payment.getBooking().confirm();
 		} else if (newStatus == PaymentStatus.CANCELED) {
 			payment.cancel();
@@ -313,6 +365,10 @@ public class PaymentService {
 		log.info("주문 ID {} 의 결제 상태가 웹훅을 통해 {} 로 변경되었습니다.", orderId, newStatus);
 	}
 
+	/**
+	 * 사용자별 결제 내역 조회
+	 * - 사용자 ID로 결제 내역을 모두 조회하여 DTO로 변환 후 반환
+	 */
 	@Transactional(readOnly = true)
 	public List<PaymentHistoryDto> getPaymentHistoryByUserId(Long userId) {
 		return paymentRepository.findByBooking_UserId(userId)
