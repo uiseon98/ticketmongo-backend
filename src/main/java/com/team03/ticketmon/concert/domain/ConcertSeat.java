@@ -1,7 +1,9 @@
 package com.team03.ticketmon.concert.domain;
 
+import com.team03.ticketmon.booking.domain.Ticket;
+import com.team03.ticketmon.concert.domain.enums.SeatGrade;
+import com.team03.ticketmon.venue.domain.Seat;
 import jakarta.persistence.*;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -10,7 +12,6 @@ import lombok.Setter;
 import lombok.ToString;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 /**
  * Concert Seat Entity
@@ -21,7 +22,7 @@ import java.util.List;
 @Getter
 @Setter
 @Table(name = "concertSeats")
-@ToString(exclude = {"concert", "seat", "tickets"})
+@ToString(exclude = {"concert", "seat", "ticket"})
 @EqualsAndHashCode(of = "concertSeatId")  // ID 기반으로 변경
 @NoArgsConstructor
 @AllArgsConstructor
@@ -40,11 +41,11 @@ public class ConcertSeat {
 	private Seat seat;
 
 	@Column(length = 50, nullable = false)
-	private String grade;
+	private SeatGrade grade;
 
 	@Column(precision = 10, scale = 2, nullable = false)
 	private BigDecimal price;
 
-	@OneToMany(mappedBy = "concertSeat", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-	private List<Ticket> tickets;
+	@OneToOne(mappedBy = "concertSeat")
+	private Ticket ticket;
 }
