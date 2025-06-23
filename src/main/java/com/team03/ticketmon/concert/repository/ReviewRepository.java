@@ -16,8 +16,7 @@ import java.util.Optional;
 
 @Repository
 public interface ReviewRepository extends JpaRepository<Review, Long> {
-	Page<Review> findByConcertConcertIdOrderByCreatedAtDesc(Long concertId, Pageable pageable);
-	List<Review> findByConcertConcertIdOrderByCreatedAtDesc(Long concertId);
+	Page<Review> findByConcertConcertId(Long concertId, Pageable pageable);
 	boolean existsByIdAndConcertConcertId(Long id, Long concertId);
 	Optional<Review> findByIdAndConcertConcertId(Long id, Long concertId);
 	void deleteByIdAndConcertConcertId(Long id, Long concertId);

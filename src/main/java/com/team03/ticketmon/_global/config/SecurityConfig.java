@@ -128,23 +128,25 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // 허용할 프론트엔드 도메인 (로컬 개발용)
-        config.setAllowedOrigins(Arrays.asList(
-                "http://localhost:3000",
-                "http://localhost:8080"
-        ));
+		// 허용할 프론트엔드 도메인 (로컬 개발용)
+		config.setAllowedOrigins(Arrays.asList(
+			"http://localhost:3000",
+			"http://localhost:8080",
+			"https://ff52-222-105-3-101.ngrok-free.app"
+		));
 
         // 허용할 HTTP 메서드
-        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
 
-        // 요청 시 허용할 헤더
-        config.setAllowedHeaders(Arrays.asList(
-                "Authorization", "Content-Type", "X-Requested-With", "Accept",
-                "Origin", "X-CSRF-Token", "Cookie", "Set-Cookie"
-        ));
+		// 요청 시 허용할 헤더
+		config.setAllowedHeaders(Arrays.asList(
+			"Authorization", "Content-Type", "X-Requested-With", "Accept",
+			"Origin", "X-CSRF-Token", "Cookie", "Set-Cookie", "ngrok-skip-browser-warning"
+		));
 
         // 인증 정보 포함한 요청 허용 (credentials: true)
         config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
 
         // 위 설정을 전체 경로(/)에 적용
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -167,4 +169,5 @@ public class SecurityConfig {
     public OAuth2LoginFailureHandler oAuth2LoginFailureHandler() {
         return new OAuth2LoginFailureHandler();
     }
+
 }
