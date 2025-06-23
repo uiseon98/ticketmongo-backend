@@ -1,4 +1,3 @@
-// src/main/java/com/team03/ticketmon/_global/config/RedisConfig.java
 package com.team03.ticketmon._global.config;
 
 import org.springframework.context.annotation.Bean;
