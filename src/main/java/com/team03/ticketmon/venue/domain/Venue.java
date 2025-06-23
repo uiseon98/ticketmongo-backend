@@ -1,6 +1,7 @@
 package com.team03.ticketmon.venue.domain;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Min;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import java.util.List;
@@ -34,6 +35,7 @@ public class Venue {
 	 * 공연장 수용 인원 (총 좌석 수)
 	 */
 	@Column(nullable = false)
+	@Min(value = 1, message = "공연장 수용 인원은 1명 이상이어야 합니다")
 	private Integer capacity;
 
 	/**
