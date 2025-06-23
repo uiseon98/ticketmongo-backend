@@ -37,12 +37,13 @@ public class SeatStatusService {
 
     /**
      * 특정 콘서트의 전체 좌석 상태 조회
+     * ⚠️ 자동 해제 로직 임시 비활성화
      */
     public Map<Long, SeatStatus> getAllSeatStatus(Long concertId) {
         String key = SEAT_STATUS_KEY_PREFIX + concertId;
         RMap<String, SeatStatus> seatMap = redissonClient.getMap(key);
 
-        // String 키를 Long으로 변환하여 반환
+        // String 키를 Long으로 변환하여 반환 (자동 해제 로직 제거)
         return seatMap.readAllMap().entrySet().stream()
                 .collect(Collectors.toMap(
                         entry -> Long.valueOf(entry.getKey()),
@@ -52,6 +53,7 @@ public class SeatStatusService {
 
     /**
      * 특정 좌석 상태 조회
+     * ⚠️ 자동 해제 로직 임시 비활성화
      */
     public Optional<SeatStatus> getSeatStatus(Long concertId, Long seatId) {
         String key = SEAT_STATUS_KEY_PREFIX + concertId;
@@ -62,7 +64,7 @@ public class SeatStatusService {
     }
 
     /**
-     * 좌석 상태 업데이트
+     * 좌석 상태 업데이트 (기본 버전 - TTL 로직 제거)
      */
     public void updateSeatStatus(SeatStatus seatStatus) {
         String key = SEAT_STATUS_KEY_PREFIX + seatStatus.getConcertId();
