@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 public class SeatStatusService {
 
     private final RedissonClient redissonClient;
+    private final SeatStatusEventPublisher eventPublisher;
 
     // Redis 키 패턴
     private static final String SEAT_STATUS_KEY_PREFIX = "seat:status:";
@@ -70,12 +71,24 @@ public class SeatStatusService {
 
     /**
      * 좌석 상태 업데이트 (기본 버전 - TTL 로직 제거)
+     * - Redis Hash에 좌석 상태 저장
+     * - 실시간 이벤트 발행으로 다른 사용자들에게 변경사항 알림
      */
     public void updateSeatStatus(SeatStatus seatStatus) {
         String key = SEAT_STATUS_KEY_PREFIX + seatStatus.getConcertId();
         RMap<String, SeatStatus> seatMap = redissonClient.getMap(key);
 
+        // 1. Redis에 좌석 상태 저장
         seatMap.put(seatStatus.getSeatId().toString(), seatStatus);
+
+        // 2. 실시간 이벤트 발행 (실패해도 좌석 상태 저장에는 영향 없음)
+        try {
+            eventPublisher.publishSeatUpdate(seatStatus);
+        } catch (Exception e) {
+            log.warn("좌석 상태 이벤트 발행 실패 (서비스 계속 진행): concertId={}, seatId={}",
+                    seatStatus.getConcertId(), seatStatus.getSeatId(), e);
+        }
+
         log.info("좌석 상태 업데이트: concertId={}, seatId={}, status={}",
                 seatStatus.getConcertId(), seatStatus.getSeatId(), seatStatus.getStatus());
     }
