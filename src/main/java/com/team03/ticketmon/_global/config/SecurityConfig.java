@@ -104,11 +104,13 @@ public class SecurityConfig {
                         .successHandler(oAuth2SuccessHandler())
                         .failureHandler(oAuth2LoginFailureHandler()))
 
-                // Login Filter 적용
+                // ⚠️ JWT 필터들을 임시로 주석 처리 (Swagger 테스트를 위해)
+                // TODO: JWT 기능 완성 후 주석 해제
+                /*
                 .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, reissueService, cookieUtil), LoginFilter.class)
                 .addFilterBefore(new CustomLogoutFilter(jwtTokenProvider, refreshTokenService, cookieUtil), LogoutFilter.class)
                 .addFilterAt(new LoginFilter(authenticationManager(authenticationConfiguration), jwtTokenProvider, refreshTokenService, cookieUtil), UsernamePasswordAuthenticationFilter.class)
-
+                */
                 // 인증/인가 실패(인증 실패(401), 권한 부족(403)) 시 반환되는 예외 응답 설정
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {
