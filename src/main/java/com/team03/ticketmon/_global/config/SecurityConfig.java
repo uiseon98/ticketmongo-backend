@@ -132,6 +132,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(Arrays.asList(
                 "http://localhost:3000",
                 "http://localhost:8080",
+                "http://localhost:5173",    // Vite 기본 포트
                 "https://ff52-222-105-3-101.ngrok-free.app"
         ));
 
