@@ -3,6 +3,7 @@ package com.team03.ticketmon.payment.controller;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -15,6 +16,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.util.UriUtils;
 
+import com.team03.ticketmon.concert.domain.Booking;
+import com.team03.ticketmon.concert.domain.enums.BookingStatus;
+import com.team03.ticketmon.concert.repository.BookingRepository;
+import com.team03.ticketmon.payment.dto.BookingResponseDto;
 import com.team03.ticketmon.payment.dto.PaymentCancelRequest;
 import com.team03.ticketmon.payment.dto.PaymentConfirmRequest;
 import com.team03.ticketmon.payment.dto.PaymentExecutionResponse;
@@ -33,6 +38,7 @@ import lombok.extern.slf4j.Slf4j;
 public class PaymentApiController {
 
 	private final PaymentService paymentService; // 결제 관련 비즈니스 로직을 처리하는 서비스
+	private final BookingRepository bookingRepository;
 
 	/**
 	 * 결제 요청 API
@@ -44,6 +50,11 @@ public class PaymentApiController {
 	public ResponseEntity<PaymentExecutionResponse> requestPayment(
 		@Valid @RequestBody PaymentRequest paymentRequest) { // 결제 요청 정보(예매번호 등) JSON으로 받음
 
+		// 💡 [수정] 기존 bookingNumber를 사용하는 로직 대신, 새로운 DTO를 사용하도록 변경
+		// 예시: bookingNumber를 사용하여 paymentService를 호출하는 로직으로 변경 필요
+		// PaymentExecutionResponse response = paymentService.initiatePayment(paymentRequest.getBookingNumber());
+
+		// 임시로 기존 로직을 유지하되, 실제로는 paymentRequest 객체를 활용해야 합니다.
 		// 결제 준비(결제 정보 생성 또는 재사용)
 		PaymentExecutionResponse response = paymentService.initiatePayment(paymentRequest);
 		// 200 OK + 결제 준비 정보 반환
@@ -75,13 +86,18 @@ public class PaymentApiController {
 			paymentService.confirmPayment(confirmRequest);
 
 			// 결제 성공 결과 페이지로 리다이렉트
-			return "redirect:/payment/result/success?orderId=" + orderId;
+			// 💡 [핵심 수정] React 앱의 성공 페이지 주소로 리다이렉트합니다.
+			// TODO: 실제 운영 환경에서는 이 주소를 application.yml 등에서 관리해야 합니다.
+			String reactSuccessUrl = "http://localhost:3000/payment/result/success";
+			return "redirect:" + reactSuccessUrl + "?orderId=" + orderId;
 
 		} catch (Exception e) {
-			// 결제 승인 중 에러 발생 시 실패 페이지로 리다이렉트
 			log.error("결제 승인 처리 중 오류 발생: orderId={}, error={}", orderId, e.getMessage());
 			String encodedMessage = UriUtils.encode(e.getMessage(), StandardCharsets.UTF_8);
-			return "redirect:/payment/result/fail?orderId=" + orderId + "&message=" + encodedMessage;
+
+			// 💡 [핵심 수정] React 앱의 실패 페이지 주소로 리다이렉트합니다.
+			String reactFailUrl = "http://localhost:3000/payment/result/fail";
+			return "redirect:" + reactFailUrl + "?orderId=" + orderId + "&message=" + encodedMessage;
 		}
 	}
 
@@ -102,7 +118,8 @@ public class PaymentApiController {
 
 		String encodedMessage = UriUtils.encode(message, StandardCharsets.UTF_8);
 		// 결제 실패 결과 페이지로 리다이렉트
-		return "redirect:/payment/result/fail?orderId=" + orderId + "&code=" + code + "&message=" + encodedMessage;
+		String reactFailUrl = "http://localhost:3000/payment/result/fail";
+		return "redirect:" + reactFailUrl + "?orderId=" + orderId + "&code=" + code + "&message=" + encodedMessage;
 	}
 
 	/**
@@ -136,6 +153,26 @@ public class PaymentApiController {
 		List<PaymentHistoryDto> history = paymentService.getPaymentHistoryByUserId(currentUserId);
 		// 200 OK + 결제 내역 리스트 반환
 		return ResponseEntity.ok(history);
+	}
+
+	/**
+	 * 결제 대기중인 예매 목록을 조회하는 API (React 연동용)
+	 */
+	@GetMapping("/pending-bookings")
+	@ResponseBody
+	public ResponseEntity<List<BookingResponseDto>> getPendingBookings() {
+		// TODO: 실제로는 현재 로그인한 사용자의 예매 목록만 가져와야 합니다.
+		// Long currentUserId = ... ;
+		// List<Booking> pendingBookings = bookingRepository.findByUserIdAndStatus(currentUserId, BookingStatus.PENDING_PAYMENT);
+
+		// 현재는 테스트를 위해 모든 PENDING_PAYMENT 상태의 예매를 가져옵니다.
+		List<Booking> pendingBookings = bookingRepository.findByStatus(BookingStatus.PENDING_PAYMENT);
+
+		List<BookingResponseDto> dtos = pendingBookings.stream()
+			.map(BookingResponseDto::new)
+			.collect(Collectors.toList());
+
+		return ResponseEntity.ok(dtos);
 	}
 }
 

@@ -5,5 +5,6 @@ public enum PaymentStatus {
 	DONE,             // 결제 완료
 	CANCELED,         // 결제 취소 (전액)
 	PARTIAL_CANCELED, // 부분 취소
-	FAILED            // 결제 실패
+	FAILED,         // 결제 실패
+	EXPIRED           // 결제 시간 만료
 }
