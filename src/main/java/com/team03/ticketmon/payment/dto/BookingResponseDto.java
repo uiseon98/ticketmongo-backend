@@ -1,6 +1,6 @@
 package com.team03.ticketmon.payment.dto;
 
-import com.team03.ticketmon.concert.domain.Booking;
+import com.team03.ticketmon.booking.domain.Booking;
 
 import lombok.Getter;
 

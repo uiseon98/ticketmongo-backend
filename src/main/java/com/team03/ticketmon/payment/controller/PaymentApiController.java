@@ -16,9 +16,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.util.UriUtils;
 
-import com.team03.ticketmon.concert.domain.Booking;
-import com.team03.ticketmon.concert.domain.enums.BookingStatus;
-import com.team03.ticketmon.concert.repository.BookingRepository;
+import com.team03.ticketmon.booking.domain.Booking;
+import com.team03.ticketmon.booking.domain.BookingStatus;
+import com.team03.ticketmon.booking.repository.BookingRepository;
 import com.team03.ticketmon.payment.dto.BookingResponseDto;
 import com.team03.ticketmon.payment.dto.PaymentCancelRequest;
 import com.team03.ticketmon.payment.dto.PaymentConfirmRequest;
