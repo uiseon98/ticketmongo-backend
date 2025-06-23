@@ -20,7 +20,6 @@ import org.springframework.web.multipart.MultipartFile;
  * 회사 정보, 담당자 정보, 그리고 사업자 등록증과 같은 서류 파일을 담아 보냅니다.
  * </p>
  *
- * @author [작성자 이름] (예: YourName)
  * @version 1.0
  * @see com.team03.ticketmon.seller_application.domain.SellerApplication
  * @see com.team03.ticketmon.seller_application.service.SellerApplicationService#applyForSeller(Long, SellerApplicationRequestDTO, MultipartFile)
