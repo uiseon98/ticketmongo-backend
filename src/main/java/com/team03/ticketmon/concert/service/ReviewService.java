@@ -33,7 +33,7 @@ public class ReviewService {
 	 */
 	@Transactional(readOnly = true)
 	public Page<ReviewDTO> getConcertReviews(Long concertId, Pageable pageable) {
-		return reviewRepository.findByConcertConcertIdOrderByCreatedAtDesc(concertId, pageable)
+		return reviewRepository.findByConcertConcertId(concertId, pageable)
 			.map(this::convertToDTO);
 	}
 
