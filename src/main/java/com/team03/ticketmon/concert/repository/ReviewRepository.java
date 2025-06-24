@@ -34,9 +34,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 	@Query("""
         SELECT r FROM Review r 
         WHERE r.concert.id = :concertId 
-        AND r.content IS NOT NULL 
-        AND TRIM(r.content) != '' 
-        AND LENGTH(TRIM(r.content)) >= 10
+        AND r.description IS NOT NULL 
+        AND TRIM(r.description) != '' 
+        AND LENGTH(TRIM(r.description)) >= 10
         ORDER BY r.createdAt DESC
         """)
 		List<Review> findValidReviewsForAiSummary(@Param("concertId") Long concertId);

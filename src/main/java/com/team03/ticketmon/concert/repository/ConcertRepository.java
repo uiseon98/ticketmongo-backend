@@ -130,8 +130,8 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 	 */
 	@Query("SELECT c FROM Concert c WHERE " +
 		"(SELECT COUNT(r) FROM Review r WHERE r.concert = c " +
-		"AND r.content IS NOT NULL AND TRIM(r.content) != '' " +
-		"AND LENGTH(TRIM(r.content)) >= 10) >= :minReviewCount")
+		"AND r.description IS NOT NULL AND TRIM(r.description) != '' " +
+		"AND LENGTH(TRIM(r.description)) >= 10) >= :minReviewCount")
 	List<Concert> findConcertsWithMinimumReviews(@Param("minReviewCount") Integer minReviewCount);
 }
 
