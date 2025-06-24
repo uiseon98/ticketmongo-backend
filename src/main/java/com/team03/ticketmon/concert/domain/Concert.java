@@ -104,6 +104,27 @@ public class Concert extends BaseTimeEntity {
 	@Column(name = "ai_summary", columnDefinition = "TEXT")
 	private String aiSummary;
 
+	@Column(name = "ai_summary_retry_count")
+	@Builder.Default
+	private Integer aiSummaryRetryCount = 0;
+
+	@Column(name = "ai_summary_last_failed_at")
+	private LocalDateTime aiSummaryLastFailedAt;
+
+	// 리뷰 변동성 추적을 위한 필드들
+	@Column(name = "ai_summary_generated_at")
+	private LocalDateTime aiSummaryGeneratedAt;
+
+	@Column(name = "ai_summary_review_count")
+	@Builder.Default
+	private Integer aiSummaryReviewCount = 0; // 요약 생성 시 사용된 리뷰 개수
+
+	@Column(name = "ai_summary_review_checksum")
+	private String aiSummaryReviewChecksum; // 리뷰 내용 변경 감지용
+
+	@Column(name = "last_review_modified_at")
+	private LocalDateTime lastReviewModifiedAt; // 마지막 리뷰 변경 시점
+
 	@OneToMany(mappedBy = "concert", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
 	private List<ConcertSeat> concertSeats;
 
