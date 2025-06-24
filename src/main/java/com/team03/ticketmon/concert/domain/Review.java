@@ -54,4 +54,14 @@ public class Review extends BaseTimeEntity {
 	@Max(value = 5, message = "평점은 5 이하여야 합니다")
 	@Column(name = "rating", nullable = false)
 	private Integer rating;
+
+	// Concert의 lastReviewModifiedAt 업데이트를 위한 리스너
+	@PrePersist
+	@PreUpdate
+	@PreRemove
+	public void updateConcertReviewModifiedTime() {
+		if (this.concert != null) {
+			this.concert.setLastReviewModifiedAt(LocalDateTime.now());
+		}
+	}
 }
