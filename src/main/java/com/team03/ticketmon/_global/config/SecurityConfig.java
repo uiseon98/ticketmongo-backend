@@ -16,6 +16,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -108,9 +109,19 @@ public class SecurityConfig {
                 // URL 별 접근 권한 설정
                 .authorizeHttpRequests(auth -> auth
 
+
+                                // LoginFilter가 처리하는 정확한 로그인 경로를 모든 규칙보다 가장 먼저 permitAll()
+                                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll() // <-- 이 라인을 가장 위로 이동 및 HttpMethod.POST 명시
+
+                                // -----------------------------------------------------------
+                                // 추가: 대기열 진입 API (POST /api/queue/enter)를 permitAll()
+                                .requestMatchers(HttpMethod.POST, "/api/queue/enter").permitAll()
+
+
                                 //------------인증 없이 접근 허용할 경로들 (permitAll())------------
-                                // .requestMatchers("/", "/index.html").permitAll()
+//                                .requestMatchers("/", "/index.html").permitAll()
                                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()   // Swagger UI 및 API 문서 경로 허용
+                                // .requestMatchers("/api/auth/login").permitAll() // <-- 이 부분을 수정 (기존 /auth/login 또는 /api/auth/** permitAll과 중복 가능성 있으나 명시적 지정)
                                 .requestMatchers("/api/auth/**").permitAll()    // 인증(로그인, 회원가입) 관련 API 경로 허용 (인증 불필요)
                                 // .requestMatchers("/test/upload/**").permitAll()     // 파일 업로드 테스트용 API 경로 허용 (개발/테스트 목적)
                                 // .requestMatchers("/profile/image/**").permitAll()   // 프로필 이미지 접근/업로드 관련 API 경로 허용 (필요하다면 유지)
@@ -133,7 +144,7 @@ public class SecurityConfig {
 
                                 //------------나머지 모든 요청에 대한 접근 권한 설정(티켓팅, 예매, 마이페이지 등 필요하다면 추후 수정 예정)------------
                                 // 위에서 정의되지 않은 나머지 모든 요청은 인증만 되면 접근 허용
-                                .anyRequest().authenticated() // JWT 인증 완료된 사용자만 접근 가능
+//                                .anyRequest().authenticated() // JWT 인증 완료된 사용자만 접근 가능
 
                                 // <추후 추가될 수 있는 인가 설정>
                                 // .requestMatchers("/api/some-specific-path").hasAuthority("SOME_PERMISSION") // 특정 권한 필요
@@ -141,7 +152,7 @@ public class SecurityConfig {
 
 
                                 // 전체 인증 없이 API 테스트 가능(초기 개발 단계 / 추후 JWT 완성 시 주석 처리)
-                                // .anyRequest().permitAll()
+                                 .anyRequest().permitAll()  // CORS 문제 임시 조치 -> 추후에 문제 해결 시 .anyRequest().authenticated() 활성화 예정
                 )
                 // OAuth2 Login
                 .oauth2Login(oauth -> oauth
@@ -185,6 +196,7 @@ public class SecurityConfig {
                 "http://localhost:3000",    // 기존 React App 기본 포트
                 "http://localhost:8080",    // 백엔드 개발 서버 포트 (테스트용, 백엔드 직접 접근 시)
                 "http://localhost:5173",    // Vite React 개발 서버 기본 포트 (새 프론트엔드 레포)
+                "http://localhost:5174",    // <-- 이 부분 추가 (현재 프론트엔드 개발 서버 포트)
                 "https://ff52-222-105-3-101.ngrok-free.app" // ngrok 등 터널링 서비스 주소 (필요 시)
         ));
 
