@@ -38,91 +38,91 @@
    (프로젝트 의존성을 다운로드하고 빌드합니다.)
 
 3. **환경 변수 설정:**
-  - 프로젝트 루트 디렉토리 (`build.gradle` 파일이 있는 곳)에 `.env` 파일을 생성합니다.
-  - `.env` 파일은 `.gitignore`에 의해 Git 추적에서 제외되므로 **절대 커밋하지 않습니다.**
-  - `application-dev.yml`에서 참조하는 다음 환경 변수들의 실제 값을 팀 내부 채널(예: Discord)에서 공유받아 `.env` 파일에 작성합니다.
+- 프로젝트 루트 디렉토리 (`build.gradle` 파일이 있는 곳)에 `.env` 파일을 생성합니다.
+- `.env` 파일은 `.gitignore`에 의해 Git 추적에서 제외되므로 **절대 커밋하지 않습니다.**
+- `application-dev.yml`에서 참조하는 다음 환경 변수들의 실제 값을 팀 내부 채널(예: Discord)에서 공유받아 `.env` 파일에 작성합니다.
 
-    ```
-    # .env 파일 내용 (예시 - 실제 값으로 대체 필요)
-    # SPRING_PROFILES_ACTIVE 기본값은 'dev'이므로, 로컬 개발 시에는 이 값을 변경하지 않습니다.
-    SPRING_PROFILES_ACTIVE=dev
-    
-    # 데이터베이스 (Aiven MySQL)
-    DB_URL=jdbc:mysql://[your-db-host]:[your-db-port]/defaultdb
-    DB_USERNAME=[your-db-username]
-    DB_PASSWORD=[your-db-password]
-    
-    # Redis
-    SPRING_DATA_REDIS_HOST=localhost
-    SPRING_DATA_REDIS_PORT=6379
-    SPRING_DATA_REDIS_USERNAME=default
-    SPRING_DATA_REDIS_PASSWORD=
-    
-    # Supabase (현재 로컬 개발 환경에서 사용 중)
-    SUPABASE_URL=https://[your-supabase-url].supabase.co
-    SUPABASE_KEY=[your-supabase-service-role-key] # ⚠️ 절대 클라이언트에 노출 금지!
-    SUPABASE_PROFILE_BUCKET=ticketmon-dev-profile-imgs
-    SUPABASE_POSTER_BUCKET=ticketmon-dev-poster-imgs
-    SUPABASE_DOCS_BUCKET=ticketmon-dev-seller-docs
-    
-    # JWT
-    JWT_SECRET_KEY=your-very-long-and-secure-jwt-secret-key-from-openssl-rand-base64-32
-    JWT_ACCESS_EXPIRATION_MS=600000  # 10분
-    JWT_REFRESH_EXPIRATION_MS=86400000 # 24시간
-    
-    # AWS (LocalStack 모킹용 - 실제 AWS 아님)
-    AWS_ACCESS_KEY=test-key
-    AWS_SECRET_KEY=test-secret
-    SQS_ENDPOINT=http://localstack:4566 # LocalStack SQS 엔드포인트
-    
-    # 앱 기본 URL (토스페이먼츠 콜백 URL 등)
-    BASE_URL=http://localhost:8080 # 로컬 백엔드 앱의 주소
-    
-    # 토스페이먼츠 (개발용 키)
-    TOSS_CLIENT_KEY=test_ck_your-toss-client-key
-    TOSS_SECRET_KEY=test_sk_your-toss-secret-key
-    
-    ```
+  ```
+  # .env 파일 내용 (예시 - 실제 값으로 대체 필요)
+  # SPRING_PROFILES_ACTIVE 기본값은 'dev'이므로, 로컬 개발 시에는 이 값을 변경하지 않습니다.
+  SPRING_PROFILES_ACTIVE=dev
+  
+  # 데이터베이스 (Aiven MySQL)
+  DB_URL=jdbc:mysql://[your-db-host]:[your-db-port]/defaultdb
+  DB_USERNAME=[your-db-username]
+  DB_PASSWORD=[your-db-password]
+  
+  # Redis
+  SPRING_DATA_REDIS_HOST=localhost
+  SPRING_DATA_REDIS_PORT=6379
+  SPRING_DATA_REDIS_USERNAME=default
+  SPRING_DATA_REDIS_PASSWORD=
+  
+  # Supabase (현재 로컬 개발 환경에서 사용 중)
+  SUPABASE_URL=https://[your-supabase-url].supabase.co
+  SUPABASE_KEY=[your-supabase-service-role-key] # ⚠️ 절대 클라이언트에 노출 금지!
+  SUPABASE_PROFILE_BUCKET=ticketmon-dev-profile-imgs
+  SUPABASE_POSTER_BUCKET=ticketmon-dev-poster-imgs
+  SUPABASE_DOCS_BUCKET=ticketmon-dev-seller-docs
+  
+  # JWT
+  JWT_SECRET_KEY=your-very-long-and-secure-jwt-secret-key-from-openssl-rand-base64-32
+  JWT_ACCESS_EXPIRATION_MS=600000  # 10분
+  JWT_REFRESH_EXPIRATION_MS=86400000 # 24시간
+  
+  # AWS (LocalStack 모킹용 - 실제 AWS 아님)
+  AWS_ACCESS_KEY=test-key
+  AWS_SECRET_KEY=test-secret
+  SQS_ENDPOINT=http://localstack:4566 # LocalStack SQS 엔드포인트
+  
+  # 앱 기본 URL (토스페이먼츠 콜백 URL 등)
+  BASE_URL=http://localhost:8080 # 로컬 백엔드 앱의 주소
+  
+  # 토스페이먼츠 (개발용 키)
+  TOSS_CLIENT_KEY=test_ck_your-toss-client-key
+  TOSS_SECRET_KEY=test_sk_your-toss-secret-key
+  
+  ```
 
 4. **Docker 컨테이너 실행 (Redis, LocalStack, Nginx):**
-  - 프로젝트 루트 디렉토리에서 다음 명령어를 실행합니다.
+- 프로젝트 루트 디렉토리에서 다음 명령어를 실행합니다.
 
-    ```bash
-    docker-compose up --build
-    
-    ```
+  ```bash
+  docker-compose up --build
+  
+  ```
 
-  - `redis-cache`, `localstack`, `nginx-frontend-server` 컨테이너가 실행됩니다.
-  - **`nginx-frontend-server` 역할:** `http://localhost`를 통해 **프론트엔드 레포지토리의 `dist` 폴더** 내용을 서빙하며, `/api` 및 `/ws` 요청을 백엔드 앱(`http://host.docker.internal:8080/`)으로 프록시합니다.
-  - **참고:** 이 단계에서는 프론트엔드 레포지토리도 함께 `npm run dev`로 실행되어야 완전한 로컬 환경 연동 테스트가 가능합니다.
+- `redis-cache`, `localstack`, `nginx-frontend-server` 컨테이너가 실행됩니다.
+- **`nginx-frontend-server` 역할:** `http://localhost`를 통해 **프론트엔드 레포지토리의 `dist` 폴더** 내용을 서빙하며, `/api` 및 `/ws` 요청을 백엔드 앱(`http://host.docker.internal:8080/`)으로 프록시합니다.
+- **참고:** 이 단계에서는 프론트엔드 레포지토리도 함께 `npm run dev`로 실행되어야 완전한 로컬 환경 연동 테스트가 가능합니다.
 5. **백엔드 Spring Boot 앱 실행 (IntelliJ IDEA에서):**
-  - IntelliJ IDEA에서 `TicketmonGoApplication.java`를 실행합니다. (`http://localhost:8080`에서 시작)
-  - 콘솔 로그에 오류 없이 시작되는지 확인합니다.
+- IntelliJ IDEA에서 `TicketmonGoApplication.java`를 실행합니다. (`http://localhost:8080`에서 시작)
+- 콘솔 로그에 오류 없이 시작되는지 확인합니다.
 
 ### 1.3. 로컬 환경 테스트 방법 ✅
 
 모든 앱(백엔드, 프론트엔드 개발 서버)과 Docker 컨테이너가 실행 중인 상태에서:
 
 1. **백엔드 API 직접 테스트 (Swagger UI):**
-  - 웹 브라우저로 `http://localhost:8080/swagger-ui/index.html` 에 접속하여 백엔드 API 문서가 정상 로드되는지 확인합니다.
-  - `/api/auth/login` (POST) API 등을 통해 백엔드 API가 정상 작동하는지 테스트합니다.
-  - **💡 참고:** 현재 `SecurityConfig.java`에 `anyRequest().permitAll()`이 임시 활성화되어 있으므로, 인증 없이 모든 API 테스트가 가능합니다. 로그인 관련 기능의 JWT 쿠키 발행 문제는 백엔드 로그인 담당자가 추후 해결할 예정입니다.
+- 웹 브라우저로 `http://localhost:8080/swagger-ui/index.html` 에 접속하여 백엔드 API 문서가 정상 로드되는지 확인합니다.
+- `/api/auth/login` (POST) API 등을 통해 백엔드 API가 정상 작동하는지 테스트합니다.
+- **💡 참고:** 현재 `SecurityConfig.java`에 `anyRequest().permitAll()`이 임시 활성화되어 있으므로, 인증 없이 모든 API 테스트가 가능합니다. 로그인 관련 기능의 JWT 쿠키 발행 문제는 백엔드 로그인 담당자가 추후 해결할 예정입니다.
 2. **Docker 컨테이너 상태 확인 명령어:**
-  - **Redis 상태 확인:**
+- **Redis 상태 확인:**
 
-      ```bash
-      docker exec -it redis-cache redis-cli ping
-      # → PONG 반환되면 정상 작동
-      
-      ```
+    ```bash
+    docker exec -it redis-cache redis-cli ping
+    # → PONG 반환되면 정상 작동
+    
+    ```
 
-  - **LocalStack SQS 상태 확인:**
+- **LocalStack SQS 상태 확인:**
 
-      ```bash
-      docker exec -it localstack awslocal sqs list-queues
-      # → 큐 없어도 오류 없이 반환되면 정상 (예시: "<http://localhost:4566>" 응답 확인)
-      
-      ```
+    ```bash
+    docker exec -it localstack awslocal sqs list-queues
+    # → 큐 없어도 오류 없이 반환되면 정상 (예시: "<http://localhost:4566>" 응답 확인)
+    
+    ```
 
 
 ---
