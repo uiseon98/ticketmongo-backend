@@ -2,6 +2,256 @@
 
 ---
 
+### (2025.06.24) README.md 최신화
+
+이 레포지토리는 Ticketmon 프로젝트의 **백엔드 애플리케이션 코드**를 관리합니다. 기존 통합 레포지토리에서 프론트엔드 코드와 분리되어, 백엔드 개발 팀이 독립적으로 개발 및 배포를 진행할 수 있도록 구성되었습니다.
+
+---
+
+## 🚀 1. 개발 환경 설정 가이드
+
+### 1.1. 필수 설치 도구
+
+- **Java 17**: 백엔드 애플리케이션 실행을 위한 Java Development Kit (JDK)
+- **Gradle**: `gradlew` 스크립트가 포함되어 있어 별도 설치 불필요 (첫 빌드 시 자동 다운로드)
+- **IntelliJ IDEA Ultimate**: 주요 개발 IDE
+- **Git**: 최신 버전
+- **Docker Desktop**: Redis, LocalStack, 그리고 로컬 Nginx 컨테이너 실행을 위해 필요합니다.
+
+### 1.2. 프로젝트 시작하기
+
+1. **레포지토리 클론:**
+
+    ```bash
+    git clone [<https://github.com/AIBE-3Team/AIBE1-FinalProject-Team03.git>](<https://github.com/AIBE-3Team/AIBE1-FinalProject-Team03.git>)
+    cd AIBE1-FinalProject-Team03
+    
+    ```
+
+2. **의존성 빌드:**
+
+    ```bash
+    ./gradlew build
+    
+    ```
+
+   (프로젝트 의존성을 다운로드하고 빌드합니다.)
+
+3. **환경 변수 설정:**
+- 프로젝트 루트 디렉토리 (`build.gradle` 파일이 있는 곳)에 `.env` 파일을 생성합니다.
+- `.env` 파일은 `.gitignore`에 의해 Git 추적에서 제외되므로 **절대 커밋하지 않습니다.**
+- `application-dev.yml`에서 참조하는 다음 환경 변수들의 실제 값을 팀 내부 채널(예: Discord)에서 공유받아 `.env` 파일에 작성합니다.
+
+  ```
+  # .env 파일 내용 (예시 - 실제 값으로 대체 필요)
+  # SPRING_PROFILES_ACTIVE 기본값은 'dev'이므로, 로컬 개발 시에는 이 값을 변경하지 않습니다.
+  SPRING_PROFILES_ACTIVE=dev
+  
+  # 데이터베이스 (Aiven MySQL)
+  DB_URL=jdbc:mysql://[your-db-host]:[your-db-port]/defaultdb
+  DB_USERNAME=[your-db-username]
+  DB_PASSWORD=[your-db-password]
+  
+  # Redis
+  SPRING_DATA_REDIS_HOST=localhost
+  SPRING_DATA_REDIS_PORT=6379
+  SPRING_DATA_REDIS_USERNAME=default
+  SPRING_DATA_REDIS_PASSWORD=
+  
+  # Supabase (현재 로컬 개발 환경에서 사용 중)
+  SUPABASE_URL=https://[your-supabase-url].supabase.co
+  SUPABASE_KEY=[your-supabase-service-role-key] # ⚠️ 절대 클라이언트에 노출 금지!
+  SUPABASE_PROFILE_BUCKET=ticketmon-dev-profile-imgs
+  SUPABASE_POSTER_BUCKET=ticketmon-dev-poster-imgs
+  SUPABASE_DOCS_BUCKET=ticketmon-dev-seller-docs
+  
+  # JWT
+  JWT_SECRET_KEY=your-very-long-and-secure-jwt-secret-key-from-openssl-rand-base64-32
+  JWT_ACCESS_EXPIRATION_MS=600000  # 10분
+  JWT_REFRESH_EXPIRATION_MS=86400000 # 24시간
+  
+  # AWS (LocalStack 모킹용 - 실제 AWS 아님)
+  AWS_ACCESS_KEY=test-key
+  AWS_SECRET_KEY=test-secret
+  SQS_ENDPOINT=http://localstack:4566 # LocalStack SQS 엔드포인트
+  
+  # 앱 기본 URL (토스페이먼츠 콜백 URL 등)
+  BASE_URL=http://localhost:8080 # 로컬 백엔드 앱의 주소
+  
+  # 토스페이먼츠 (개발용 키)
+  TOSS_CLIENT_KEY=test_ck_your-toss-client-key
+  TOSS_SECRET_KEY=test_sk_your-toss-secret-key
+  
+  ```
+
+4. **Docker 컨테이너 실행 (Redis, LocalStack, Nginx):**
+- 프로젝트 루트 디렉토리에서 다음 명령어를 실행합니다.
+
+  ```bash
+  docker-compose up --build
+  
+  ```
+
+- `redis-cache`, `localstack`, `nginx-frontend-server` 컨테이너가 실행됩니다.
+- **`nginx-frontend-server` 역할:** `http://localhost`를 통해 **프론트엔드 레포지토리의 `dist` 폴더** 내용을 서빙하며, `/api` 및 `/ws` 요청을 백엔드 앱(`http://host.docker.internal:8080/`)으로 프록시합니다.
+- **참고:** 이 단계에서는 프론트엔드 레포지토리도 함께 `npm run dev`로 실행되어야 완전한 로컬 환경 연동 테스트가 가능합니다.
+5. **백엔드 Spring Boot 앱 실행 (IntelliJ IDEA에서):**
+- IntelliJ IDEA에서 `TicketmonGoApplication.java`를 실행합니다. (`http://localhost:8080`에서 시작)
+- 콘솔 로그에 오류 없이 시작되는지 확인합니다.
+
+### 1.3. 로컬 환경 테스트 방법 ✅
+
+모든 앱(백엔드, 프론트엔드 개발 서버)과 Docker 컨테이너가 실행 중인 상태에서:
+
+1. **백엔드 API 직접 테스트 (Swagger UI):**
+- 웹 브라우저로 `http://localhost:8080/swagger-ui/index.html` 에 접속하여 백엔드 API 문서가 정상 로드되는지 확인합니다.
+- `/api/auth/login` (POST) API 등을 통해 백엔드 API가 정상 작동하는지 테스트합니다.
+- **💡 참고:** 현재 `SecurityConfig.java`에 `anyRequest().permitAll()`이 임시 활성화되어 있으므로, 인증 없이 모든 API 테스트가 가능합니다. 로그인 관련 기능의 JWT 쿠키 발행 문제는 백엔드 로그인 담당자가 추후 해결할 예정입니다.
+2. **Docker 컨테이너 상태 확인 명령어:**
+- **Redis 상태 확인:**
+
+    ```bash
+    docker exec -it redis-cache redis-cli ping
+    # → PONG 반환되면 정상 작동
+    
+    ```
+
+- **LocalStack SQS 상태 확인:**
+
+    ```bash
+    docker exec -it localstack awslocal sqs list-queues
+    # → 큐 없어도 오류 없이 반환되면 정상 (예시: "<http://localhost:4566>" 응답 확인)
+    
+    ```
+
+
+---
+
+## 🛠️ 2. 기술 스택 및 주요 설정
+
+### 2.1. 핵심 기술 스택
+
+- **백엔드 프레임워크:** Spring Boot (`v3.x`)
+- **언어:** Java 17
+- **ORM:** Spring Data JPA (Hibernate)
+- **데이터베이스:** MySQL (Aiven 사용)
+- **캐시/분산락/PubSub:** Redis (Redisson 사용)
+- **클라우드 모킹:** LocalStack (AWS SQS, S3 개발용 모킹)
+- **파일 스토리지:** Supabase (현재) -> AWS S3 (추후 마이그레이션 예정)
+- **결제:** Toss Payments 연동
+- **API 문서:** Swagger UI
+- **인증/보안:** Spring Security (JWT, OAuth2)
+- **로깅:** SLF4J + Logback
+
+### 2.2. Spring Security 설정 요약 (최신화)
+
+| 구분 | 설명 |
+| --- | --- |
+| **현재 인증 상태** | **전체 인증 없이 API 테스트 가능** 상태입니다. (`.anyRequest().permitAll()` 활성화) |
+| **CORS 설정** | `SecurityConfig.java`의 `corsConfigurationSource`에서 모든 CORS 정책을 통합 관리하며, 프론트엔드 개발 서버 도메인(`http://localhost:5173`, `http://localhost:5174`, `http://localhost:8080`) 및 `ngrok` 주소를 허용합니다. `credentials: true`를 허용합니다. (기존 `WebConfig.java` 삭제) |
+| **인가 설정** | `SecurityConfig.java`에서 URL별 접근 권한이 설정되어 있습니다. <br> - `/api/auth/login` (POST) 및 `/api/queue/enter` (POST)는 `permitAll()`로 최상단에 명시적으로 허용됩니다. <br> - `/api/auth/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/test/upload/**`, `/profile/image/**`도 `permitAll()` 입니다. <br> - `/api/users/me/seller-status`, `/api/users/me/seller-requests`, `/api/users/me/role`은 `authenticated()` (로그인된 사용자). <br> - `/api/seller/concerts/**`, `/api/seller/count`는 `hasRole("SELLER")` (판매자 권한). <br> - `/admin/**`은 `hasRole("ADMIN")` (관리자 권한, 주석 처리됨). <br> - 나머지 모든 요청은 현재 `anyRequest().permitAll()`로 임시 허용 중입니다. |
+| **JWT 필터** | `LoginFilter`, `JwtAuthenticationFilter`, `CustomLogoutFilter`가 `SecurityFilterChain`에 추가되어 있습니다. `LoginFilter`는 `/api/auth/login` (POST) 요청을 처리하며, `JwtAuthenticationFilter`는 해당 로그인 요청을 건너뛰도록 처리되어 있습니다. |
+| **WebSocket** | `WebSocketConfig.java`에서 `/ws/waitqueue` 엔드포인트를 허용하며, `setAllowedOrigins`에 프론트엔드 개발 서버 도메인을 포함합니다. `WebSocketAuthInterceptor`를 통해 WebSocket 핸드셰이크 시 JWT 토큰을 검증합니다. |
+| **예외 응답 처리** | 인증 실패(401), 권한 없음(403)에 대해 커스텀 에러 메시지를 반환하도록 설정됨. |
+| **주의 사항** | **현재 `anyRequest().permitAll()` 활성화로 인해 로그인 및 JWT 쿠키 발행 관련 문제가 우회된 상태입니다.** 이 문제는 로그인 담당 팀원과 상의하여 해결할 예정입니다. 이 PR은 프론트엔드 개발 블로킹 해소를 위한 인프라 설정에 초점을 맞춥니다. |
+
+### 2.3. 파일 업로드 시스템 구조 (Supabase -> S3 마이그레이션 대비)
+
+- `StorageUploader` 인터페이스를 통해 Supabase와 S3 업로더를 추상화했습니다.
+- **현재는 `SupabaseUploader`가 `application.yml`에 `supabase` 프로필이 포함되어 활성화되어 있습니다.**
+- `S3Uploader`는 `s3` 프로필이 활성화될 때 사용되도록 준비되어 있습니다.
+
+### 2.4. 공통 예외 처리 정책 (`Global Exception Handling`)
+
+- `GlobalExceptionHandler`를 통해 애플리케이션 전역에서 발생하는 예외를 일관된 `ErrorResponse` 형식으로 처리합니다.
+- `ErrorCode` enum을 통해 모든 비즈니스 및 시스템 예외 코드를 통합 관리합니다.
+- **참고:** 대기열 진입 API (`/api/queue/enter`)는 현재 클라이언트(`queue/index.html`)의 요청 방식과 컨트롤러 파라미터 방식 불일치로 인해 `400 Bad Request` 오류가 발생하고 있습니다. 이 부분은 대기열 담당 팀원이 `WaitingQueueController.java`에서 `@RequestParam` 대신 `@RequestBody` DTO를 사용하도록 수정해야 합니다.
+
+---
+
+## 📚 3. 주요 파일 설명 (패키지 기준)
+
+| 파일명 | 설명 |
+| --- | --- |
+| `.env` | 실제 민감 설정 키 저장 (Git 제외) |
+| `docker-compose.yml` | 로컬 개발용 컨테이너 (Redis, LocalStack, Nginx) 구성 |
+| `nginx.conf` | 로컬 Nginx 컨테이너 설정 (프론트 서빙, 백엔드 프록시) |
+| `SecurityConfig.java` | Spring Security 핵심 설정 (인증, 인가, CORS) |
+| `WebSocketConfig.java` | WebSocket 설정 (핸들러, 인터셉터, CORS) |
+| `LoginFilter.java` | 자체 로그인 처리 필터 |
+| `JwtAuthenticationFilter.java` | JWT 토큰 검증 및 재발급 필터 |
+| `CookieUtil.java` | JWT 쿠키 생성/삭제 유틸 |
+| `GlobalExceptionHandler.java` | 전역 예외 처리 |
+| `ErrorCode.java` | 에러 코드 및 메시지 정의 |
+| `SuccessResponse.java` | 공통 성공 응답 형식 |
+| `application.yml` | Spring 공통 설정 및 프로필 활성화 |
+| `application-dev.yml` | 개발 환경 (dev 프로필) 전용 설정 |
+| `application-prod.yml` | 운영 환경 (prod 프로필) 전용 설정 (AWS 마이그레이션용) |
+| `TicketmonGoApplication.java` | Spring Boot 애플리케이션 진입점 |
+| `SellerConcertController.java` | 판매자 콘서트 CRUD API 컨트롤러 |
+| `WaitingQueueController.java` | 대기열 진입 API 컨트롤러 |
+| `ConcertController.java` | 콘서트 목록/상세 조회 등 API 컨트롤러 |
+| `ReviewController.java` | 후기 작성/수정/삭제 API 컨트롤러 |
+| `ExpectationReviewController.java` | 기대평 작성/수정/삭제 API 컨트롤러 |
+| `PaymentApiController.java` | 결제 API 컨트롤러 (Toss Payments 연동) |
+| `WebhookController.java` | 토스페이먼츠 웹훅 처리 컨트롤러 |
+| `TestUploadController.java` | 파일 업로드 테스트 API |
+| `RedisTestController.java` | Redis 테스트 API |
+| `RedisHealthController.java` | Redis 헬스체크 API |
+| `HomeController.java` | 기본 `/` 경로 컨트롤러 |
+| `ExampleProfileController.java` | 프로필 이미지 업로드 예시 컨트롤러 |
+| `PaymentTestPageController.java` | 결제 테스트 페이지 (`/payment/checkout`) 컨트롤러 |
+| `UserController.java` | 사용자 (회원가입) 컨트롤러 |
+| `SeatReservationController.java` | 좌석 선점/해제 API 컨트롤러 |
+| `SeatQueryController.java` | 좌석 상태 조회 API 컨트롤러 |
+| `SeatAdminController.java` | 좌석 관리자 API 컨트롤러 |
+| `SeatStatusService.java` | 좌석 상태 관리 서비스 (Redis) |
+| `SeatCacheInitService.java` | 좌석 캐시 초기화 서비스 |
+| `WaitingQueueService.java` | 대기열 서비스 (Redis Sorted Set) |
+| `NotificationService.java` | 알림 서비스 (Redis Pub/Sub) |
+| `WaitingQueueScheduler.java` | 대기열 스케줄러 (Redis 분산 락) |
+| `CleanupScheduler.java` | 만료된 세션 정리 스케줄러 |
+| `RegisterService.java` | 회원가입 서비스 인터페이스 |
+| `RegisterServiceImpl.java` | 회원가입 서비스 구현체 |
+| `UserEntityService.java` | 사용자 엔티티 서비스 |
+| `UserEntityServiceImpl.java` | 사용자 엔티티 서비스 구현체 |
+| `SocialUserService.java` | 소셜 사용자 서비스 인터페이스 |
+| `SocialUserServiceImpl.java` | 소셜 사용자 서비스 구현체 |
+| `RefreshTokenService.java` | 리프레시 토큰 서비스 인터페이스 |
+| `RefreshTokenServiceImpl.java` | 리프레시 토큰 서비스 구현체 |
+| `TestUploadService.java` | 파일 업로드 테스트 서비스 |
+| `ExampleProfileImageService.java` | 프로필 이미지 업로드 예시 서비스 |
+| `ConcertRepository.java` | 콘서트 레포지토리 |
+| `SellerConcertRepository.java` | 판매자 콘서트 레포지토리 |
+| `ReviewRepository.java` | 후기 레포지토리 |
+| `ExpectationReviewRepository.java` | 기대평 레포지토리 |
+| `PaymentRepository.java` | 결제 레포지토리 |
+| `PaymentCancelHistoryRepository.java` | 결제 취소 이력 레포지토리 |
+| `UserRepository.java` | 사용자 레포지토리 |
+| `SocialUserRepository.java` | 소셜 사용자 레포지토리 |
+| `ReviewDTO.java` | 후기 DTO |
+| `ExpectationReviewDTO.java` | 기대평 DTO |
+| `LoginDTO.java` | 로그인 요청 DTO |
+| `TicketmonGoApplicationTests.java` | 메인 애플리케이션 테스트 |
+| `ConcertServiceTest.java` | 콘서트 서비스 테스트 |
+| `SellerConcertServiceTest.java` | 판매자 콘서트 서비스 테스트 |
+| `ReviewServiceTest.java` | 후기 서비스 테스트 |
+| `ExpectationReviewServiceTest.java` | 기대평 서비스 테스트 |
+| `PaymentServiceTest.java` | 결제 서비스 테스트 |
+| `RegisterServiceImplTest.java` | 회원가입 서비스 테스트 |
+| `RedisTestController.java` | Redis 테스트 컨트롤러 |
+| `RedisHealthController.java` | Redis 헬스체크 컨트롤러 |
+| `WaitingQueueControllerTest.java` | 대기열 컨트롤러 테스트 |
+| `AdmissionFlowIntegrationTest.java` | 대기열 흐름 통합 테스트 |
+| `WaitingQueueSchedulerIntegrationTest.java` | 대기열 스케줄러 통합 테스트 |
+| `CleanupSchedulerTest.java` | 정리 스케줄러 테스트 |
+
+<br>
+<br>
+<br>
+<br>
+
+---
 
 ## (2025.06.15) 초기 환경 세팅 관련 공지
 
