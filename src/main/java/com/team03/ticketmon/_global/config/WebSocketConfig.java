@@ -31,8 +31,15 @@ public class WebSocketConfig implements WebSocketConfigurer {
                 .addHandler(customWebSocketHandler, "/ws/waitqueue")
                 // 주입받은 인터셉터를 등록
                 .addInterceptors(webSocketAuthInterceptor)
-                // TODO: [보안] 운영 환경에서는 CSRF 공격 등을 방지하기 위해 "*" 대신
-                // 실제 서비스 도메인(예: "https://ticketmon.com")을 명시해야 함
-                .setAllowedOrigins("*");
+
+                // 실제 서비스 도메인(예: "https://ticketmon.com" 등)으로 추후 수정 가능성 있음
+                // .setAllowedOrigins("*");
+                .setAllowedOrigins(
+                        "http://localhost:3000",    // 기존 React App 기본 포트
+                        "http://localhost:8080",    // 백엔드 개발 서버 포트 (SecurityConfig와 일관성)
+                        "http://localhost:5173",    // Vite React 개발 서버 기본 포트
+                        "http://localhost:5174",    // <-- 이 부분 추가 (현재 프론트엔드 개발 서버 포트)
+                        "https://ff52-222-105-3-101.ngrok-free.app" // ngrok 등 터널링 서비스 주소 (필요 시)
+                );
     }
 }
