@@ -45,9 +45,9 @@ public class SellerApplicationService {
 
     private final UserRepository userRepository;
     private final SellerApplicationRepository sellerApplicationRepository;
-//    private final FileValidator fileValidator;
+    private final FileValidator fileValidator;
     private final StorageUploader storageUploader;
-//    private final UploadPathUtil uploadPathUtil;
+    private final UploadPathUtil uploadPathUtil;
     private final SupabaseProperties supabaseProperties;
 
     // private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository; // 추후(3.1 단계)에서 추가될 의존성 (주석 해제 필요)
@@ -61,7 +61,7 @@ public class SellerApplicationService {
      * @param request  판매자 신청 정보 (업체명, 사업자번호 등)
      * @param document 제출 서류 파일
      * @throws BusinessException 이미 신청했거나, 판매자 권한을 이미 가진 경우 등 비즈니스 예외
-     * @return 성공 여부 (void 또는 상태 응답 DTO)
+     * @return void // 성공 시 반환 값 없음
      */
     @Transactional
     public void applyForSeller(Long userId, SellerApplicationRequestDTO request, MultipartFile document) {
@@ -70,8 +70,9 @@ public class SellerApplicationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다."));
 
         // 2. 판매자 권한 신청 유효성 검사 (이미 PENDING 상태의 신청이 있는지, 또는 APPROVED 상태인지 등)
-        // (예: user.getApprovalStatus() == PENDING 이거나 user.getRole() == SELLER 인 경우 예외 처리)
-        if (user.getApprovalStatus() == ApprovalStatus.PENDING) {
+        // sellerApplicationRepository.existsByUserIdAndStatus()를 활용하여 더 견고하게 체크 가능
+        if (user.getApprovalStatus() == ApprovalStatus.PENDING ||
+                sellerApplicationRepository.existsByUserIdAndStatus(userId, SUBMITTED)) {   // SellerApplication 테이블도 함께 확인
             throw new BusinessException(ErrorCode.SELLER_APPLY_ONCE, "이미 판매자 권한 신청이 접수되어 처리 대기 중입니다."); // PENDING 상태이면 재신청 불가
         }
         if (user.getRole() == Role.SELLER && user.getApprovalStatus() == ApprovalStatus.APPROVED) {
@@ -79,15 +80,16 @@ public class SellerApplicationService {
         }
 
         // 3. 제출 서류 파일 유효성 검사 (FileValidator 사용)
-//        fileValidator.validate(document);
+        fileValidator.validate(document);
 
         // 4. Supabase에 문서 업로드 (UploadPathUtil, StorageUploader 사용)
         String fileUuid = java.util.UUID.randomUUID().toString(); // 파일명 중복 방지를 위한 UUID
-        String fileExtension = document.getOriginalFilename() != null ?
-                document.getOriginalFilename().substring(document.getOriginalFilename().lastIndexOf('.') + 1) : "";
-//        String filePath = uploadPathUtil.getSellerDocsPath(fileUuid, fileExtension);
-        // String uploadedFileUrl = storageUploader.uploadFile(document, "ticketmon-dev-seller-docs", filePath); // 버킷명 하드코딩
-//        String uploadedFileUrl = storageUploader.uploadFile(document, supabaseProperties.getDocsBucket(), filePath);    // 추후 마이그레이션 대비 동적으로 변경
+        String fileExtension = "";
+        if (document.getOriginalFilename() != null && document.getOriginalFilename().contains(".")) {
+            fileExtension = document.getOriginalFilename().substring(document.getOriginalFilename().lastIndexOf('.') + 1);
+        }   // 파일명에 확장자가 없거나 null인 경우 방지
+        String filePath = uploadPathUtil.getSellerDocsPath(fileUuid, fileExtension);
+        String uploadedFileUrl = storageUploader.uploadFile(document, supabaseProperties.getDocsBucket(), filePath);    // Supabase Storage에 파일 업로드 (동적 버킷명 사용)
 
         // 5. SellerApplication 엔티티 생성 및 저장
         SellerApplication sellerApplication = SellerApplication.builder()
@@ -96,15 +98,14 @@ public class SellerApplicationService {
                 .businessNumber(request.getBusinessNumber())
                 .representativeName(request.getRepresentativeName())
                 .representativePhone(request.getRepresentativePhone())
-//                .uploadedFileUrl(uploadedFileUrl)
+                .uploadedFileUrl(uploadedFileUrl)
                 .status(SUBMITTED) // 초기 상태는 SUBMITTED
-                // .createdAt(LocalDateTime.now()) // PrePersist에서 자동 설정되지만 명시적으로 설정도 가능
-                .build(); // createdAt은 @PrePersist에서 자동 설정됩니다.
+                // .createdAt(LocalDateTime.now()) // @PrePersist에서 자동 설정됩니다(명시적으로 설정도 가능)
+                .build();
         sellerApplicationRepository.save(sellerApplication);
 
         // 6. UserEntity의 approvalStatus 업데이트
         user.setApprovalStatus(ApprovalStatus.PENDING); // 사용자의 승인 상태를 PENDING으로 변경
-//        user.setLastReason(null); // 재신청이므로 이전 거부 사유는 초기화
         userRepository.save(user); // 변경사항 저장
 
         // 7. SellerApprovalHistory에 REQUEST 타입의 이력 기록 (추후(3.1 단계 구현 후) 활성화)
@@ -137,7 +138,7 @@ public class SellerApplicationService {
         // 사용자 역할 및 승인 상태
         Role userRole = user.getRole();
         ApprovalStatus userApprovalStatus = user.getApprovalStatus();
-//        String lastReason = user.getLastReason(); // UserEntity에 lastReason 필드 추가 필요
+        String lastReason = null; // UserEntity에 lastReason 필드가 없으므로 null로 초기화
 
         // 최신 판매자 신청서 정보 조회 (신청일 및 마지막 처리일 등)
         // SellerApplication 및 SellerApprovalHistory에서 추가 정보 조회
@@ -172,19 +173,18 @@ public class SellerApplicationService {
             }
         }
 
-        // TODO: lastReason 필드 조합 로직 개선 (SellerApprovalHistory에서 가져오거나 UserEntity의 필드 활용)
-        // 현재는 UserEntity의 lastReason 필드를 직접 사용하도록 되어있습니다.
-        // 추후 SellerApprovalHistory를 참조하여 최종 반려/회수 사유를 가져오는 것이 더 정확할 수 있습니다.
+        // TODO: lastReason 필드 조합 로직 개선 (SellerApprovalHistory에서 가져오기)
+        // SellerApprovalHistoryRepository가 구현되면 이곳에서 lastReason을 가져오도록 변경
         /*
         Optional<SellerApprovalHistory> latestRejectOrRevokeHistory = sellerApprovalHistoryRepository
                 .findTopByUserIdAndTypeInOrderByActionDateDesc(userId, List.of(SellerApprovalHistory.ActionType.REJECT, SellerApprovalHistory.ActionType.REVOKE));
-        lastReason = latestRejectOrRevokeHistory.map(SellerApprovalHistory::getReason).orElse(lastReason); // 기존 lastReason이 없으면 히스토리에서
+        lastReason = latestRejectOrRevokeHistory.map(SellerApprovalHistory::getReason).orElse(null); // 기존 lastReason이 없으면 히스토리에서
         */
 
         return SellerApplicationStatusResponseDTO.builder()
                 .role(userRole)
                 .approvalStatus(userApprovalStatus)
-//                .lastReason(lastReason)
+                .lastReason(lastReason) // lastReason은 추후(3.1단계 이후) 채워질 예정
                 .canReapply(canReapply)
                 .canWithdraw(canWithdraw)
                 .applicationDate(applicationDate)
@@ -229,7 +229,7 @@ public class SellerApplicationService {
                     app.setUpdatedAt(LocalDateTime.now());
                     sellerApplicationRepository.save(app);
 
-                    // 4. SellerApprovalHistory에 WITHDRAW 로그 기록 (3.1 단계 구현 후 활성화)
+                    // 4. SellerApprovalHistory에 WITHDRAW 로그 기록 (추후(3.1 단계 구현 후) 활성화)
                     /*
                     SellerApprovalHistory history = SellerApprovalHistory.builder()
                             .userId(userId)
