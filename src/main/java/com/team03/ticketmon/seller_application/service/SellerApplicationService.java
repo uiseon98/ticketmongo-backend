@@ -36,7 +36,7 @@ import java.util.Optional;
 // 콘서트 도메인 의존성 추가 (판매자 권한 철회 조건 강화용)
 import com.team03.ticketmon.concert.repository.SellerConcertRepository; // 판매자의 콘서트 정보를 조회하기 위한 Repository
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus; // 콘서트 상태 Enum (ON_SALE, SCHEDULED 등)
-
+import com.team03.ticketmon.concert.domain.Concert; // Concert 엔티티 임포트
 
 // SellerApplicationStatus Enum 값들을 static import로 사용 (내부 ENUM 사용 / 선택 사항)
 import static com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus.*;
@@ -247,5 +247,20 @@ public class SellerApplicationService {
 
         // 5. 개인정보 처리 (스케줄러에 의해 처리될 예정)
         // SellerApplication의 representative_name, representative_phone 마스킹 및 uploaded_file_url 파일 삭제/NULL 처리
+
+    }
+
+    /**
+     * 판매자가 진행 중이거나 예정된 콘서트(ON_SALE, SCHEDULED)를 가지고 있는지 확인합니다.
+     * 판매자 권한 철회 시 제약 조건으로 사용됩니다.
+     * @param sellerId 판매자 ID
+     * @return 활성 콘서트가 있으면 true, 없으면 false
+     */
+    private boolean hasActiveConcertsForSeller(Long sellerId) {
+        // ON_SALE 또는 SCHEDULED 상태의 콘서트가 있는지 확인합니다.
+        List<ConcertStatus> activeStatuses = List.of(ConcertStatus.ON_SALE, ConcertStatus.SCHEDULED);
+        List<Concert> activeConcerts = sellerConcertRepository.findBySellerIdAndStatusIn(sellerId, activeStatuses);
+
+        return !activeConcerts.isEmpty(); // 비어있지 않으면 활성 콘서트가 있는 것
     }
 }
