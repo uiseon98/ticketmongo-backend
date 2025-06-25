@@ -13,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -41,32 +40,6 @@ public class SeatAdminController {
     private final SeatCacheWarmupScheduler seatCacheWarmupScheduler;
     private final RedissonClient redissonClient;
     private final ConcertRepository concertRepository;
-
-    /**
-     * 좌석 캐시 초기화 (더미 데이터) - 기존 API
-     * 🔴 고위험 - 실제 서비스에서는 권한 활성화 필요
-     */
-    @Operation(summary = "좌석 캐시 초기화 (더미 데이터)", description = "특정 콘서트의 좌석 상태 캐시를 더미 데이터로 초기화합니다")
-    // @PreAuthorize("hasRole('ADMIN')") // ← 📌 실제 서비스에서는 주석 해제
-    @PostMapping("/concerts/{concertId}/cache/init")
-    public ResponseEntity<SuccessResponse<String>> initSeatCache(
-            @Parameter(description = "콘서트 ID", example = "1")
-            @PathVariable Long concertId,
-            @Parameter(description = "총 좌석 수", example = "100")
-            @RequestParam(defaultValue = "100") int totalSeats) {
-
-        try {
-            seatCacheInitService.initializeSeatCache(concertId, totalSeats);
-
-            log.info("좌석 캐시 초기화 완료: concertId={}, totalSeats={}", concertId, totalSeats);
-            return ResponseEntity.ok(SuccessResponse.of("좌석 캐시 초기화 성공", "SUCCESS"));
-
-        } catch (Exception e) {
-            log.error("좌석 캐시 초기화 중 오류: concertId={}, totalSeats={}", concertId, totalSeats, e);
-            return ResponseEntity.status(500)
-                    .body(SuccessResponse.of("좌석 캐시 초기화 중 오류가 발생했습니다.", "ERROR"));
-        }
-    }
 
     /**
      * ✨ DB 기반 좌석 캐시 초기화 - 새로 추가된 API

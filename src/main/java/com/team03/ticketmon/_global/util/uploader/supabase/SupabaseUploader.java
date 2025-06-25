@@ -1,5 +1,6 @@
 package com.team03.ticketmon._global.util.uploader.supabase;
 
+import com.team03.ticketmon._global.exception.StorageUploadException;
 import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import io.supabase.StorageClient;
 //import io.supabase.common.SupabaseException;
@@ -83,12 +84,19 @@ public class SupabaseUploader implements StorageUploader {
                     .getPublicUrl();
 
             log.debug("✅ [DEBUG] public URL = {}", publicUrl);
+
+            // 🔴 중요: 테스트용으로 StorageUploadException을 강제로 발생시키는 임시 코드입니다.
+            // 🔴 테스트 완료 후에는 반드시 이 줄을 제거해야 합니다!
+            // throw new StorageUploadException("테스트용으로 강제 발생시킨 파일 업로드 오류입니다."); // 이 줄을 추가합니다.
+
             return publicUrl;
 
         } catch (IOException | InterruptedException | ExecutionException e) {
+            // 변경: 기존 RuntimeException 대신 StorageUploadException으로 예외를 래핑하여 던집니다.
+            // 이를 통해 파일 업로드 관련 시스템 오류임을 명확히 구분할 수 있습니다.
             // 파일 I/O, 스레드 인터럽트, 비동기 작업 실행 예외 처리
             log.error("❌ 파일 업로드 중 시스템 또는 기타 예외 발생", e);
-            throw new RuntimeException("파일 업로드 중 시스템 오류", e);
+            throw new StorageUploadException("파일 업로드 중 시스템 오류", e);// 변경
         }
 //        catch (StorageException e) {
 //            throw new RuntimeException("Supabase 업로드 실패", e);

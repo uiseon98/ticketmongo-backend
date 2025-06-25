@@ -1,12 +1,12 @@
 package com.team03.ticketmon._global.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Primary;
 import lombok.Data;
 
 @Data
-@Component
 @ConfigurationProperties(prefix = "ai.together")
+@Primary
 public class AiServiceProperties {
 
 	private String apiKey;
@@ -14,6 +14,10 @@ public class AiServiceProperties {
 	private String model = "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free";
 	private Integer timeoutSeconds = 30;
 	private Integer maxRetries = 3;
+	private Integer maxTokensPerRequest = 100000;     // 요청당 최대 토큰 수
+	private Integer maxReviewsPerRequest = 50;        // 요청당 최대 리뷰 수
+	private Double charsPerToken = 2.5;               // 문자당 토큰 추정치
+	private Double tokenSafetyMargin = 0.2;           // 안전 마진 (20%)
 
 	// 시스템 프롬프트 템플릿
 	private String systemPrompt = """

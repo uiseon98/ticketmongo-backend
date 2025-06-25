@@ -31,6 +31,11 @@ public enum ErrorCode {
     INVALID_PAGE_REQUEST(400, "C006", "페이징 요청 정보가 유효하지 않습니다."), // 추가: Pageable 검증
     REQUEST_PARAM_MISSING(400, "C007", "필수 요청 파라미터가 누락되었습니다."), // <--- 추가됨
 
+    // 추가: File (파일 업로드/처리 관련) - 새로운 카테고리
+    FILE_UPLOAD_FAILED(500, "F001", "파일 업로드 중 알 수 없는 오류가 발생했습니다."), // 파일 업로드 오류
+    FILE_SIZE_LIMIT_EXCEEDED(400, "F002", "요청 파일 크기가 허용된 최대 크기를 초과했습니다."), // FileValidator 관련(파일 크기)
+    UNSUPPORTED_FILE_TYPE(400, "F003", "허용되지 않는 파일 형식입니다."), // FileValidator 관련 (파일 형식)
+
     // Auth & User (인증 및 사용자 관련)
     LOGIN_FAILED(401, "A001", "아이디 또는 비밀번호가 일치하지 않습니다."),
     INVALID_TOKEN(401, "A002", "인증 토큰이 유효하지 않습니다."),
@@ -73,7 +78,8 @@ public enum ErrorCode {
     INVALID_SEAT_SELECTION(400, "B007", "선택한 좌석 중 일부를 찾을 수 없습니다."),
     BOOKING_NOT_FOUND(404, "B008", "요청한 예매 정보를 찾을 수 없습니다."),
     ALREADY_CANCELED_BOOKING(409, "B009", "이미 취소 처리된 예매입니다."),
-    ALREADY_COMPLETE_BOOKING(409, "B010", "이미 관람(사용)이 완료된 예매는 취소할 수 없습니다."),
+    CANNOT_CANCEL_COMPLETED_BOOKING(409, "B010", "이미 관람(사용)이 완료된 예매는 취소할 수 없습니다."),
+    CANCELLATION_PERIOD_EXPIRED(403, "B011", "예매 취소 가능 기간이 지났습니다."),
 
     // Review & Expectation (후기 및 기대평) - 새롭게 추가된 도메인
     REVIEW_ALREADY_EXISTS(409, "R001", "이미 후기를 작성했습니다."), // 추가: 중복 후기 방지
@@ -91,6 +97,7 @@ public enum ErrorCode {
     // Payment (결제)
     PAYMENT_AMOUNT_MISMATCH(400, "M001", "주문 금액이 일치하지 않습니다."),
     PAYMENT_FAILED(402, "M002", "결제에 실패했습니다."),
+    INVALID_BOOKING_STATUS_FOR_PAYMENT(409, "M003", "결제를 진행할 수 없는 예매 상태입니다."),
 
     // AI Service (AI 서비스 관련)
     AI_SERVICE_UNAVAILABLE(503, "AI001", "AI 서비스가 일시적으로 사용할 수 없습니다."),
