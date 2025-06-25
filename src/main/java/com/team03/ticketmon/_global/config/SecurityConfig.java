@@ -122,7 +122,7 @@ public class SecurityConfig {
 
 				//------------인증 없이 접근 허용할 경로들 (permitAll())------------
 				//                                .requestMatchers("/", "/index.html").permitAll()
-				.requestMatchers("/swagger-ui/**", "/swagger-resources/**", "/v3/api-docs/**")
+				.requestMatchers("/swagger-ui/**", "/v3/api-docs/**")
 				.permitAll()   // Swagger UI 및 API 문서 경로 허용
 				// .requestMatchers("/api/auth/login").permitAll() // <-- 이 부분을 수정 (기존 /auth/login 또는 /api/auth/** permitAll과 중복 가능성 있으나 명시적 지정)
 				.requestMatchers("/api/auth/**")
@@ -146,12 +146,10 @@ public class SecurityConfig {
 				.authenticated() // 판매자 권한 요청 등록 (API-03-06)
 				.requestMatchers("/api/users/me/role")
 				.authenticated() // 판매자 본인의 권한 철회 (API-03-07)
-
-				// [결제] 인증이 반드시 필요한 결제 API
-				.requestMatchers(
-					"/api/v1/payments/history",         // 결제 내역 조회
-					"/api/v1/payments/*/cancel"       // 결제 취소 (와일드카드 패턴)
-				).authenticated() // ◀◀◀ 이 API들은 반드시 인증된 사용자만 접근 가능
+				//결제 및 예매 API 경로 허용(로그인된 사용자일 시 )
+				.requestMatchers("/api/v1/payments/history").authenticated() // 결제 내역 조회
+				.requestMatchers(HttpMethod.POST, "/api/bookings").authenticated() // 예매 생성 및 결제 준비
+				.requestMatchers(HttpMethod.POST, "/api/bookings/*/cancel").authenticated() // 예매 취소
 
 				// 실제 판매자 기능 (콘서트 CRUD) - SELLER 역할만 접근 허용
 				// 콘서트 CRUD 및 판매자별 콘서트 개수 조회 API
