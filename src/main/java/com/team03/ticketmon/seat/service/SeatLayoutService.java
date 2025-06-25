@@ -51,7 +51,7 @@ public class SeatLayoutService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.CONCERT_NOT_FOUND));
 
             // 2. 공연장 정보 조회
-            VenueDTO venue = venueService.getVenue(Long.valueOf(concert.getVenueName()));
+            VenueDTO venue = venueService.getVenue(Long.valueOf(concert.getVenueName())); // ⚠️ 임시로 작성한 부분 - 반드시 수정 필요!
             SeatLayoutResponse.VenueInfo venueInfo = SeatLayoutResponse.VenueInfo.from(venue);
 
             // 3. 콘서트의 모든 좌석 정보 조회 (Fetch Join으로 최적화됨)
