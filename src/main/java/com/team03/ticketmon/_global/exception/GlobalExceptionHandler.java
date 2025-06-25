@@ -1,5 +1,7 @@
 package com.team03.ticketmon._global.exception;
 
+import com.team03.ticketmon._global.util.FileValidator;
+import com.team03.ticketmon._global.util.uploader.supabase.SupabaseUploader;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.stream.Collectors;
 
@@ -107,19 +110,50 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.METHOD_NOT_ALLOWED);
     }
 
+//    /**
+//     * ✅ IllegalArgumentException 처리
+//     * <p>
+//     * Service 계층에서 발생하는 입력값 검증 예외를 처리합니다.<br>
+//     * 대부분의 검증 실패는 400 Bad Request로 처리됩니다.
+//     *
+//     * @param e IllegalArgumentException (입력값 검증 실패 예외)
+//     * @return 400 에러 응답 (ResponseEntity<ErrorResponse>)
+//     */
+//    @ExceptionHandler(IllegalArgumentException.class)
+//    protected ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException e) {
+//        // 🔥 IllegalArgumentException을 INVALID_INPUT 에러 코드로 매핑
+//        ErrorResponse response = ErrorResponse.of(ErrorCode.INVALID_INPUT);
+//        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+//    }
+
     /**
      * ✅ IllegalArgumentException 처리
      * <p>
-     * Service 계층에서 발생하는 입력값 검증 예외를 처리합니다.<br>
-     * 대부분의 검증 실패는 400 Bad Request로 처리됩니다.
+     * Service 계층이나 유효성 검사 유틸리티(예: {@link FileValidator})에서 발생하는 입력값 검증 예외를 처리합니다.<br>
+     * 파일 크기/형식 관련 예외를 포함하여 세분화된 에러 코드를 반환합니다.
      *
      * @param e IllegalArgumentException (입력값 검증 실패 예외)
      * @return 400 에러 응답 (ResponseEntity<ErrorResponse>)
      */
     @ExceptionHandler(IllegalArgumentException.class)
     protected ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException e) {
-        // 🔥 IllegalArgumentException을 INVALID_INPUT 에러 코드로 매핑
-        ErrorResponse response = ErrorResponse.of(ErrorCode.INVALID_INPUT);
+        log.warn("IllegalArgumentException 발생: {}", e.getMessage());
+
+        ErrorResponse response;
+        String errorMessage = e.getMessage();
+
+        if (errorMessage != null && errorMessage.contains("파일 크기는") && errorMessage.contains("초과할 수 없습니다.")) {
+            // 파일 크기 제한 초과 (FileValidator에서 발생)
+            response = ErrorResponse.of(ErrorCode.FILE_SIZE_LIMIT_EXCEEDED);
+        } else if (errorMessage != null && errorMessage.contains("허용되지 않은 파일 형식입니다")) {
+            // 허용되지 않는 파일 형식 (FileValidator에서 발생)
+            response = ErrorResponse.of(ErrorCode.UNSUPPORTED_FILE_TYPE);
+        } else {
+            // 그 외의 모든 IllegalArgumentException (일반적인 유효하지 않은 입력값)
+            // 수정: private 생성자 호출 대신 ErrorResponse.of(ErrorCode, String) 팩토리 메서드 사용
+            response = ErrorResponse.of(ErrorCode.INVALID_INPUT, errorMessage);
+        }
+
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
 
@@ -172,4 +206,40 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.of(ErrorCode.SERVER_ERROR);
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
+    /**
+     * ✅ 파일 업로드 중 발생하는 StorageUploadException을 처리하는 핸들러입니다.
+     * <p>
+     * 이 예외는 {@link SupabaseUploader}에서 래핑되어 던져지며, 파일 업로드 시스템 오류임을 명시적으로 나타냅니다.<br>
+     * 클라이언트에게는 500 Internal Server Error와 함께 `FILE_UPLOAD_FAILED` 코드를 반환합니다.
+     *
+     * @param e StorageUploadException (파일 업로드 중 발생한 시스템 예외)
+     * @return 500 에러 응답 (ResponseEntity<ErrorResponse>)
+     */
+    @ExceptionHandler(StorageUploadException.class)
+    protected ResponseEntity<ErrorResponse> handleStorageUploadException(StorageUploadException e) {
+        log.error("StorageUploadException 발생: {}", e.getMessage(), e);
+        // 수정: ErrorResponse.of()를 호출
+        ErrorResponse response = ErrorResponse.of(ErrorCode.FILE_UPLOAD_FAILED);
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    /**
+     * ✅ Spring 자체의 파일 업로드 크기 제한 초과 예외 처리
+     * <p>
+     * {@link org.springframework.web.multipart.MultipartResolver}에서 파일 크기 제한을 초과했을 때 발생합니다.<br>
+     * 이는 애플리케이션의 {@code FileValidator}가 동작하기 전에 Spring 프레임워크 자체의 물리적 제한에 걸린 경우입니다.
+     *
+     * @param e MaxUploadSizeExceededException (최대 업로드 크기 초과 예외)
+     * @return 400 Bad Request 에러 응답 (ResponseEntity<ErrorResponse>)
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    protected ResponseEntity<ErrorResponse> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException e) {
+        log.warn("MaxUploadSizeExceededException 발생: {}", e.getMessage(), e); // e 추가
+        // 수정: ErrorResponse.of()를 호출
+        ErrorResponse response = ErrorResponse.of(ErrorCode.FILE_SIZE_LIMIT_EXCEEDED);
+        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    }
+
+
 }
