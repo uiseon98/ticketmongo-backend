@@ -166,13 +166,12 @@ public class SecurityConfig {
                         // 전체 인증 없이 API 테스트 가능(초기 개발 단계 / 추후 JWT 완성 시 주석 처리)
                         // .anyRequest().permitAll()  // CORS 문제 임시 조치 -> 추후에 문제 해결 시 .anyRequest().authenticated() 활성화 예정
                 )
-/*
+
                 // OAuth2 Login
                 .oauth2Login(oauth -> oauth
                         .userInfoEndpoint(user -> user.userService(customOAuth2UserService()))
                         .successHandler(oAuth2SuccessHandler())
                         .failureHandler(oAuth2LoginFailureHandler()))
-*/
 
                 // Login Filter 적용
                 .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, reissueService, cookieUtil), LoginFilter.class)
