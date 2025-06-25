@@ -4,6 +4,16 @@
 
 
 ---
+
+### ✅ 파일 업로드 관련 예외 처리
+
+파일 업로드 과정에서 발생하는 다양한 예외는 `GlobalExceptionHandler`를 통해 일관된 방식으로 처리됩니다.
+
+- **`StorageUploadException` (F001):** 스토리지 서비스와의 통신 오류 등 서버 내부적인 업로드 실패 시 발생합니다.
+- **`MaxUploadSizeExceededException` (F002):** `application.yml`에 설정된 Spring Boot의 최대 파일 크기 제한을 초과했을 때 발생합니다.
+- **`IllegalArgumentException` (F002, F003):** `FileValidator`에서 정의된 파일 크기(F002) 또는 허용되지 않는 파일 형식(F003) 검증에 실패했을 때 발생합니다.
+
+---
 ### ✅ 공통 업로더 인터페이스
 ```java
 public interface StorageUploader {
@@ -118,8 +128,12 @@ if (file.getSize() > MAX_SIZE) {
 	throw new IllegalArgumentException("파일 크기 제한 초과");
 }
 ```
-- ✅ 권장: 2MB 이하
-- ✅ 허용 확장자: jpg, png, webp, pdf (필요에 따라)
+- **✅ 애플리케이션 레벨 (FileValidator):**
+    - `FileValidator.java`에 정의된 `MAX_FILE_SIZE`는 **10MB**입니다.
+    - 허용 확장자: jpg, png, webp, pdf (필요에 따라)
+- **✅ 프레임워크 레벨 (Spring Boot):**
+    - `application.yml`(`spring.servlet.multipart.max-file-size`, `max-request-size`)에서 파일 업로드의 물리적 최대 크기가 설정됩니다.
+    - 이 값은 `FileValidator`의 `MAX_FILE_SIZE`보다 **크거나 같아야 합니다** (현재는 11MB으로 설정하여 FileValidator가 먼저 검증하도록 되어있습니다).
 
 <br>
 

@@ -31,6 +31,11 @@ public enum ErrorCode {
     INVALID_PAGE_REQUEST(400, "C006", "페이징 요청 정보가 유효하지 않습니다."), // 추가: Pageable 검증
     REQUEST_PARAM_MISSING(400, "C007", "필수 요청 파라미터가 누락되었습니다."), // <--- 추가됨
 
+    // 추가: File (파일 업로드/처리 관련) - 새로운 카테고리
+    FILE_UPLOAD_FAILED(500, "F001", "파일 업로드 중 알 수 없는 오류가 발생했습니다."), // 파일 업로드 오류
+    FILE_SIZE_LIMIT_EXCEEDED(400, "F002", "요청 파일 크기가 허용된 최대 크기를 초과했습니다."), // FileValidator 관련(파일 크기)
+    UNSUPPORTED_FILE_TYPE(400, "F003", "허용되지 않는 파일 형식입니다."), // FileValidator 관련 (파일 형식)
+
     // Auth & User (인증 및 사용자 관련)
     LOGIN_FAILED(401, "A001", "아이디 또는 비밀번호가 일치하지 않습니다."),
     INVALID_TOKEN(401, "A002", "인증 토큰이 유효하지 않습니다."),
