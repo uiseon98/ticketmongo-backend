@@ -53,7 +53,7 @@ public class AiBatchSummaryService {
 	@Autowired
 	private AiSummaryConditionProperties conditionProperties;
 
-  /**
+	/**
 	 * 🕒 매일 새벽 2시에 AI 배치 요약 처리 실행
 	 *
 	 * @return 배치 처리 결과 DTO
@@ -132,7 +132,7 @@ public class AiBatchSummaryService {
 			// 1단계: 유효한 리뷰들 조회
 			List<Review> reviews = reviewRepository.findValidReviewsForAiSummary(concert.getConcertId());
 
-      // 2단계: 리뷰 존재 여부 검증 (팀 규칙 준수)
+			// 2단계: 리뷰 존재 여부 검증 (팀 규칙 준수)
 			validateReviewsForSummary(reviews, concert.getConcertId());
 
 			// 3단계: AI 요약 생성 (AiSummaryService에서 예외 처리)
