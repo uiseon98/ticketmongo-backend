@@ -144,7 +144,7 @@ public class AiBatchSummaryService {
 			// 5단계: 데이터베이스 저장
 			concertRepository.save(concert);
 
-			log.info("콘서트 AI 요약 업데이트 완료: concertId={}, 리뷰수={}",
+			log.info("콘서트 AI 요약 업데이트 완료: concertId={}, 원본리뷰수={}",
 				concert.getConcertId(), reviews.size());
 
 		} catch (BusinessException e) {
