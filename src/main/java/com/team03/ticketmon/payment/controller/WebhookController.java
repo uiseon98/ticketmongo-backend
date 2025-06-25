@@ -34,25 +34,29 @@ public class WebhookController {
 
 	private final ObjectMapper objectMapper = new ObjectMapper();
 	private final PaymentService paymentService;
-	private final TossPaymentsProperties tossPaymentsProperties; // 💡 [추가] 시크릿 키를 담고 있는 프로퍼티 클래스
+	private final TossPaymentsProperties tossPaymentsProperties;
 
 	/**
 	 * 토스페이먼츠 웹훅 수신 API
-	 * - 서명 검증을 통해 위조된 요청을 차단
+	 * - 서명이 있는 웹훅은 검증하고, 없는 웹훅은 예외 처리합니다.
 	 */
 	@PostMapping("/payment-updates")
-	public ResponseEntity<String> handleTossPaymentWebhook(
-		HttpServletRequest request) { // 💡 [수정] HttpServletRequest를 직접 받음
+	public ResponseEntity<String> handleTossPaymentWebhook(HttpServletRequest request) { // 💡 HttpServletRequest를 직접 받음
 		try {
-			// 1. 서명 검증
+			// 1. 원본 요청 바디를 읽음
 			String requestBody = request.getReader().lines().collect(Collectors.joining(System.lineSeparator()));
-			verifySignature(request, requestBody); // 검증 실패 시 예외 발생
-			log.info("토스페이먼츠 웹훅 서명 검증 성공");
-
-			// 2. 서명 검증 성공 후, 비즈니스 로직 처리
 			JsonNode jsonNode = objectMapper.readTree(requestBody);
 			String eventType = jsonNode.get("eventType").asText();
 
+			// "PAYMENT_STATUS_CHANGED" 이벤트가 아닌 경우에만 서명을 검증합니다.
+			if (!"PAYMENT_STATUS_CHANGED".equals(eventType)) {
+				verifySignature(request, requestBody);
+				log.info("토스페이먼츠 웹훅 서명 검증 성공 (eventType: {})", eventType);
+			} else {
+				log.info("PAYMENT_STATUS_CHANGED 이벤트이므로 서명 검증을 건너뜁니다.");
+			}
+
+			// 3. 서명 검증 성공 또는 예외 처리 후, 비즈니스 로직 실행
 			if ("PAYMENT_STATUS_CHANGED".equals(eventType)) {
 				JsonNode data = jsonNode.get("data");
 				String orderId = data.get("orderId").asText();
@@ -66,6 +70,7 @@ public class WebhookController {
 			return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
 		} catch (IOException e) {
 			log.error("웹훅 페이로드 파싱 실패: {}", e.getMessage(), e);
+			// 파싱 실패 시에도 토스 서버에는 2xx 응답을 보내야 재전송을 막을 수 있습니다.
 			return ResponseEntity.ok("Webhook payload parsing error, but acknowledged.");
 		} catch (Exception e) {
 			log.error("웹훅 처리 중 알 수 없는 오류 발생: {}", e.getMessage(), e);
