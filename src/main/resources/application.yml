@@ -20,6 +20,11 @@ spring:
     time-zone: Asia/Seoul  # [기본 설정] 한국 사용자 대상이므로 KST 기준으로 기본 직렬화 설정함
     # 추후 글로벌 확장 시 UTC 또는 타임존 동적 처리로 대체 가능
 
+  servlet:
+    multipart:
+      max-file-size: 11MB  # 단일 파일 최대 크기
+      max-request-size: 11MB # 요청 전체의 최대 크기 (일반적으로 동일하게 설정)
+
 server:
   port: ${SERVER_PORT:8080}  # .env에서 설정한 포트 사용, 기본은 8080
 
