@@ -159,13 +159,14 @@ public class SecurityConfig {
                                 // 위에서 정의되지 않은 나머지 모든 요청은 인증(로그인)만 되면 접근 허용
                                 .anyRequest().authenticated()
 
-                                // <추후 추가될 수 있는 인가 설정>
-                                // .requestMatchers("/api/some-specific-path").hasAuthority("SOME_PERMISSION") // 특정 권한 필요
-                                // .requestMatchers("/api/public/**").permitAll() // 추가적인 공개 API 경로
+                        // <추후 추가될 수 있는 인가 설정>
+                        // .requestMatchers("/api/some-specific-path").hasAuthority("SOME_PERMISSION") // 특정 권한 필요
+                        // .requestMatchers("/api/public/**").permitAll() // 추가적인 공개 API 경로
 
-                                // 전체 인증 없이 API 테스트 가능(초기 개발 단계 / 추후 JWT 완성 시 주석 처리)
-                                // .anyRequest().permitAll()  // CORS 문제 임시 조치 -> 추후에 문제 해결 시 .anyRequest().authenticated() 활성화 예정
+                        // 전체 인증 없이 API 테스트 가능(초기 개발 단계 / 추후 JWT 완성 시 주석 처리)
+                        // .anyRequest().permitAll()  // CORS 문제 임시 조치 -> 추후에 문제 해결 시 .anyRequest().authenticated() 활성화 예정
                 )
+
                 // OAuth2 Login
                 .oauth2Login(oauth -> oauth
                         .userInfoEndpoint(user -> user.userService(customOAuth2UserService()))

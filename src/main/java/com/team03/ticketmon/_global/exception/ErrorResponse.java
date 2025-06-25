@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
  * ✅ 사용 예시:<br>
  * - ErrorCode 기반: ErrorResponse.of(ErrorCode.LOGIN_FAILED)<br>
  * - 커스텀 메시지: ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR, "서버에 문제가 발생했습니다.")
+ * - 커스텀 메시지 + ErrorCode: ErrorResponse.of(ErrorCode.INVALID_INPUT, "추가 상세 메시지")
  */
 @Getter
 @JsonInclude(JsonInclude.Include.NON_NULL) // null이 아닌 필드만 JSON에 포함
@@ -59,6 +60,20 @@ public class ErrorResponse {
     }
 
     /**
+     * ✅ 추가/수정: ErrorCode와 커스텀 메시지를 함께 받는 생성자
+     * <p>
+     * ErrorCode의 기본 메시지를 오버라이드할 때 사용합니다.
+     * </p>
+     * @param errorCode ErrorCode enum 값
+     * @param customMessage 구체적인 상황에 맞는 커스텀 메시지
+     */
+    private ErrorResponse(ErrorCode errorCode, String customMessage) {
+        this.status = errorCode.getStatus();
+        this.code = errorCode.getCode();
+        this.message = customMessage != null ? customMessage : errorCode.getMessage();
+    }
+
+    /**
      * HttpStatus와 직접 입력한 메시지를 기반으로 생성<br>
      * - 예상하지 못한 일반 예외 처리에 사용(커스텀)
      *
@@ -81,6 +96,19 @@ public class ErrorResponse {
      */
     public static ErrorResponse of(ErrorCode errorCode) {
         return new ErrorResponse(errorCode);
+    }
+
+    /**
+     * ✅ 추가: 정적 팩토리 메서드 (ErrorCode + 커스텀 메시지 기반)
+     * <p>
+     * 사전 정의된 ErrorCode를 사용하지만, 메시지는 특정 상황에 맞게 재정의할 때 사용합니다.
+     * </p>
+     * @param errorCode 사전 정의된 ErrorCode
+     * @param customMessage 사용자에게 전달할 커스텀 메시지
+     * @return ErrorResponse 인스턴스
+     */
+    public static ErrorResponse of(ErrorCode errorCode, String customMessage) {
+        return new ErrorResponse(errorCode, customMessage);
     }
 
     /**

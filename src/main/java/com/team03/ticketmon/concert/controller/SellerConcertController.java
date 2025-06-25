@@ -27,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Seller Concert Controller
@@ -39,6 +40,9 @@ import java.util.List;
 @Validated
 public class SellerConcertController {
 
+	private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+		"createdAt", "title", "concertDate", "artist", "status"
+	);
 	private final SellerConcertService sellerConcertService;
 
 	@Operation(
@@ -143,6 +147,12 @@ public class SellerConcertController {
 		)
 		@RequestParam(defaultValue = "desc") String sortDir
 	) {
+
+		// sortBy 필드 검증
+		if (!ALLOWED_SORT_FIELDS.contains(sortBy)) {
+			throw new IllegalArgumentException("허용되지 않은 정렬 필드입니다: " + sortBy);
+		}
+
 		// 안전한 Sort 객체 생성
 		Sort.Direction direction = "asc".equalsIgnoreCase(sortDir)
 			? Sort.Direction.ASC
