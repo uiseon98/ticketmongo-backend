@@ -45,9 +45,7 @@ public class SellerApplicationService {
 
     private final UserRepository userRepository;
     private final SellerApplicationRepository sellerApplicationRepository;
-    private final FileValidator fileValidator;
     private final StorageUploader storageUploader;
-    private final UploadPathUtil uploadPathUtil;
     private final SupabaseProperties supabaseProperties;
 
     // private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository; // 추후(3.1 단계)에서 추가될 의존성 (주석 해제 필요)
@@ -80,7 +78,7 @@ public class SellerApplicationService {
         }
 
         // 3. 제출 서류 파일 유효성 검사 (FileValidator 사용)
-        fileValidator.validate(document);
+        FileValidator.validate(document); // 정적 호출로 변경
 
         // 4. Supabase에 문서 업로드 (UploadPathUtil, StorageUploader 사용)
         String fileUuid = java.util.UUID.randomUUID().toString(); // 파일명 중복 방지를 위한 UUID
@@ -88,7 +86,7 @@ public class SellerApplicationService {
         if (document.getOriginalFilename() != null && document.getOriginalFilename().contains(".")) {
             fileExtension = document.getOriginalFilename().substring(document.getOriginalFilename().lastIndexOf('.') + 1);
         }   // 파일명에 확장자가 없거나 null인 경우 방지
-        String filePath = uploadPathUtil.getSellerDocsPath(fileUuid, fileExtension);
+        String filePath = UploadPathUtil.getSellerDocsPath(fileUuid, fileExtension); // 정적 호출로 변경
         String uploadedFileUrl = storageUploader.uploadFile(document, supabaseProperties.getDocsBucket(), filePath);    // Supabase Storage에 파일 업로드 (동적 버킷명 사용)
 
         // 5. SellerApplication 엔티티 생성 및 저장
