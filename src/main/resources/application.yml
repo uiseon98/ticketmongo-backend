@@ -33,6 +33,17 @@ toss:
     confirm-url: ${toss.api.url}confirm # 결제 승인 API 엔드포인트 (${toss.api.url} 재사용)
 
 ai:
+  together:
+    api-key: ${AI_API_KEY}
+    api-url: "https://api.together.xyz/v1/chat/completions"
+    model: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"
+    timeout-seconds: 30
+    max-retries: 3
+    max-tokens-per-request: 100000
+    max-reviews-per-request: 50
+    chars-per-token: 2.5
+    token-safety-margin: 0.2
+
   summary:
     condition:
       min-review-count: 10
