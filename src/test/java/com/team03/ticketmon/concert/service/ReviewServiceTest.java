@@ -69,7 +69,7 @@ class ReviewServiceTest {
 			Pageable pageable = PageRequest.of(0, 10);
 			Page<Review> reviewPage = new PageImpl<>(Arrays.asList(testReview), pageable, 1);
 
-			given(reviewRepository.findByConcertConcertIdOrderByCreatedAtDesc(concertId, pageable))
+			given(reviewRepository.findByConcertConcertId(concertId, pageable))
 				.willReturn(reviewPage);
 
 			// when
@@ -80,7 +80,7 @@ class ReviewServiceTest {
 			assertThat(result.getContent()).hasSize(1);
 			assertThat(result.getContent().get(0).getTitle()).isEqualTo("훌륭한 공연이었습니다");
 			assertThat(result.getContent().get(0).getRating()).isEqualTo(5);
-			verify(reviewRepository).findByConcertConcertIdOrderByCreatedAtDesc(concertId, pageable);
+			verify(reviewRepository).findByConcertConcertId(concertId, pageable);
 		}
 
 		@Test
@@ -91,7 +91,7 @@ class ReviewServiceTest {
 			Pageable pageable = PageRequest.of(0, 10);
 			Page<Review> emptyPage = new PageImpl<>(Collections.emptyList(), pageable, 0);
 
-			given(reviewRepository.findByConcertConcertIdOrderByCreatedAtDesc(concertId, pageable))
+			given(reviewRepository.findByConcertConcertId(concertId, pageable))
 				.willReturn(emptyPage);
 
 			// when
@@ -101,7 +101,7 @@ class ReviewServiceTest {
 			assertThat(result).isNotNull();
 			assertThat(result.getContent()).isEmpty();
 			assertThat(result.getTotalElements()).isEqualTo(0);
-			verify(reviewRepository).findByConcertConcertIdOrderByCreatedAtDesc(concertId, pageable);
+			verify(reviewRepository).findByConcertConcertId(concertId, pageable);
 		}
 	}
 

@@ -14,6 +14,11 @@ public class UserEntityServiceImpl implements UserEntityService {
     private final UserRepository userRepository;
 
     @Override
+    public Optional<UserEntity> findUserEntityByUserId(Long userId) {
+        return userRepository.findById(userId);
+    }
+
+    @Override
     public Optional<UserEntity> findUserEntityByEmail(String email) {
         return userRepository.findByEmail(email);
     }
@@ -21,5 +26,10 @@ public class UserEntityServiceImpl implements UserEntityService {
     @Override
     public boolean existsByEmail(String email) {
         return userRepository.existsByEmail(email);
+    }
+
+    @Override
+    public UserEntity save(UserEntity user) {
+        return userRepository.save(user);
     }
 }

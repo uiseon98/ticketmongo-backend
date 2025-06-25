@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /*
@@ -94,5 +95,43 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		"c.bookingEndDate >= CURRENT_TIMESTAMP " +
 		"ORDER BY c.concertDate ASC")
 	List<Concert> findBookableConcerts();
+
+	/**
+	 * 리뷰 변동성 기반 업데이트 대상 조회
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+		"(c.aiSummary IS NULL OR c.aiSummary = '') AND " +
+		"(SELECT COUNT(r) FROM Review r WHERE r.concert = c AND r.description IS NOT NULL AND r.description != '') >= :minReviewCount")
+	List<Concert> findConcertsNeedingInitialAiSummary(@Param("minReviewCount") Integer minReviewCount);
+
+	@Query("SELECT c FROM Concert c WHERE " +
+		"c.aiSummary IS NOT NULL AND c.aiSummary != '' AND " +
+		"c.lastReviewModifiedAt > c.aiSummaryGeneratedAt AND " +
+		"(SELECT COUNT(r) FROM Review r WHERE r.concert = c AND r.description IS NOT NULL AND r.description != '') >= :minReviewCount")
+	List<Concert> findConcertsNeedingAiSummaryUpdate(@Param("minReviewCount") Integer minReviewCount);
+
+	@Query("SELECT c FROM Concert c WHERE " +
+		"c.aiSummary IS NOT NULL AND c.aiSummary != '' AND " +
+		"c.aiSummaryGeneratedAt < :beforeTime AND " +
+		"(SELECT COUNT(r) FROM Review r WHERE r.concert = c AND r.description IS NOT NULL AND r.description != '') >= :minReviewCount")
+	List<Concert> findConcertsWithOutdatedSummary(@Param("beforeTime") LocalDateTime beforeTime,
+		@Param("minReviewCount") Integer minReviewCount);
+
+	/**
+	 * 리뷰 수 변화가 큰 콘서트들
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+		"c.aiSummary IS NOT NULL AND " +
+		"ABS((SELECT COUNT(r) FROM Review r WHERE r.concert = c AND r.description IS NOT NULL AND r.description != '') - c.aiSummaryReviewCount) >= :significantChange")
+	List<Concert> findConcertsWithSignificantReviewCountChange(@Param("significantChange") Integer significantChange);
+
+	/**
+	 * 사전 필터링: 최소 리뷰 수 이상인 콘서트들 조회
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+		"(SELECT COUNT(r) FROM Review r WHERE r.concert = c " +
+		"AND r.description IS NOT NULL AND TRIM(r.description) != '' " +
+		"AND LENGTH(TRIM(r.description)) >= 10) >= :minReviewCount")
+	List<Concert> findConcertsWithMinimumReviews(@Param("minReviewCount") Integer minReviewCount);
 }
 
