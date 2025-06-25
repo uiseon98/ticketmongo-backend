@@ -40,4 +40,20 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
         ORDER BY r.createdAt DESC
         """)
 		List<Review> findValidReviewsForAiSummary(@Param("concertId") Long concertId);
+
+	/**
+	 * 제한된 수의 최신 유효 리뷰 조회 (토큰 제한 대응)
+	 */
+	@Query("""
+    SELECT r FROM Review r 
+    WHERE r.concert.id = :concertId 
+    AND r.description IS NOT NULL 
+    AND TRIM(r.description) != '' 
+    AND LENGTH(TRIM(r.description)) >= 10
+    ORDER BY r.createdAt DESC
+    LIMIT :maxCount
+    """)
+	List<Review> findLatestValidReviewsForAiSummary(
+		@Param("concertId") Long concertId,
+		@Param("maxCount") Integer maxCount);
 }
