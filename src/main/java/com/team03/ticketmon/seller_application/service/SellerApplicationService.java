@@ -33,6 +33,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+// 콘서트 도메인 의존성 추가 (판매자 권한 철회 조건 강화용)
+import com.team03.ticketmon.concert.repository.SellerConcertRepository; // 판매자의 콘서트 정보를 조회하기 위한 Repository
+import com.team03.ticketmon.concert.domain.enums.ConcertStatus; // 콘서트 상태 Enum (ON_SALE, SCHEDULED 등)
+
+
 // SellerApplicationStatus Enum 값들을 static import로 사용 (내부 ENUM 사용 / 선택 사항)
 import static com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus.*;
 
@@ -47,6 +52,7 @@ public class SellerApplicationService {
     private final SellerApplicationRepository sellerApplicationRepository;
     private final StorageUploader storageUploader;
     private final SupabaseProperties supabaseProperties;
+    private final SellerConcertRepository sellerConcertRepository; // 콘서트 정보 조회를 위한 레포지토리 주입
 
     // private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository; // 추후(3.1 단계)에서 추가될 의존성 (주석 해제 필요)
 
