@@ -1,6 +1,17 @@
 app:
   max-active-users: 5 # 예매 페이지에 동시 진입 가능한 최대 사용자 수
   access-key-ttl-minutes: 1 # 예매 페이지 접근 키의 유효시간 (단위: 분)
+    # ✅ 새로 추가: 스케줄러 관련 설정 - [좌석 관리 및 예매 모듈]
+  scheduler:
+    seat-cache-warmup:
+      enabled: true          # 좌석 캐시 Warm-up 스케줄러 활성화
+      interval-minutes: 5    # 실행 주기 (분)
+      warmup-minutes-before: 10  # 예매 시작 몇 분 전에 캐시 초기화할지
+      lock-wait-seconds: 30  # 분산 락 획득 대기 시간
+      lock-lease-seconds: 300  # 분산 락 유지 시간
+    waiting-queue:
+      enabled: true          # 대기열 스케줄러 활성화 (기존)
+      interval-seconds: 10   # 실행 주기 (초)
 
 spring:
   application:
@@ -24,6 +35,19 @@ spring:
     multipart:
       max-file-size: 11MB  # 단일 파일 최대 크기
       max-request-size: 11MB # 요청 전체의 최대 크기 (일반적으로 동일하게 설정)
+
+    # ✅ 새로 추가: 스케줄러 설정 - [좌석 관리 및 예매 모듈]
+  task:
+    scheduling:
+      enabled: true  # 스케줄러 활성화 (기본값: true)
+      pool:
+        size: 10     # 스케줄러 스레드 풀 크기
+      thread-name-prefix: "ticket-scheduler-"  # 스레드 이름 접두사
+    execution:
+      pool:
+        core-size: 8      # 비동기 작업 스레드 풀 코어 크기
+        max-size: 20      # 비동기 작업 스레드 풀 최대 크기
+        queue-capacity: 500  # 대기 큐 크기
 
 server:
   port: ${SERVER_PORT:8080}  # .env에서 설정한 포트 사용, 기본은 8080
