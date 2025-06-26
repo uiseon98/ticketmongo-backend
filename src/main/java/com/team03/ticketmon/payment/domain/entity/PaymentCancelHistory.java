@@ -62,4 +62,6 @@ public class PaymentCancelHistory {
 		this.cancelReason = cancelReason;
 		this.canceledAt = canceledAt;
 	}
+
 }
+

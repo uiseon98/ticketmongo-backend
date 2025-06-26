@@ -150,6 +150,12 @@ public class SecurityConfig {
                                 // 실제 판매자 기능 (콘서트 CRUD) - SELLER 역할만 접근 허용
                                 .requestMatchers("/api/seller/concerts/**").hasRole("SELLER")
 
+								//결제 및 예매 API 경로 허용(로그인된 사용자일 시 )
+								.requestMatchers("/api/v1/payments/history").authenticated() // 결제 내역 조회
+								.requestMatchers(HttpMethod.POST, "/api/bookings").authenticated() // 예매 생성 및 결제 준비
+								.requestMatchers(HttpMethod.POST, "/api/bookings/*/cancel").authenticated() // 예매 취소
+
+
                                 // 판매자 권한 신청 관련 API 경로 허용 (로그인된 사용자라면 누구나 접근 가능해야 함) - .anyRequest().authenticated()에 포함됨(주석처리)
                                 // .requestMatchers("/api/users/me/seller-status").authenticated() // 판매자 권한 UI 접근 시 로그인 사용자의 권한 상태 조회 (API-03-05)
                                 // .requestMatchers("/api/users/me/seller-requests").authenticated() // 판매자 권한 요청 등록 (API-03-06)
