@@ -31,11 +31,16 @@ import lombok.NoArgsConstructor;
 public class Payment {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "id") // DB 컬럼 이름에 맞춤
 	private Long paymentId;
 
 	@OneToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "booking_id", nullable = false, unique = true)
 	private Booking booking;
+
+	// 💡 [수정] user_id 컬럼에 직접 매핑될 필드 추가
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
 
 	@Column(nullable = false, unique = true, length = 64)
 	private String orderId;
@@ -72,20 +77,15 @@ public class Payment {
 	}
 
 	@Builder
-	public Payment(Booking booking, String orderId, BigDecimal amount) {
+	public Payment(Booking booking, Long userId, String orderId, BigDecimal amount) {
 		this.booking = booking;
+		this.userId = userId;
 		this.orderId = orderId;
 		this.amount = amount;
 		this.status = PaymentStatus.PENDING;
 	}
 
-	public void complete(String paymentKey) {
-		this.paymentKey = paymentKey;
-		this.status = PaymentStatus.DONE;
-		this.approvedAt = LocalDateTime.now();
-	}
-
-	public void complete(String paymentKey, LocalDateTime approvedAt) { // 💡 [추가/수정]
+	public void complete(String paymentKey, LocalDateTime approvedAt) {
 		this.paymentKey = paymentKey;
 		this.status = PaymentStatus.DONE;
 		this.approvedAt = approvedAt;
