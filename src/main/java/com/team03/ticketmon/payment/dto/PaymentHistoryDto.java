@@ -27,4 +27,5 @@ public class PaymentHistoryDto {
 		this.approvedAt = payment.getApprovedAt();
 		this.paymentMethod = payment.getPaymentMethod();
 	}
+
 }
