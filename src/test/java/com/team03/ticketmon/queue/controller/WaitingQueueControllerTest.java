@@ -1,7 +1,6 @@
 package com.team03.ticketmon.queue.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.team03.ticketmon._global.config.SecurityConfig;
 import com.team03.ticketmon.auth.jwt.JwtTokenProvider;
 import com.team03.ticketmon.auth.service.RefreshTokenService;
 import com.team03.ticketmon.auth.service.ReissueService;
