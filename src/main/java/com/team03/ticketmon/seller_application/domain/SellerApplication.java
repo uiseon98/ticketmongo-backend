@@ -71,4 +71,9 @@ public class SellerApplication {
             status = SellerApplicationStatus.SUBMITTED; // 기본 상태는 SUBMITTED
         }
     }
+
+    @PreUpdate // 엔티티가 업데이트되기 전에 실행될 콜백 메서드
+    public void preUpdate() {
+        updatedAt = LocalDateTime.now(); // 업데이트 시점 자동 기록
+    }
 }

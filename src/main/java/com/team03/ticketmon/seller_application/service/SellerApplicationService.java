@@ -104,7 +104,7 @@ public class SellerApplicationService {
                 .representativePhone(request.getRepresentativePhone())
                 .uploadedFileUrl(uploadedFileUrl)
                 .status(SUBMITTED) // 초기 상태는 SUBMITTED
-                // .createdAt(LocalDateTime.now()) // @PrePersist에서 자동 설정됩니다(명시적으로 설정도 가능)
+                // .createdAt(LocalDateTime.now()) // @PrePersist에서 자동 설정(명시적으로 설정도 가능)
                 .build();
         sellerApplicationRepository.save(sellerApplication);
 
@@ -170,9 +170,10 @@ public class SellerApplicationService {
                     canReapply = true; // 반려, 자발적 철회, 관리자 회수 상태는 재신청 가능
                     break;
                 case APPROVED:
-                    canWithdraw = true; // 승인 상태는 철회 가능 (추가 조건 확인 필요)
-                    // TODO: canWithdraw 조건 강화: 진행 중이거나 예정된 콘서트가 없는지 확인 로직 추가 (콘서트 도메인 의존성)
-                    // 예시: if (hasActiveConcerts(userId)) { canWithdraw = false; }
+                    // canWithdraw = true; // 승인 상태는 철회 가능 (추가 조건 확인 필요)    // 예시: if (hasActiveConcerts(userId)) { canWithdraw = false; }
+
+                    // canWithdraw 조건 강화: 진행 중이거나 예정된 콘서트가 없는지 확인 로직 추가 (콘서트 도메인 의존성)
+                    canWithdraw = !hasActiveConcertsForSeller(userId); // 활성 콘서트 여부로 철회 가능 여부 결정
                     break;
             }
         }
@@ -213,24 +214,24 @@ public class SellerApplicationService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "판매자 권한이 승인된 상태가 아니므로 철회할 수 없습니다.");
         }
 
-        // TODO: canWithdraw 조건 강화 (진행 중이거나 예정된 콘서트가 없는지 확인)
+        // 2. canWithdraw 조건 강화 (진행 중이거나 예정된 콘서트가 없는지 확인)
         // 만약 콘서트가 있다면 철회 불가 예외 발생
-        // if (hasActiveConcerts(userId)) {
-        //     throw new BusinessException(ErrorCode.INVALID_INPUT, "진행 중이거나 예정된 콘서트가 있어 판매자 권한을 철회할 수 없습니다.");
-        // }
+        if (hasActiveConcertsForSeller(userId)) { // 활성 콘서트 여부 확인
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "진행 중이거나 예정된 콘서트가 있어 판매자 권한을 철회할 수 없습니다."); // 오류 코드 및 메시지 구체화 필요시 수정 예정
+        }
 
-        // 2. UserEntity의 역할(Role) 및 승인 상태(ApprovalStatus) 업데이트
+        // 3. UserEntity의 역할(Role) 및 승인 상태(ApprovalStatus) 업데이트
         user.setRole(Role.USER); // 일반 유저로 변경
         user.setApprovalStatus(ApprovalStatus.WITHDRAWN); // 상태를 WITHDRAWN으로 변경
         userRepository.save(user);
 
-        // 3. 해당 유저의 가장 최근 APPROVED 상태의 SellerApplication 상태 업데이트 (WITHDRAWN)
+        // 4. 해당 유저의 가장 최근 APPROVED 상태의 SellerApplication 상태 업데이트 (WITHDRAWN)
         // findTopByUserIdAndStatusInOrderByCreatedAtDesc 등으로 APPROVED 상태의 신청서를 찾아 업데이트하는 로직 필요
         sellerApplicationRepository.findTopByUserIdAndStatusInOrderByCreatedAtDesc(
                         userId, List.of(ACCEPTED)) // APPROVED 대신 ACCEPTED 사용
                 .ifPresent(app -> {
                     app.setStatus(WITHDRAWN);
-                    app.setUpdatedAt(LocalDateTime.now());
+                    // app.setUpdatedAt(LocalDateTime.now());   // @PreUpdate로 자동 갱신되도록 수정 -> 중복 코드 제거
                     sellerApplicationRepository.save(app);
 
                     // 4. SellerApprovalHistory에 WITHDRAW 로그 기록 (추후(3.1 단계 구현 후) 활성화)
