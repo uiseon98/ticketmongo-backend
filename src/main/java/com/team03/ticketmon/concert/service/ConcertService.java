@@ -221,6 +221,20 @@ public class ConcertService {
 			.orElse("AI 요약 정보가 아직 생성되지 않았습니다.");
 	}
 
+	/**
+	 * 🛠️ 관리자용: 콘서트 엔티티 직접 조회 (내부 처리용)
+	 *
+	 * AI 요약 생성 등 엔티티가 필요한 관리 작업에서 사용
+	 * 일반 사용자용 getConcertById()와 구분하여 명명
+	 *
+	 * @param id 콘서트 ID
+	 * @return Concert 엔티티 (Optional)
+	 */
+	public Optional<Concert> getConcertEntityById(Long id) {
+		validateConcertId(id);
+		return concertRepository.findById(id);
+	}
+
 	// ========== Private Helper Methods ==========
 
 	/**
