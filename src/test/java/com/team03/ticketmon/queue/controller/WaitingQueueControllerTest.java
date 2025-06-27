@@ -58,12 +58,12 @@ class WaitingQueueControllerTest {
 
         // WHEN: 실제 HTTP 요청을 시뮬레이션
         mockMvc.perform(post("/api/queue/enter")
-                        .param("concertId", String.valueOf(concertId)))
-                .andDo(print())
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId").value(expectedUserId))
-                .andExpect(jsonPath("$.rank").value(expectedRank))
-                .andExpect(jsonPath("$.status").value("WAITING"));
+                .param("concertId", String.valueOf(concertId)))
+            .andDo(print())
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.userId").value(expectedUserId))
+            .andExpect(jsonPath("$.rank").value(expectedRank))
+            .andExpect(jsonPath("$.status").value("WAITING"));
     }
 
     @Test
@@ -73,9 +73,9 @@ class WaitingQueueControllerTest {
 
         // WHEN & THEN: HTTP 요청 시 401 에러가 발생하는지 검증
         mockMvc.perform(post("/api/queue/enter")
-                        .param("concertId", "1"))
-                .andDo(print())
-                .andExpect(status().isUnauthorized()); // SecurityConfig에 의해 401 응답
+                .param("concertId", "1"))
+            .andDo(print())
+            .andExpect(status().isUnauthorized()); // SecurityConfig에 의해 401 응답
     }
 
     @Test
@@ -86,7 +86,7 @@ class WaitingQueueControllerTest {
 
         // WHEN & THEN: HTTP 요청 시 400 에러가 발생하는지 검증
         mockMvc.perform(post("/api/queue/enter"))
-                .andDo(print())
-                .andExpect(status().isBadRequest());
+            .andDo(print())
+            .andExpect(status().isBadRequest());
     }
 }
