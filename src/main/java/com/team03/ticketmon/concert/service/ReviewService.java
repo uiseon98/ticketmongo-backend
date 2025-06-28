@@ -13,6 +13,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 /*
@@ -52,6 +54,10 @@ public class ReviewService {
 		review.setDescription(reviewDTO.getDescription());
 		review.setRating(reviewDTO.getRating());
 
+		// 새 리뷰 작성 시에도 업데이트
+		concert.setLastReviewModifiedAt(LocalDateTime.now());
+		concertRepository.save(concert);
+
 		review = reviewRepository.save(review);
 		return convertToDTO(review);
 	}
@@ -64,6 +70,12 @@ public class ReviewService {
 			.map(review -> {
 				review.setTitle(reviewDTO.getTitle());
 				review.setDescription(reviewDTO.getDescription());
+
+				// Concert의 last_review_modified_at 업데이트 추가
+				Concert concert = review.getConcert();
+				concert.setLastReviewModifiedAt(LocalDateTime.now());
+				concertRepository.save(concert);
+
 				return convertToDTO(reviewRepository.save(review));
 			});
 	}
@@ -72,9 +84,16 @@ public class ReviewService {
 	 * 후기 삭제
 	 */
 	public boolean deleteReview(Long reviewId, Long concertId) {
-		Optional<Review> review = reviewRepository.findByIdAndConcertConcertId(reviewId, concertId);
-		if (review.isPresent()) {
-			reviewRepository.delete(review.get());
+		Optional<Review> reviewOpt = reviewRepository.findByIdAndConcertConcertId(reviewId, concertId);
+		if (reviewOpt.isPresent()) {
+			Review review = reviewOpt.get();
+
+			// 리뷰 삭제 시에도 업데이트
+			Concert concert = review.getConcert();
+			concert.setLastReviewModifiedAt(LocalDateTime.now());
+			concertRepository.save(concert);
+
+			reviewRepository.delete(review);
 			return true;
 		}
 		return false;

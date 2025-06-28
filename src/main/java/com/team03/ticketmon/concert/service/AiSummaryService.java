@@ -31,8 +31,8 @@ import java.util.List;
 
 		// 상수 정의 - 매직 넘버 방지
 		private static final int MAX_REVIEWS_FOR_SUMMARY = 100;
-		private static final int MIN_SUMMARY_LENGTH = 50;
-		private static final int MAX_SUMMARY_LENGTH = 3000;
+		private static final int MIN_SUMMARY_LENGTH = 30;
+		private static final int MAX_SUMMARY_LENGTH = 1500;
 
 		/**
 		 * 🎯 리뷰 목록을 받아 AI 요약을 생성하는 메인 메서드
