@@ -419,4 +419,90 @@ public class ReviewController {
 			? ResponseEntity.ok(SuccessResponse.of("후기가 삭제되었습니다.", null))
 			: ResponseEntity.notFound().build();
 	}
+	@Operation(
+		summary = "콘서트 후기 상세 조회",
+		description = """
+		특정 콘서트의 특정 후기를 상세 조회합니다.
+		후기 ID와 콘서트 ID가 모두 일치해야 조회됩니다.
+		"""
+	)
+	@ApiResponses({
+		@ApiResponse(
+			responseCode = "200",
+			description = "후기 상세 조회 성공",
+			content = @Content(
+				mediaType = "application/json",
+				examples = @ExampleObject(
+					name = "상세 조회 성공 응답",
+					value = """
+					{
+						"success": true,
+						"message": "성공",
+						"data": {
+							"id": 1,
+							"concertId": 100,
+							"userId": 200,
+							"userNickname": "콘서트러버",
+							"title": "정말 감동적인 콘서트였어요!",
+							"description": "아이유의 라이브 실력이 정말 대단했습니다. 2시간 30분 동안 한 순간도 지루하지 않았어요. 특히 '좋은 날' 라이브는 정말 소름 돋았습니다! 무대 연출도 화려하고, 관객과의 소통도 자연스러웠어요. 다음 콘서트도 꼭 가고 싶습니다.",
+							"rating": 5,
+							"createdAt": "2025-08-16T10:30:00",
+							"updatedAt": "2025-08-16T10:30:00"
+						}
+					}
+					"""
+				)
+			)
+		),
+		@ApiResponse(
+			responseCode = "400",
+			description = "잘못된 ID 값",
+			content = @Content(
+				examples = @ExampleObject(
+					value = """
+					{
+						"success": false,
+						"message": "콘서트 ID는 1 이상의 양수여야 합니다",
+						"data": null
+					}
+					"""
+				)
+			)
+		),
+		@ApiResponse(
+			responseCode = "404",
+			description = "후기를 찾을 수 없음",
+			content = @Content(
+				examples = @ExampleObject(
+					value = """
+					{
+						"success": false,
+						"message": "후기를 찾을 수 없습니다",
+						"data": null
+					}
+					"""
+				)
+			)
+		)
+	})
+	@GetMapping("/{concertId}/reviews/{reviewId}")
+	public ResponseEntity<SuccessResponse<ReviewDTO>> getReviewDetail(
+		@Parameter(
+			description = "**콘서트 ID** (1 이상의 양수)",
+			example = "100",
+			schema = @Schema(minimum = "1")
+		)
+		@PathVariable @Min(1) Long concertId,
+
+		@Parameter(
+			description = "**후기 ID** (1 이상의 양수)",
+			example = "1",
+			schema = @Schema(minimum = "1")
+		)
+		@PathVariable @Min(1) Long reviewId) {
+
+		return reviewService.getReviewDetail(concertId, reviewId)
+			.map(review -> ResponseEntity.ok(SuccessResponse.of(review)))
+			.orElse(ResponseEntity.notFound().build());
+	}
 }
