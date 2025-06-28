@@ -133,5 +133,50 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		"AND r.description IS NOT NULL AND TRIM(r.description) != '' " +
 		"AND LENGTH(TRIM(r.description)) >= 10) >= :minReviewCount")
 	List<Concert> findConcertsWithMinimumReviews(@Param("minReviewCount") Integer minReviewCount);
+
+	/**
+	 * ✅ [좌석 관리 및 예매 모듈] 파트에 필요한 메서드 추가
+	 */
+
+	/**
+	 * 예매 시작이 임박한 콘서트들 조회 (캐시 Warm-up용)
+	 * 지정된 시간 범위 내에 예매가 시작되는 SCHEDULED 상태의 콘서트들을 조회합니다.
+	 *
+	 * @param startTime 조회 시작 시간 (현재 시간)
+	 * @param endTime 조회 종료 시간 (현재 시간 + 10분)
+	 * @return 예매 시작이 임박한 콘서트 목록
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+			"c.status = 'SCHEDULED' AND " +
+			"c.bookingStartDate BETWEEN :startTime AND :endTime " +
+			"ORDER BY c.bookingStartDate ASC")
+	List<Concert> findUpcomingBookingStarts(@Param("startTime") LocalDateTime startTime,
+											@Param("endTime") LocalDateTime endTime);
+
+	/**
+	 * 예매 시작 시간 기준으로 특정 시간 이후에 시작되는 콘서트들 조회
+	 *
+	 * @param afterTime 기준 시간
+	 * @return 기준 시간 이후에 예매가 시작되는 콘서트 목록
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+			"c.status = 'SCHEDULED' AND " +
+			"c.bookingStartDate > :afterTime " +
+			"ORDER BY c.bookingStartDate ASC")
+	List<Concert> findConcertsBookingStartsAfter(@Param("afterTime") LocalDateTime afterTime);
+
+	/**
+	 * 오늘 예매가 시작되는 콘서트들 조회
+	 *
+	 * @param todayStart 오늘 00:00:00
+	 * @param todayEnd 오늘 23:59:59
+	 * @return 오늘 예매가 시작되는 콘서트 목록
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+			"c.status = 'SCHEDULED' AND " +
+			"c.bookingStartDate BETWEEN :todayStart AND :todayEnd " +
+			"ORDER BY c.bookingStartDate ASC")
+	List<Concert> findTodayBookingStarts(@Param("todayStart") LocalDateTime todayStart,
+										 @Param("todayEnd") LocalDateTime todayEnd);
 }
 

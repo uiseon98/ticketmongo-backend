@@ -102,7 +102,10 @@ public enum ErrorCode {
     // AI Service (AI 서비스 관련)
     AI_SERVICE_UNAVAILABLE(503, "AI001", "AI 서비스가 일시적으로 사용할 수 없습니다."),
     AI_RESPONSE_INVALID(502, "AI002", "AI 서비스 응답 형식이 올바르지 않습니다."),
-    AI_REQUEST_INVALID(400, "AI003", "AI 서비스 요청이 올바르지 않습니다.");
+    AI_REQUEST_INVALID(400, "AI003", "AI 서비스 요청이 올바르지 않습니다."),
+    AI_SUMMARY_CONDITION_NOT_MET(400, "AI004", "AI 요약 생성 조건을 만족하지 않습니다."),
+    AI_INSUFFICIENT_REVIEWS(400, "AI005", "AI 요약 생성에 필요한 최소 리뷰 수가 부족합니다."),
+    AI_SUMMARY_GENERATION_FAILED(500, "AI006", "AI 요약 생성 중 오류가 발생했습니다.");
 
     /**
      * HTTP 상태 코드 (예: 400, 404, 500 등)
