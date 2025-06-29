@@ -25,8 +25,9 @@ ARG GH_PACKAGES_TOKEN
 ENV GH_PACKAGES_USER=$GH_PACKAGES_USER
 ENV GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN
 
-RUN echo "🔎 GH_PACKAGES_USER=$GH_PACKAGES_USER" && \
-    echo "🔑 GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN"
+# PAT 값을 로그에 그대로 출력하면 토큰 유출 위험 - 주석 처리
+#RUN echo "🔎 GH_PACKAGES_USER=$GH_PACKAGES_USER" && \
+#    echo "🔑 GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN"
 
 # Spring Boot 애플리케이션의 실행 가능한 JAR 파일을 빌드
 # '--no-daemon' 옵션은 Docker 빌드 환경에서 Gradle 데몬 사용을 방지
