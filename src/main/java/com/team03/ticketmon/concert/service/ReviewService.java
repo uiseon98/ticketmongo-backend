@@ -100,6 +100,15 @@ public class ReviewService {
 	}
 
 	/**
+	 * 리뷰 상세 조회
+	 */
+	@Transactional(readOnly = true)
+	public Optional<ReviewDTO> getReviewDetail(Long concertId, Long reviewId) {
+		return reviewRepository.findByIdAndConcertConcertId(reviewId, concertId)
+			.map(this::convertToDTO);
+	}
+
+	/**
 	 * Review Entity를 DTO로 변환
 	 */
 	private ReviewDTO convertToDTO(Review review) {
