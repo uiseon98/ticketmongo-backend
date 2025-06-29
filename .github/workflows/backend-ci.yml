@@ -63,6 +63,7 @@ jobs:
       - name: Configure GitHub Packages for Gradle  # GH_PACKAGES 환경변수 설정
         run: |
           echo "GH_PACKAGES_USER=${{ secrets.GH_PACKAGES_USER }}" >> $GITHUB_ENV
+          echo "::add-mask::${{ secrets.GH_PACKAGES_TOKEN }}" # <-- 토큰 마스킹 추가
           echo "GH_PACKAGES_TOKEN=${{ secrets.GH_PACKAGES_TOKEN }}" >> $GITHUB_ENV
 
       - name: Build with Gradle
