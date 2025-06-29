@@ -9,13 +9,13 @@ import com.team03.ticketmon._global.config.supabase.SupabaseProperties; // Supab
 
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
-//import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory; // 추후(3.1 단계)에서 생성 예정 (주석 처리)
+import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
 
 import com.team03.ticketmon.seller_application.dto.SellerApplicationRequestDTO;
 import com.team03.ticketmon.seller_application.dto.SellerApplicationStatusResponseDTO;
 
 import com.team03.ticketmon.seller_application.repository.SellerApplicationRepository;
-//import com.team03.ticketmon.seller_application.repository.SellerApprovalHistoryRepository; // 추후(3.1 단계)에서 생성 예정 (주석 처리)
+import com.team03.ticketmon.seller_application.repository.SellerApprovalHistoryRepository;
 
 import com.team03.ticketmon.user.domain.entity.UserEntity;
 import com.team03.ticketmon.user.domain.entity.UserEntity.ApprovalStatus;
@@ -53,8 +53,7 @@ public class SellerApplicationService {
     private final StorageUploader storageUploader;
     private final SupabaseProperties supabaseProperties;
     private final SellerConcertRepository sellerConcertRepository; // 콘서트 정보 조회를 위한 레포지토리 주입
-
-    // private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository; // 추후(3.1 단계)에서 추가될 의존성 (주석 해제 필요)
+     private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository;
 
     /**
      * API-03-06: 판매자 권한 신청 등록/재신청
@@ -115,15 +114,15 @@ public class SellerApplicationService {
         userRepository.save(user); // 변경사항 저장
 
         // 7. SellerApprovalHistory에 REQUEST 타입의 이력 기록 (추후(3.1 단계 구현 후) 활성화)
-        /*
         SellerApprovalHistory history = SellerApprovalHistory.builder()
-                .userId(userId)
-                .sellerApplicationId(sellerApplication.getId()) // 생성된 신청서 ID 연결
+//                .userId(userId)
+                .user(user)     // UserEntity 객체 'user'를 전달
+//                .sellerApplicationId(sellerApplication.getId()) // 생성된 신청서 ID 연결
+                .sellerApplication(sellerApplication)     // SellerApplication 객체 'sellerApplication'을 전달
                 .type(SellerApprovalHistory.ActionType.REQUEST) // 요청 타입
-                .actionDate(LocalDateTime.now())
+                .reason(null)                             // 'REQUEST' 타입이므로 reason은 null
                 .build();
         sellerApprovalHistoryRepository.save(history);
-        */
 
         // TODO: (선택) 알림 서비스 연동 (관리자에게 새 신청이 접수되었음을 알림)
     }
