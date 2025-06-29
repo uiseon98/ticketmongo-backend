@@ -76,7 +76,8 @@ public class SellerApplicationService {
         // 2. 판매자 권한 신청 유효성 검사 (이미 PENDING 상태의 신청이 있는지, 또는 APPROVED 상태인지 등)
         // sellerApplicationRepository.existsByUserIdAndStatus()를 활용하여 더 견고하게 체크 가능
         if (user.getApprovalStatus() == ApprovalStatus.PENDING ||
-                sellerApplicationRepository.existsByUserIdAndStatus(userId, SUBMITTED)) {   // SellerApplication 테이블도 함께 확인
+//                sellerApplicationRepository.existsByUserIdAndStatus(userId, SUBMITTED)) {   // SellerApplication 테이블도 함께 확인
+                sellerApplicationRepository.existsByUserAndStatus(user, SUBMITTED)) {
             throw new BusinessException(ErrorCode.SELLER_APPLY_ONCE, "이미 판매자 권한 신청이 접수되어 처리 대기 중입니다."); // PENDING 상태이면 재신청 불가
         }
         if (user.getRole() == Role.SELLER && user.getApprovalStatus() == ApprovalStatus.APPROVED) {
@@ -97,7 +98,8 @@ public class SellerApplicationService {
 
         // 5. SellerApplication 엔티티 생성 및 저장
         SellerApplication sellerApplication = SellerApplication.builder()
-                .userId(userId)
+//                .userId(userId)
+                .user(user) // userId (Long) 대신, 위에서 조회한 UserEntity 객체 'user'를 전달
                 .companyName(request.getCompanyName())
                 .businessNumber(request.getBusinessNumber())
                 .representativeName(request.getRepresentativeName())
@@ -146,8 +148,11 @@ public class SellerApplicationService {
 
         // 최신 판매자 신청서 정보 조회 (신청일 및 마지막 처리일 등)
         // SellerApplication 및 SellerApprovalHistory에서 추가 정보 조회
-        Optional<SellerApplication> latestApplication = sellerApplicationRepository.findTopByUserIdAndStatusInOrderByCreatedAtDesc(
-                userId, List.of(SUBMITTED, ACCEPTED, REJECTED, REVOKED, WITHDRAWN)
+//        Optional<SellerApplication> latestApplication = sellerApplicationRepository.findTopByUserIdAndStatusInOrderByCreatedAtDesc(
+//                userId, List.of(SUBMITTED, ACCEPTED, REJECTED, REVOKED, WITHDRAWN)
+//        );
+        Optional<SellerApplication> latestApplication = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
+                user, List.of(SUBMITTED, ACCEPTED, REJECTED, REVOKED, WITHDRAWN)
         );
 
         LocalDateTime applicationDate = latestApplication.map(SellerApplication::getCreatedAt).orElse(null);
@@ -227,8 +232,10 @@ public class SellerApplicationService {
 
         // 4. 해당 유저의 가장 최근 APPROVED 상태의 SellerApplication 상태 업데이트 (WITHDRAWN)
         // findTopByUserIdAndStatusInOrderByCreatedAtDesc 등으로 APPROVED 상태의 신청서를 찾아 업데이트하는 로직 필요
-        sellerApplicationRepository.findTopByUserIdAndStatusInOrderByCreatedAtDesc(
-                        userId, List.of(ACCEPTED)) // APPROVED 대신 ACCEPTED 사용
+//        sellerApplicationRepository.findTopByUserIdAndStatusInOrderByCreatedAtDesc(
+        sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
+//                        userId, List.of(ACCEPTED)) // APPROVED 대신 ACCEPTED 사용
+                        user, List.of(ACCEPTED))
                 .ifPresent(app -> {
                     app.setStatus(WITHDRAWN);
                     // app.setUpdatedAt(LocalDateTime.now());   // @PreUpdate로 자동 갱신되도록 수정 -> 중복 코드 제거
@@ -237,7 +244,8 @@ public class SellerApplicationService {
                     // 4. SellerApprovalHistory에 WITHDRAW 로그 기록 (추후(3.1 단계 구현 후) 활성화)
                     /*
                     SellerApprovalHistory history = SellerApprovalHistory.builder()
-                            .userId(userId)
+//                            .userId(userId)
+                            .user(user) // userId 대신 UserEntity 객체 user를 전달
                             .sellerApplicationId(app.getId())
                             .type(SellerApprovalHistory.ActionType.WITHDRAW)
                             .actionDate(LocalDateTime.now())
