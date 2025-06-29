@@ -13,7 +13,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    services: # 여기에 Docker 서비스 컨테이너를 정의합니다.
+    services:
       redis-cache: # Redis 서비스
         image: redis:7.0-alpine # 사용할 Docker 이미지 (로컬과 동일하게 7.0-alpine 추천)
         options: >- # 헬스체크 및 추가 옵션 (Redis가 준비될 때까지 기다림)
@@ -60,8 +60,13 @@ jobs:
           echo "AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}" >> $GITHUB_ENV # Secrets에서 주입
           echo "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" >> $GITHUB_ENV # Secrets에서 주입
 
+      - name: Configure GitHub Packages for Gradle  # GH_PACKAGES 환경변수 설정
+        run: |
+          echo "GH_PACKAGES_USER=${{ secrets.GH_PACKAGES_USER }}" >> $GITHUB_ENV
+          echo "GH_PACKAGES_TOKEN=${{ secrets.GH_PACKAGES_TOKEN }}" >> $GITHUB_ENV
+
       - name: Build with Gradle
-        run: ./gradlew build # 이제 테스트 코드가 CI 내의 Redis와 LocalStack에 연결 시도 가능
+        run: ./gradlew build
 
       - name: Upload Test Report
         uses: actions/upload-artifact@v4
