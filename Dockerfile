@@ -18,15 +18,15 @@ RUN ./gradlew dependencies --no-daemon || true
 COPY . /app
 
 # [빌드 타임 ARG] GitHub 패키지 인증 정보를 외부에서 받아오기 (docker-compose.yml → Dockerfile)
-ARG GITHUB_PACKAGES_USER
-ARG GITHUB_PACKAGES_TOKEN
+ARG GH_PACKAGES_USER
+ARG GH_PACKAGES_TOKEN
 
 # [런타임 ENV] Gradle에서 System.getenv(...)로 읽을 수 있도록 환경변수로 설정
-ENV GITHUB_PACKAGES_USER=$GITHUB_PACKAGES_USER
-ENV GITHUB_PACKAGES_TOKEN=$GITHUB_PACKAGES_TOKEN
+ENV GH_PACKAGES_USER=$GH_PACKAGES_USER
+ENV GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN
 
-RUN echo "🔎 GITHUB_PACKAGES_USER=$GITHUB_PACKAGES_USER" && \
-    echo "🔑 GITHUB_PACKAGES_TOKEN=$GITHUB_PACKAGES_TOKEN"
+RUN echo "🔎 GH_PACKAGES_USER=$GH_PACKAGES_USER" && \
+    echo "🔑 GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN"
 
 # Spring Boot 애플리케이션의 실행 가능한 JAR 파일을 빌드
 # '--no-daemon' 옵션은 Docker 빌드 환경에서 Gradle 데몬 사용을 방지
