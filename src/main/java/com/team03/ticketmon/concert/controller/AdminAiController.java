@@ -1,6 +1,16 @@
 package com.team03.ticketmon.concert.controller;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
+import com.team03.ticketmon._global.config.AiSummaryConditionProperties;
+import com.team03.ticketmon.concert.domain.Concert;
+import com.team03.ticketmon.concert.domain.Review;
+import com.team03.ticketmon.concert.dto.ReviewChangeDetectionDTO;
+import com.team03.ticketmon.concert.repository.ConcertRepository;
+import com.team03.ticketmon.concert.repository.ReviewRepository;
 import com.team03.ticketmon.concert.service.AiBatchSummaryService;
+import com.team03.ticketmon.concert.service.AiSummaryUpdateConditionService;
 import com.team03.ticketmon.concert.service.ConcertService;
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
@@ -36,6 +46,10 @@ public class AdminAiController {
 
 	private final AiBatchSummaryService batchSummaryService;
 	private final ConcertService concertService;
+	private final AiSummaryUpdateConditionService conditionService;
+	private final AiSummaryConditionProperties conditionProperties;
+	private final ReviewRepository reviewRepository;
+	private final ConcertRepository concertRepository;
 
 	@Operation(
 		summary = "콘서트 AI 요약 수동 재생성",
@@ -110,23 +124,93 @@ public class AdminAiController {
 
 		log.info("[ADMIN] 콘서트 AI 요약 수동 재생성 시작 - concertId: {}", concertId);
 
-		// 🎯 엔티티 직접 조회 (새로 추가한 메서드 사용)
+		// 🎯 엔티티 직접 조회
 		var concert = concertService.getConcertEntityById(concertId)
 			.orElseThrow(() -> new BusinessException(
 				ErrorCode.CONCERT_NOT_FOUND,
 				"콘서트를 찾을 수 없습니다."
 			));
 
-		// AI 요약 생성 처리
-		batchSummaryService.processConcertAiSummary(concert);
+		try {
+			// ✅ 최소 리뷰 개수 검증 추가
+			List<Review> validReviews = reviewRepository.findValidReviewsForAiSummary(concertId);
 
-		// 생성된 요약 조회
-		String regeneratedSummary = concertService.getAiSummary(concertId);
+			if (validReviews.size() < conditionProperties.getMinReviewCount()) {
+				// 조건 미충족 시에도 실패 정보 기록
+				recordAiSummaryFailure(concert, "INSUFFICIENT_REVIEWS",
+					String.format("최소 %d개의 유효한 리뷰가 필요합니다. 현재: %d개",
+						conditionProperties.getMinReviewCount(), validReviews.size()));
 
-		log.info("[ADMIN] 콘서트 AI 요약 재생성 완료 - concertId: {}", concertId);
+				throw new BusinessException(ErrorCode.AI_SUMMARY_CONDITION_NOT_MET,
+					String.format("AI 요약 생성을 위해서는 최소 %d개의 유효한 리뷰가 필요합니다. 현재: %d개",
+						conditionProperties.getMinReviewCount(), validReviews.size()));
+			}
 
-		return ResponseEntity.ok(
-			SuccessResponse.of("AI 요약이 생성되었습니다.", regeneratedSummary)
-		);
+			// 기존 조건 검증 (업데이트 필요성)
+			ReviewChangeDetectionDTO detection = conditionService.checkNeedsUpdate(concert, conditionProperties);
+
+			if (!detection.getNeedsUpdate()) {
+				// 조건 미충족 시에도 실패 정보 기록
+				recordAiSummaryFailure(concert, "CONDITION_NOT_MET", detection.getChangeReason());
+
+				throw new BusinessException(ErrorCode.AI_SUMMARY_CONDITION_NOT_MET,
+					"AI 요약 생성 조건을 만족하지 않습니다: " + detection.getChangeReason());
+			}
+
+			// AI 요약 생성 처리
+			batchSummaryService.processConcertAiSummary(concert);
+
+			// 생성된 요약 조회
+			String regeneratedSummary = concertService.getAiSummary(concertId);
+
+			log.info("[ADMIN] 콘서트 AI 요약 재생성 완료 - concertId: {}", concertId);
+
+			return ResponseEntity.ok(
+				SuccessResponse.of("AI 요약이 생성되었습니다.", regeneratedSummary)
+			);
+
+		} catch (BusinessException e) {
+			// 이미 recordAiSummaryFailure가 호출된 경우는 제외하고 처리
+			if (!e.getErrorCode().equals(ErrorCode.AI_SUMMARY_CONDITION_NOT_MET)) {
+				recordAiSummaryFailure(concert, "BUSINESS_ERROR", e.getMessage());
+			}
+
+			log.error("[ADMIN] AI 요약 생성 실패 - concertId: {}, 에러: {}", concertId, e.getMessage());
+			throw e;
+
+		} catch (Exception e) {
+			recordAiSummaryFailure(concert, "SYSTEM_ERROR", e.getMessage());
+
+			log.error("[ADMIN] AI 요약 생성 중 예상치 못한 오류 - concertId: {}", concertId, e);
+			throw new BusinessException(ErrorCode.SERVER_ERROR,
+				"AI 요약 생성 중 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+		}
+	}
+
+	/**
+	 * AI 요약 실패 정보를 기록하는 헬퍼 메서드
+	 */
+	private void recordAiSummaryFailure(Concert concert, String failureType, String failureReason) {
+		try {
+			LocalDateTime now = LocalDateTime.now();
+
+			// 실패 카운터 증가
+			Integer currentRetryCount = concert.getAiSummaryRetryCount();
+			int newRetryCount = (currentRetryCount != null ? currentRetryCount : 0) + 1;
+			concert.setAiSummaryRetryCount(newRetryCount);
+
+			// 실패 시간 기록
+			concert.setAiSummaryLastFailedAt(now);
+
+			// 데이터베이스에 실패 정보 저장
+			concertRepository.save(concert);
+
+			log.info("[ADMIN] AI 요약 실패 정보 저장 완료: concertId={}, 실패유형={}, 재시도횟수={}, 실패시간={}",
+				concert.getConcertId(), failureType, newRetryCount, now);
+
+		} catch (Exception saveException) {
+			log.error("[ADMIN] AI 요약 실패 정보 저장 중 오류 발생: concertId={}",
+				concert.getConcertId(), saveException);
+		}
 	}
 }

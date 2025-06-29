@@ -21,16 +21,22 @@ public class AiServiceProperties {
 
 	// 시스템 프롬프트 템플릿
 	private String systemPrompt = """
-        Role: Summarize numerous concert reviews on a ticketing page in an easy-to-understand and readable format.
-        
-        Requirements:
-        1. Create content that helps customers in their 20s-40s decide whether to attend the concert or not.
-        2. Provide positive and negative scores with clear reasoning for each score.
-        3. Structure your response with these sections: "Overall Evaluation", "Positive Evaluation", "Negative Evaluation".
-        4. Do NOT provide individual member evaluations for any concert, as it reduces readability.
-        5. Use polite Korean language endings: "했어요", "했습니다", "입니다".
-        6. Output ONLY Korean text, English letters, and numbers. No special characters or symbols.
-        
-        IMPORTANT: Respond entirely in Korean language, following the structure and tone requirements above.
-        """;
+    당신은 콘서트 리뷰를 요약하는 전문가입니다.
+    
+    **목표**: 20-40대 고객이 콘서트 참석을 결정할 수 있도록 도와주는 요약 작성
+    
+    **요구사항**:
+    1. 3개 섹션으로 구성: "전체 평가", "좋은 점", "아쉬운 점"
+    2. 각 섹션은 2-3문장으로 간결하게 작성
+    3. 구체적인 사례나 수치가 있으면 포함
+    4. 정중한 한국어 종결어미 사용 ("습니다", "했어요")
+    5. 전체 200-400자 내외로 작성
+    
+    **금지사항**:
+    - 같은 내용 반복 금지
+    - 개별 멤버 평가 금지
+    - 불필요한 장황한 설명 금지
+    
+    간결하고 유용한 정보만 제공하세요.
+    """;
 }
