@@ -5,6 +5,7 @@ import com.team03.ticketmon._global.exception.ErrorCode;
 import com.team03.ticketmon.admin.dto.AdminApprovalRequestDTO;
 import com.team03.ticketmon.admin.dto.AdminRevokeRequestDTO;
 import com.team03.ticketmon.admin.dto.AdminSellerApplicationListResponseDTO;
+import com.team03.ticketmon.admin.dto.SellerApprovalHistoryResponseDTO;
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
 import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
@@ -156,7 +157,7 @@ public class AdminSellerService {
         // 5. UserEntity 업데이트 (Role을 USER로, ApprovalStatus를 REVOKED로)
         user.setRole(Role.USER);
         user.setApprovalStatus(ApprovalStatus.REVOKED);
-        // user.setLastReason(request.getReason()); // UserEntity에 lastReason 필드 있다면 주석 해제
+        // user.setLastReason(request.getReason()); // UserEntity에 lastReason 필드 없음 - 주석 처리
         userRepository.save(user);
 
         // 6. 최신 SellerApplication의 상태도 REVOKED로 업데이트
@@ -177,6 +178,34 @@ public class AdminSellerService {
                 .build();
         sellerApprovalHistoryRepository.save(history);
 
-        return user; // 처리된 유저 엔티티 반환
+        return user;
+    }
+
+    /**
+     * API-04-04: 판매자 권한 상세 보기 (특정 유저 이력 조회)
+     * @param userId 이력을 조회할 유저의 ID
+     * @param adminId 현재 처리하는 관리자의 ID
+     * @return 특정 유저의 판매자 권한 이력 DTO 리스트
+     */
+    public List<SellerApprovalHistoryResponseDTO> getSellerApprovalHistoryForUser(Long userId, Long adminId) {
+        // 1. 유저 조회 (대상 유저)
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "이력을 조회할 사용자를 찾을 수 없습니다."));
+
+        // 2. 관리자 유효성 검사 (AdminService 내 공통 로직으로 분리도 가능)
+        UserEntity adminUser = userRepository.findById(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "관리자 정보를 찾을 수 없습니다."));
+        if (adminUser.getRole() != Role.ADMIN) {
+            throw new BusinessException(ErrorCode.ADMIN_ACCESS_DENIED, "관리자만 이 작업을 수행할 수 있습니다.");
+        }
+
+        // 3. 특정 유저의 모든 SellerApprovalHistory를 최신순으로 조회
+        // SellerApprovalHistoryRepository에 findByUserOrderByCreatedAtDesc 메서드가 필요합니다.
+        List<SellerApprovalHistory> historyList = sellerApprovalHistoryRepository.findByUserOrderByCreatedAtDesc(user);
+
+        // 4. 엔티티 리스트를 DTO 리스트로 변환하여 반환
+        return historyList.stream()
+                .map(SellerApprovalHistoryResponseDTO::fromEntity)
+                .collect(Collectors.toList());
     }
 }
