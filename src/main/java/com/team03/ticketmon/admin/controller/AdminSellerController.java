@@ -1,6 +1,7 @@
 package com.team03.ticketmon.admin.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
+import com.team03.ticketmon.admin.dto.AdminApprovalRequestDTO;
 import com.team03.ticketmon.admin.dto.AdminSellerApplicationListResponseDTO;
 import com.team03.ticketmon.admin.service.AdminSellerService;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
@@ -9,11 +10,16 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -53,9 +59,43 @@ public class AdminSellerController {
         // 현재 컨트롤러에서 @PreAuthorize를 통해 ADMIN 역할 검증
         // TODO: (선택) 서비스 계층에서 adminUser.getUserId()를 사용하여 관리자 권한을 최종적으로 검증하거나 로깅할 수 있습니다.
         // 현재 AdminSellerService.getPendingApplications()는 adminId 파라미터를 받지 않으므로,
-        // 이를` 위해 서비스 메서드 시그니처 변경 및 추가 로직 구현이 필요할 수 있습니다.
+        // 이를 위해 서비스 메서드 시그니처 변경 및 추가 로직 구현이 필요할 수 있습니다.
         List<AdminSellerApplicationListResponseDTO> pendingApplications = adminSellerService.getPendingSellerApplications();
 
         return ResponseEntity.ok(SuccessResponse.of("대기 중인 판매자 신청 목록 조회 성공", pendingApplications));
+    }
+
+    /**
+     * API-04-02: 판매자 신청 승인/반려 처리
+     * @param userId 처리할 판매자(유저)의 ID
+     * @param request 관리자의 승인/반려 요청 정보 (approve: true/false, reason)
+     * @param adminUser 현재 로그인된 관리자 정보
+     * @return 처리 결과에 대한 성공 응답 (실제로는 처리된 신청서 정보 포함 가능)
+     */
+    @Operation(
+            summary = "판매자 신청 승인/반려 처리",
+            description = "관리자가 특정 판매자 신청을 승인하거나 반려합니다. 반려 시 사유를 필수로 포함해야 합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "처리 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청 (사유 누락 등)"),
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "신청서 또는 사용자 정보 없음")
+    })
+    @PatchMapping("/{userId}/process") // PATCH /api/admin/seller-requests/{userId}/process
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SuccessResponse<String>> processSellerApplication(
+            @Parameter(description = "처리할 판매자(유저) ID", example = "1")
+            @PathVariable Long userId,
+            @Parameter(description = "승인/반려 요청 정보", required = true)
+            @Valid @RequestBody AdminApprovalRequestDTO request,
+            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
+
+        // 서비스 계층에서 adminUser.getUserId()를 사용하여 관리자 권한을 검증하고 처리
+        adminSellerService.processSellerApplication(userId, request, adminUser.getUserId());
+
+        String message = request.getApprove() ? "판매자 신청이 승인되었습니다." : "판매자 신청이 반려되었습니다.";
+        return ResponseEntity.ok(SuccessResponse.of(message, "SUCCESS"));
     }
 }
