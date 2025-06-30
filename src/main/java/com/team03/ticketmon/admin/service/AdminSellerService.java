@@ -25,6 +25,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+// 콘서트 도메인 의존성 추가
+import com.team03.ticketmon.concert.repository.SellerConcertRepository;
+import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
+import com.team03.ticketmon.concert.domain.Concert;
+
 /**
  * 관리자용 판매자 관리 비즈니스 로직 서비스
  */
@@ -36,6 +41,7 @@ public class AdminSellerService {
     private final SellerApplicationRepository sellerApplicationRepository;
     private final UserRepository userRepository;
     private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository;
+    private final SellerConcertRepository sellerConcertRepository; // ConcertRepository 의존성 추가
 
     /**
      * API-04-01: 대기 중인 판매자 신청 목록 조회
@@ -156,7 +162,12 @@ public class AdminSellerService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "판매자 권한을 가진 사용자가 아니거나, 이미 권한이 해제된 상태입니다.");
         }
 
-        // 5. UserEntity 업데이트 (Role을 USER로, ApprovalStatus를 REVOKED로)
+        // 5. 판매자에게 진행 중이거나 예정된 콘서트가 있는지 확인
+        if (hasActiveConcertsForSeller(userId)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "해당 판매자에게 진행 중이거나 예정된 콘서트가 있어 권한을 해제할 수 없습니다.");
+        }
+
+        // 6. UserEntity 업데이트 (Role을 USER로, ApprovalStatus를 REVOKED로)
         user.setRole(Role.USER);
         user.setApprovalStatus(ApprovalStatus.REVOKED);
         // user.setLastReason(request.getReason()); // UserEntity에 lastReason 필드 없음 - 주석 처리
@@ -171,7 +182,7 @@ public class AdminSellerService {
                     sellerApplicationRepository.save(app);
                 });
 
-        // 7. SellerApprovalHistory에 REVOKED 타입 이력 기록
+        // 8. SellerApprovalHistory에 REVOKED 타입 이력 기록
         SellerApprovalHistory history = SellerApprovalHistory.builder()
                 .user(user)
                 .sellerApplication(sellerApplicationRepository.findTopByUserOrderByCreatedAtDesc(user).orElse(null)) // 가장 최신 신청서에 연결 (없을 수도 있음)
@@ -280,5 +291,18 @@ public class AdminSellerService {
 
         // 3. 엔티티 페이지를 DTO 페이지로 변환하여 반환
         return historyPage.map(SellerApprovalHistoryResponseDTO::fromEntity);
+    }
+
+    /**
+     * 판매자가 진행 중이거나 예정된 콘서트(ON_SALE, SCHEDULED)를 가지고 있는지 확인하는 헬퍼 메서드
+     * @param sellerId 판매자 ID (UserEntity의 ID)
+     * @return 활성 콘서트가 있으면 true, 없으면 false
+     */
+    private boolean hasActiveConcertsForSeller(Long sellerId) {
+        // ON_SALE 또는 SCHEDULED 상태의 콘서트가 있는지 확인합니다.
+        List<ConcertStatus> activeStatuses = List.of(ConcertStatus.ON_SALE, ConcertStatus.SCHEDULED);
+        List<Concert> activeConcerts = sellerConcertRepository.findBySellerIdAndStatusIn(sellerId, activeStatuses);
+
+        return !activeConcerts.isEmpty(); // 비어있지 않으면 활성 콘서트가 있는 것
     }
 }
