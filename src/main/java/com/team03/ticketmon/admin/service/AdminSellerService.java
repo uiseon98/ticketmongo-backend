@@ -100,7 +100,7 @@ public class AdminSellerService {
             user.setRole(Role.USER); // 반려 시 역할은 USER 유지 (SELLER로 가지 않음)
             user.setApprovalStatus(ApprovalStatus.REJECTED);
             // user.setLastReason(request.getReason()); // UserEntity에 lastReason 필드 없음 - 주석 처리
-            userRepository.save(user); //
+            userRepository.save(user);
 
             // SellerApplication 상태 업데이트
             application.setStatus(SellerApplicationStatus.REJECTED);
@@ -200,12 +200,36 @@ public class AdminSellerService {
         }
 
         // 3. 특정 유저의 모든 SellerApprovalHistory를 최신순으로 조회
-        // SellerApprovalHistoryRepository에 findByUserOrderByCreatedAtDesc 메서드가 필요합니다.
+        // SellerApprovalHistoryRepository에 findByUserOrderByCreatedAtDesc 메서드가 필요
         List<SellerApprovalHistory> historyList = sellerApprovalHistoryRepository.findByUserOrderByCreatedAtDesc(user);
 
         // 4. 엔티티 리스트를 DTO 리스트로 변환하여 반환
         return historyList.stream()
                 .map(SellerApprovalHistoryResponseDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * API-04-05: 현재 판매자 목록 조회 (관리자)
+     * @return 현재 판매자(Role.SELLER)인 유저 목록 DTO 리스트
+     */
+    public List<AdminSellerApplicationListResponseDTO> getCurrentSellers() {
+        // Role이 SELLER인 모든 UserEntity를 조회
+        List<UserEntity> sellers = userRepository.findByRole(Role.SELLER);
+
+        // UserEntity 리스트를 AdminSellerApplicationListResponseDTO 리스트로 변환하여 반환
+        // 이 DTO는 신청서 정보와 User 정보를 함께 담도록 설계되었으므로,
+        // 여기서는 User 정보를 기반으로 DTO를 구성하거나, 별도의 더 경량화된 DTO를 사용할 수 있음
+        // 현재는 AdminSellerApplicationListResponseDTO를 재활용하여 User 정보만 채워서 반환
+        return sellers.stream()
+                .map(sellerUser -> AdminSellerApplicationListResponseDTO.builder()
+                        .userId(sellerUser.getId())
+                        .username(sellerUser.getUsername())
+                        .userNickname(sellerUser.getNickname())
+                        // 판매자 목록 조회이므로 companyName, businessNumber 등은 일반적으로 포함되지 않지만,
+                        // 필요하다면 UserEntity나 SellerApplication에서 추가 조회하여 채울 수 있음
+                        // 여기서는 일단 UserEntity가 가진 정보만 DTO에 매핑
+                        .build())
                 .collect(Collectors.toList());
     }
 }
