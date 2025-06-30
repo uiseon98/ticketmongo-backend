@@ -2,6 +2,7 @@ package com.team03.ticketmon.admin.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
 import com.team03.ticketmon.admin.dto.AdminApprovalRequestDTO;
+import com.team03.ticketmon.admin.dto.AdminRevokeRequestDTO;
 import com.team03.ticketmon.admin.dto.AdminSellerApplicationListResponseDTO;
 import com.team03.ticketmon.admin.service.AdminSellerService;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
@@ -16,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,7 +33,7 @@ import java.util.List;
  */
 @Tag(name = "관리자 판매자 관리", description = "관리자 전용 판매자 신청 및 권한 관리 API")
 @RestController
-@RequestMapping("/api/admin/seller-requests") // API-04-01 및 API-04-02 경로의 공통 부분
+@RequestMapping("/api/admin") // 공통 최상위 경로로 변경 (하위 경로에서 seller-requests, sellers 구분)
 @RequiredArgsConstructor
 public class AdminSellerController {
 
@@ -51,7 +53,7 @@ public class AdminSellerController {
             @ApiResponse(responseCode = "401", description = "인증 실패"),
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN만 접근 가능)")
     })
-    @GetMapping // GET /api/admin/seller-requests
+    @GetMapping("/seller-requests") // 변경된 RequestMapping에 맞춰 경로 명시
     @PreAuthorize("hasRole('ADMIN')") // ADMIN 역할만 접근 허용
     public ResponseEntity<SuccessResponse<List<AdminSellerApplicationListResponseDTO>>> getPendingApplications(
             @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
@@ -83,7 +85,7 @@ public class AdminSellerController {
             @ApiResponse(responseCode = "403", description = "권한 없음"),
             @ApiResponse(responseCode = "404", description = "신청서 또는 사용자 정보 없음")
     })
-    @PatchMapping("/{userId}/process") // PATCH /api/admin/seller-requests/{userId}/process
+    @PatchMapping("/seller-requests/{userId}/process") // 변경된 RequestMapping에 맞춰 경로 명시
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SuccessResponse<String>> processSellerApplication(
             @Parameter(description = "처리할 판매자(유저) ID", example = "1")
@@ -97,5 +99,37 @@ public class AdminSellerController {
 
         String message = request.getApprove() ? "판매자 신청이 승인되었습니다." : "판매자 신청이 반려되었습니다.";
         return ResponseEntity.ok(SuccessResponse.of(message, "SUCCESS"));
+    }
+
+    /**
+     * API-04-03: 판매자 강제 권한 해제 (관리자)
+     * @param userId 권한을 해제할 판매자(유저)의 ID
+     * @param request 관리자의 강제 권한 해제 요청 정보 (reason)
+     * @param adminUser 현재 로그인된 관리자 정보
+     * @return 처리 결과에 대한 성공 응답 (실제로는 처리된 유저 정보 포함 가능)
+     */
+    @Operation(
+            summary = "판매자 강제 권한 해제",
+            description = "관리자가 특정 판매자의 권한을 강제로 해제합니다. 해제 사유를 필수로 포함해야 합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "처리 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청 (사유 누락 등)"),
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "사용자 정보 없음")
+    })
+    @DeleteMapping("/sellers/{userId}/role") // 변경된 RequestMapping에 맞춰 경로 명시
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SuccessResponse<String>> revokeSellerRole(
+            @Parameter(description = "권한 해제할 판매자(유저) ID", example = "1")
+            @PathVariable Long userId,
+            @Parameter(description = "강제 권한 해제 요청 정보", required = true)
+            @Valid @RequestBody AdminRevokeRequestDTO request, // DELETE 요청에 @RequestBody 가능 (Spring 4.3+, RESTful 관례상 POST/PATCH 선호)
+            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
+
+        adminSellerService.revokeSellerRole(userId, request, adminUser.getUserId());
+
+        return ResponseEntity.ok(SuccessResponse.of("판매자 권한이 강제로 해제되었습니다.", "SUCCESS"));
     }
 }
