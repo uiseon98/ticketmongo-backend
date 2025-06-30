@@ -3,6 +3,7 @@ package com.team03.ticketmon.admin.service;
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
 import com.team03.ticketmon.admin.dto.AdminApprovalRequestDTO;
+import com.team03.ticketmon.admin.dto.AdminRevokeRequestDTO;
 import com.team03.ticketmon.admin.dto.AdminSellerApplicationListResponseDTO;
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
@@ -59,7 +60,6 @@ public class AdminSellerService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다."));
 
         // 최신 'SUBMITTED' 상태의 신청서를 찾음 (이 신청서에 대한 처리가 필요)
-        // SellerApplication 엔티티에 UserEntity user 필드를 추가했으므로, findTopByUserAndStatusInOrderByCreatedAtDesc 사용
         SellerApplication application = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
                         user, List.of(SellerApplicationStatus.SUBMITTED))
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "대기 중인 판매자 신청서를 찾을 수 없습니다."));
@@ -120,6 +120,63 @@ public class AdminSellerService {
                 .build();
         sellerApprovalHistoryRepository.save(history);
 
-        return application; // 처리된 신청서 반환
+        return application;
+    }
+
+    /**
+     * API-04-03: 판매자 강제 권한 해제 (관리자)
+     * @param userId 권한을 해제할 판매자(유저)의 ID
+     * @param request 관리자의 강제 권한 해제 요청 정보 (reason)
+     * @param adminId 현재 처리하는 관리자의 ID
+     * @return 처리된 UserEntity
+     */
+    @Transactional
+    public UserEntity revokeSellerRole(Long userId, AdminRevokeRequestDTO request, Long adminId) {
+        // 1. 유저 조회
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        // 2. 관리자 유효성 검사
+        UserEntity adminUser = userRepository.findById(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "관리자 정보를 찾을 수 없습니다."));
+        if (adminUser.getRole() != Role.ADMIN) {
+            throw new BusinessException(ErrorCode.ADMIN_ACCESS_DENIED, "관리자만 이 작업을 수행할 수 있습니다.");
+        }
+
+        // 3. 강제 해제 사유 유효성 검사
+        if (request.getReason() == null || request.getReason().trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "강제 권한 해제 사유는 필수입니다.");
+        }
+
+        // 4. 판매자 권한 상태 확인 (이미 해제되었거나 일반 유저인지 등)
+        if (user.getRole() != Role.SELLER && user.getApprovalStatus() != ApprovalStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "판매자 권한을 가진 사용자가 아니거나, 이미 권한이 해제된 상태입니다.");
+        }
+
+        // 5. UserEntity 업데이트 (Role을 USER로, ApprovalStatus를 REVOKED로)
+        user.setRole(Role.USER);
+        user.setApprovalStatus(ApprovalStatus.REVOKED);
+        // user.setLastReason(request.getReason()); // UserEntity에 lastReason 필드 있다면 주석 해제
+        userRepository.save(user);
+
+        // 6. 최신 SellerApplication의 상태도 REVOKED로 업데이트
+        // 특정 UserEntity의 최신 SellerApplication을 찾아 상태를 REVOKED로 변경
+        sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
+                        user, List.of(SellerApplicationStatus.ACCEPTED, SellerApplicationStatus.SUBMITTED)) // 현재 ACCEPTED or SUBMITTED 상태의 최신 신청서
+                .ifPresent(app -> {
+                    app.setStatus(SellerApplicationStatus.REVOKED);
+                    sellerApplicationRepository.save(app);
+                });
+
+        // 7. SellerApprovalHistory에 REVOKED 타입 이력 기록
+        SellerApprovalHistory history = SellerApprovalHistory.builder()
+                .user(user)
+                .sellerApplication(sellerApplicationRepository.findTopByUserOrderByCreatedAtDesc(user).orElse(null)) // 가장 최신 신청서에 연결 (없을 수도 있음)
+                .type(SellerApprovalHistory.ActionType.REVOKED)
+                .reason(request.getReason())
+                .build();
+        sellerApprovalHistoryRepository.save(history);
+
+        return user; // 처리된 유저 엔티티 반환
     }
 }

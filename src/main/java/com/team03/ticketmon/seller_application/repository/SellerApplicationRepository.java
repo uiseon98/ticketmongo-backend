@@ -29,6 +29,9 @@ public interface SellerApplicationRepository extends JpaRepository<SellerApplica
 //    Optional<SellerApplication> findTopByUserIdAndStatusInOrderByCreatedAtDesc(Long userId, List<SellerApplicationStatus> statuses);
     Optional<SellerApplication> findTopByUserAndStatusInOrderByCreatedAtDesc(UserEntity user, List<SellerApplicationStatus> statuses); // UserEntity 객체로 조회하도록 변경
 
+    // 특정 UserEntity에 대한 가장 최신 SellerApplication을 조회 (revokeSellerRole에서 사용)
+    Optional<SellerApplication> findTopByUserOrderByCreatedAtDesc(UserEntity user);
+
     /* 스케줄러를 위한 추가 조회 메서드 예시 (개인정보 보호 정책 관련) */
     // WITHDRAWN 상태이고, 개인정보 마스킹 시점(maskedAt)이 null이며, createdAt이 특정 시간 이전인 목록 조회
     List<SellerApplication> findByStatusAndMaskedAtIsNullAndCreatedAtBefore(SellerApplicationStatus status, LocalDateTime dateTime);
