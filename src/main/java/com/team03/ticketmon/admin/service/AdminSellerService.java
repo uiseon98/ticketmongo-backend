@@ -259,14 +259,24 @@ public class AdminSellerService {
         // 2. 검색 및 필터링 로직 구현
         Page<SellerApprovalHistory> historyPage;
 
-        // 여기서는 예시로 typeFilter만 사용하여 조회하고, keyword 필터는 나중에 확장
-        if (typeFilter.isPresent()) {
+        // 2. 검색 및 필터링 로직 구현
+        // keyword가 존재하면 keyword를 사용한 검색 메서드를 호출
+        if (keyword.isPresent() && !keyword.get().trim().isEmpty()) {
+            String searchKeyword = keyword.get().trim();
+            if (typeFilter.isPresent()) {
+                // 타입 필터와 키워드 검색을 모두 사용 (findAllWithFilters)
+                historyPage = sellerApprovalHistoryRepository.findAllWithFilters(typeFilter.get(), searchKeyword, pageable);
+            } else {
+                // 키워드 검색만 사용 (findAllByKeywordOrderByCreatedAtDesc)
+                historyPage = sellerApprovalHistoryRepository.findAllByKeywordOrderByCreatedAtDesc(searchKeyword, pageable);
+            }
+        } else if (typeFilter.isPresent()) {
+            // 타입 필터만 사용 (findByTypeOrderByCreatedAtDesc)
             historyPage = sellerApprovalHistoryRepository.findByTypeOrderByCreatedAtDesc(typeFilter.get(), pageable);
         } else {
+            // 필터/검색 조건 없이 전체 조회
             historyPage = sellerApprovalHistoryRepository.findAll(pageable);
         }
-        // TODO: keyword 필터링 로직 추가 (user, sellerApplication 조인하여 검색 필요)
-        // 예를 들어, Specification 또는 Querydsl/QueryjPA를 사용하면 복잡한 동적 쿼리 생성이 용이함
 
         // 3. 엔티티 페이지를 DTO 페이지로 변환하여 반환
         return historyPage.map(SellerApprovalHistoryResponseDTO::fromEntity);
