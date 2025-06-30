@@ -14,6 +14,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,9 +27,14 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Optional;
+
+import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
+
 
 /**
  * 관리자용 판매자 관리 API 컨트롤러
@@ -187,5 +195,39 @@ public class AdminSellerController {
         List<AdminSellerApplicationListResponseDTO> currentSellers = adminSellerService.getCurrentSellers();
 
         return ResponseEntity.ok(SuccessResponse.of("현재 판매자 목록 조회 성공", currentSellers));
+    }
+
+    /**
+     * API-04-06: 전체 판매자 이력 목록 조회 (관리자)
+     * @param typeFilter 이력 타입 필터 (예: REQUEST, APPROVED, REJECTED 등. Nullable)
+     * @param keyword 검색 키워드 (유저 아이디, 닉네임, 업체명, 사업자번호, 사유 등. Nullable)
+     * @param pageable 페이징 및 정렬 정보
+     * @param adminUser 현재 로그인된 관리자 정보
+     * @return 판매자 권한 이력 DTO 페이지
+     */
+    @Operation(
+            summary = "전체 판매자 이력 목록 조회",
+            description = "관리자가 모든 판매자 권한 이력을 검색, 필터링, 정렬하여 조회합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "403", description = "권한 없음")
+    })
+    @GetMapping("/approvals/history") // API-04-06 명세에 맞춰 경로 추가
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SuccessResponse<Page<SellerApprovalHistoryResponseDTO>>> getAllSellerApprovalHistory(
+            @Parameter(description = "이력 타입 필터 (예: SUBMITTED, APPROVED, REJECTED, REVOKED)", example = "APPROVED")
+            @RequestParam(required = false) Optional<SellerApprovalHistory.ActionType> typeFilter,
+            @Parameter(description = "검색 키워드 (유저 ID, 닉네임 등)", example = "seller1")
+            @RequestParam(required = false) Optional<String> keyword,
+            @PageableDefault(size = 10, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC)
+            Pageable pageable,
+            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
+
+        Page<SellerApprovalHistoryResponseDTO> historyPage = adminSellerService.getAllSellerApprovalHistory(
+                typeFilter, keyword, pageable, adminUser.getUserId());
+
+        return ResponseEntity.ok(SuccessResponse.of("전체 판매자 이력 목록 조회 성공", historyPage));
     }
 }
