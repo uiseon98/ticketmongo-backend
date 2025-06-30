@@ -65,5 +65,15 @@ public interface SellerConcertRepository extends JpaRepository<Concert, Long> {
 	int updatePosterImageUrl(@Param("concertId") Long concertId,
 		@Param("sellerId") Long sellerId,
 		@Param("posterImageUrl") String posterImageUrl);
+
+	/**
+	 * 판매자 ID와 여러 콘서트 상태 목록으로 콘서트를 조회합니다.
+	 * 판매자 권한 철회 시 활성 콘서트 확인에 사용됩니다.
+	 * @param sellerId 판매자 ID
+	 * @param statuses 조회할 콘서트 상태 목록 (예: ON_SALE, SCHEDULED)
+	 * @return 해당 조건에 맞는 콘서트 목록
+	 */
+	@Query("SELECT c FROM Concert c WHERE c.sellerId = :sellerId AND c.status IN :statuses")
+	List<Concert> findBySellerIdAndStatusIn(@Param("sellerId") Long sellerId, @Param("statuses") List<ConcertStatus> statuses);
 }
 

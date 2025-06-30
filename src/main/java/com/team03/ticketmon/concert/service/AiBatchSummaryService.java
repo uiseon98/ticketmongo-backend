@@ -58,7 +58,7 @@ public class AiBatchSummaryService {
 	 *
 	 * @return 배치 처리 결과 DTO
 	 */
-	@Scheduled(cron = "0 0 2 * * *")
+	@Scheduled(cron = "0 */20 * * * *") //개발용: 20분 간격으로 스케줄러 설정
 	public AiBatchSummaryResultDTO processBatch() {
 		log.info("AI 배치 요약 처리 시작");
 
@@ -148,14 +148,34 @@ public class AiBatchSummaryService {
 				concert.getConcertId(), reviews.size());
 
 		} catch (BusinessException e) {
-			// 이미 BusinessException인 경우 그대로 전파 (팀 규칙)
-			throw e;
+			// 사용자 친화적 메시지로 변환
+			String userFriendlyMessage = getUserFriendlyErrorMessage(e);
+			log.warn("콘서트 AI 요약 수동 생성 실패: concertId={}, 사유={}",
+				concert.getConcertId(), userFriendlyMessage);
+
+			throw new BusinessException(e.getErrorCode(), userFriendlyMessage);
+
 		} catch (Exception e) {
-			// 예상치 못한 오류는 서버 에러로 래핑 (팀 규칙)
 			log.error("콘서트 AI 요약 처리 중 예상치 못한 오류", e);
 			throw new BusinessException(ErrorCode.SERVER_ERROR,
-				"콘서트 AI 요약 처리 중 오류가 발생했습니다.");
+				"AI 요약 생성 중 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
 		}
+	}
+
+	/**
+	 * 🎨 사용자 친화적 에러 메시지 변환
+	 */
+	private String getUserFriendlyErrorMessage(BusinessException e) {
+		return switch (e.getErrorCode()) {
+			case REVIEW_NOT_FOUND ->
+				"이 콘서트에는 아직 리뷰가 없어서 AI 요약을 생성할 수 없습니다. 리뷰가 작성된 후 다시 시도해주세요.";
+
+			case INVALID_REVIEW_DATA ->
+				"리뷰 내용이 너무 짧아서 AI 요약을 생성할 수 없습니다. 최소 10자 이상의 리뷰가 필요합니다.";
+
+			default ->
+				"AI 요약 생성 중 오류가 발생했습니다: " + e.getMessage();
+		};
 	}
 
 	/**
