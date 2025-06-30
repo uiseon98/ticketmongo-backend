@@ -1,14 +1,24 @@
 package com.team03.ticketmon.admin.service;
 
+import com.team03.ticketmon._global.exception.BusinessException;
+import com.team03.ticketmon._global.exception.ErrorCode;
+import com.team03.ticketmon.admin.dto.AdminApprovalRequestDTO;
 import com.team03.ticketmon.admin.dto.AdminSellerApplicationListResponseDTO;
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
-import com.team03.ticketmon.seller_application.repository.SellerApplicationRepository;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
+import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
+import com.team03.ticketmon.seller_application.repository.SellerApplicationRepository;
+import com.team03.ticketmon.seller_application.repository.SellerApprovalHistoryRepository;
+import com.team03.ticketmon.user.domain.entity.UserEntity;
+import com.team03.ticketmon.user.domain.entity.UserEntity.ApprovalStatus;
+import com.team03.ticketmon.user.domain.entity.UserEntity.Role;
+import com.team03.ticketmon.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -16,22 +26,100 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true) // 조회 기능이 많으므로 기본적으로 읽기 전용 트랜잭션 설정
+@Transactional(readOnly = true)
 public class AdminSellerService {
 
     private final SellerApplicationRepository sellerApplicationRepository;
+    private final UserRepository userRepository;
+    private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository;
 
     /**
      * API-04-01: 대기 중인 판매자 신청 목록 조회
      * @return 대기 중인 판매자 신청 목록 DTO 리스트
      */
     public List<AdminSellerApplicationListResponseDTO> getPendingSellerApplications() {
-        // SellerApplicationStatus.SUBMITTED 상태의 신청 목록을 조회
         List<SellerApplication> pendingApplications = sellerApplicationRepository.findByStatus(SellerApplicationStatus.SUBMITTED);
 
-        // 엔티티 리스트를 DTO 리스트로 변환하여 반환
         return pendingApplications.stream()
                 .map(AdminSellerApplicationListResponseDTO::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * API-04-02: 판매자 신청 승인/반려 처리
+     * @param userId 처리할 판매자(유저)의 ID
+     * @param request 관리자의 승인/반려 요청 정보 (approve: true/false, reason)
+     * @param adminId 현재 처리하는 관리자의 ID (로그인 정보에서 추출)
+     * @return 처리된 SellerApplication 엔티티
+     */
+    @Transactional // 상태 변경이 일어나므로 트랜잭션 필요
+    public SellerApplication processSellerApplication(Long userId, AdminApprovalRequestDTO request, Long adminId) {
+        // 1. 유저 및 신청서 조회
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        // 최신 'SUBMITTED' 상태의 신청서를 찾음 (이 신청서에 대한 처리가 필요)
+        // SellerApplication 엔티티에 UserEntity user 필드를 추가했으므로, findTopByUserAndStatusInOrderByCreatedAtDesc 사용
+        SellerApplication application = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
+                        user, List.of(SellerApplicationStatus.SUBMITTED))
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "대기 중인 판매자 신청서를 찾을 수 없습니다."));
+
+        // 2. 관리자 유효성 검사 (실제 컨트롤러에서는 @PreAuthorize 등으로 먼저 처리될 수 있으나, 서비스 레벨 방어 로직)
+        UserEntity adminUser = userRepository.findById(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "관리자 정보를 찾을 수 없습니다."));
+        if (adminUser.getRole() != Role.ADMIN) {
+            throw new BusinessException(ErrorCode.ADMIN_ACCESS_DENIED, "관리자만 이 작업을 수행할 수 있습니다.");
+        }
+
+
+        // 3. 승인 또는 반려 로직
+        SellerApprovalHistory.ActionType historyType; // 이력에 기록될 타입
+        String historyReason = null; // 이력에 기록될 사유
+
+        if (request.getApprove()) { // 승인 (approve = true)
+            // UserEntity 업데이트
+            user.setRole(Role.SELLER);
+            user.setApprovalStatus(ApprovalStatus.APPROVED);
+            userRepository.save(user);
+
+            // SellerApplication 상태 업데이트
+            application.setStatus(SellerApplicationStatus.ACCEPTED);
+            sellerApplicationRepository.save(application);
+
+            // 이력 타입 설정
+            historyType = SellerApprovalHistory.ActionType.APPROVED;
+
+        } else { // 반려 (approve = false)
+            // 반려 사유 유효성 검사
+            if (request.getReason() == null || request.getReason().trim().isEmpty()) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT, "반려 시 사유는 필수입니다.");
+            }
+
+            // UserEntity 업데이트
+            user.setRole(Role.USER); // 반려 시 역할은 USER 유지 (SELLER로 가지 않음)
+            user.setApprovalStatus(ApprovalStatus.REJECTED);
+            // user.setLastReason(request.getReason()); // UserEntity에 lastReason 필드 없음 - 주석 처리
+            userRepository.save(user); //
+
+            // SellerApplication 상태 업데이트
+            application.setStatus(SellerApplicationStatus.REJECTED);
+            // application.setRejectReason(request.getReason()); // SellerApplication에 반려 사유 필드 없음 - 주석 처리
+            sellerApplicationRepository.save(application);
+
+            // 이력 타입 및 사유 설정
+            historyType = SellerApprovalHistory.ActionType.REJECTED;
+            historyReason = request.getReason();
+        }
+
+        // 4. SellerApprovalHistory에 이력 기록 (공통)
+        SellerApprovalHistory history = SellerApprovalHistory.builder()
+                .user(user) // UserEntity 객체 'user' 전달
+                .sellerApplication(application) // SellerApplication 객체 'application' 전달
+                .type(historyType) // 이력 타입
+                .reason(historyReason) // 이력 사유
+                .build();
+        sellerApprovalHistoryRepository.save(history);
+
+        return application; // 처리된 신청서 반환
     }
 }
