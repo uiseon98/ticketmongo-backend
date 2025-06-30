@@ -60,9 +60,9 @@ public class AdminSellerController {
             @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
 
         // 현재 컨트롤러에서 @PreAuthorize를 통해 ADMIN 역할 검증
-        // TODO: (선택) 서비스 계층에서 adminUser.getUserId()를 사용하여 관리자 권한을 최종적으로 검증하거나 로깅할 수 있습니다.
+        // TODO: (선택) 서비스 계층에서 adminUser.getUserId()를 사용하여 관리자 권한을 최종적으로 검증 또는 로깅
         // 현재 AdminSellerService.getPendingApplications()는 adminId 파라미터를 받지 않으므로,
-        // 이를 위해 서비스 메서드 시그니처 변경 및 추가 로직 구현이 필요할 수 있습니다.
+        // 이를 위해 서비스 메서드 시그니처 변경 및 추가 로직 구현이 필요할 수 있음
         List<AdminSellerApplicationListResponseDTO> pendingApplications = adminSellerService.getPendingSellerApplications();
 
         return ResponseEntity.ok(SuccessResponse.of("대기 중인 판매자 신청 목록 조회 성공", pendingApplications));
@@ -160,5 +160,32 @@ public class AdminSellerController {
         List<SellerApprovalHistoryResponseDTO> history = adminSellerService.getSellerApprovalHistoryForUser(userId, adminUser.getUserId());
 
         return ResponseEntity.ok(SuccessResponse.of("특정 유저의 판매자 권한 이력 조회 성공", history));
+    }
+
+    /**
+     * API-04-05: 현재 판매자 목록 조회 (관리자)
+     * @param adminUser 현재 로그인된 관리자 정보
+     * @return 현재 판매자(Role.SELLER)인 유저 목록 DTO 리스트
+     */
+    @Operation(
+            summary = "현재 판매자 목록 조회",
+            description = "관리자가 현재 판매자 권한을 가진 유저 목록을 조회합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "403", description = "권한 없음")
+    })
+    @GetMapping("/sellers") // API-04-05 명세에 맞춰 경로 추가
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SuccessResponse<List<AdminSellerApplicationListResponseDTO>>> getCurrentSellers(
+            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
+
+        // TODO: (선택) 서비스 계층에서 adminUser.getUserId()를 사용하여 관리자 권한을 최종적으로 검증
+        // 현재 AdminSellerService.getCurrentSellers()는 adminId 파라미터를 받지 않으므로,
+        // 이를 위해 서비스 메서드 시그니처 변경 및 추가 로직 구현이 필요할 수 있음
+        List<AdminSellerApplicationListResponseDTO> currentSellers = adminSellerService.getCurrentSellers();
+
+        return ResponseEntity.ok(SuccessResponse.of("현재 판매자 목록 조회 성공", currentSellers));
     }
 }
