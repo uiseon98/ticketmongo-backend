@@ -29,9 +29,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.BindingResult;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import com.team03.ticketmon._global.validation.OnReject;
+
+import com.team03.ticketmon._global.exception.ErrorResponse;
+import com.team03.ticketmon._global.exception.ErrorCode;
 
 import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
 
@@ -47,6 +55,7 @@ import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
 public class AdminSellerController {
 
     private final AdminSellerService adminSellerService;
+    private final Validator validator;
 
     /**
      * API-04-01: 대기 중인 판매자 신청 목록 조회
@@ -96,12 +105,31 @@ public class AdminSellerController {
     })
     @PatchMapping("/seller-requests/{userId}/process") // 변경된 RequestMapping에 맞춰 경로 명시
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<SuccessResponse<String>> processSellerApplication(
-            @Parameter(description = "처리할 판매자(유저) ID", example = "1")
-            @PathVariable Long userId,
-            @Parameter(description = "승인/반려 요청 정보", required = true)
-            @Valid @RequestBody AdminApprovalRequestDTO request,
-            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
+    public ResponseEntity<?> processSellerApplication( // 반환 타입을 SuccessResponse<String>에서 ?로 변경
+                                                       @Parameter(description = "처리할 판매자(유저) ID", example = "1")
+                                                       @PathVariable Long userId,
+                                                       @Parameter(description = "승인/반려 요청 정보", required = true)
+                                                       @Valid @RequestBody AdminApprovalRequestDTO request,
+                                                       BindingResult bindingResult,
+                                                       @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
+
+        // 1. @Valid (기본 그룹) 검증 결과 확인
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(
+                    ErrorResponse.of(ErrorCode.INVALID_INPUT, bindingResult)
+            );
+        }
+
+        // 2. approve가 false(반려)일 경우에만 reason 필드에 대한 추가 유효성 검사 수행
+        if (Boolean.FALSE.equals(request.getApprove())) { // approve가 false인 경우
+            // OnReject 그룹에 속한 유효성 검사를 수동으로 수행
+            Set<ConstraintViolation<AdminApprovalRequestDTO>> violations = validator.validate(request, OnReject.class);
+            if (!violations.isEmpty()) {
+                return ResponseEntity.badRequest().body(
+                        ErrorResponse.of(ErrorCode.INVALID_INPUT, violations.iterator().next().getMessage())
+                );
+            }
+        }
 
         // 서비스 계층에서 adminUser.getUserId()를 사용하여 관리자 권한을 검증하고 처리
         adminSellerService.processSellerApplication(userId, request, adminUser.getUserId());
