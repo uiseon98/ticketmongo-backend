@@ -77,6 +77,14 @@ public class BookingService {
         return savedBooking;
     }
 
+    @Transactional
+    public List<Booking> findBookingList(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        return bookingRepository.findByUserId(userId);
+    }
 
     /**
      * 예매와 관련된 내부 상태를 '취소'로 최종 처리
