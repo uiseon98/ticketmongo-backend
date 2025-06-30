@@ -4,6 +4,7 @@ import com.team03.ticketmon._global.exception.SuccessResponse;
 import com.team03.ticketmon.admin.dto.AdminApprovalRequestDTO;
 import com.team03.ticketmon.admin.dto.AdminRevokeRequestDTO;
 import com.team03.ticketmon.admin.dto.AdminSellerApplicationListResponseDTO;
+import com.team03.ticketmon.admin.dto.SellerApprovalHistoryResponseDTO;
 import com.team03.ticketmon.admin.service.AdminSellerService;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -131,5 +132,33 @@ public class AdminSellerController {
         adminSellerService.revokeSellerRole(userId, request, adminUser.getUserId());
 
         return ResponseEntity.ok(SuccessResponse.of("판매자 권한이 강제로 해제되었습니다.", "SUCCESS"));
+    }
+
+    /**
+     * API-04-04: 판매자 권한 상세 보기 (특정 유저 이력 조회)
+     * @param userId 이력을 조회할 유저의 ID
+     * @param adminUser 현재 로그인된 관리자 정보
+     * @return 특정 유저의 판매자 권한 이력 DTO 리스트
+     */
+    @Operation(
+            summary = "특정 유저의 판매자 권한 이력 조회",
+            description = "관리자가 특정 유저의 판매자 권한 신청 및 변경 이력을 상세 조회합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "사용자 정보 없음")
+    })
+    @GetMapping("/sellers/{userId}/approval-history") // API-04-04 명세에 맞춰 경로 수정
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SuccessResponse<List<SellerApprovalHistoryResponseDTO>>> getSellerApprovalHistoryForUser(
+            @Parameter(description = "이력을 조회할 유저 ID", example = "1")
+            @PathVariable Long userId,
+            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
+
+        List<SellerApprovalHistoryResponseDTO> history = adminSellerService.getSellerApprovalHistoryForUser(userId, adminUser.getUserId());
+
+        return ResponseEntity.ok(SuccessResponse.of("특정 유저의 판매자 권한 이력 조회 성공", history));
     }
 }
