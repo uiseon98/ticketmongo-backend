@@ -18,6 +18,8 @@ import com.team03.ticketmon.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -231,5 +233,42 @@ public class AdminSellerService {
                         // 여기서는 일단 UserEntity가 가진 정보만 DTO에 매핑
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * API-04-06: 전체 판매자 이력 목록 조회 (검색, 정렬, 필터 포함)
+     * @param typeFilter 이력 타입 필터 (예: REQUEST, APPROVED, REJECTED 등. Nullable)
+     * @param keyword 검색 키워드 (유저 아이디, 닉네임, 업체명, 사업자번호, 사유 등. Nullable)
+     * @param pageable 페이징 및 정렬 정보
+     * @param adminId 현재 처리하는 관리자의 ID
+     * @return 판매자 권한 이력 DTO 페이지
+     */
+    public Page<SellerApprovalHistoryResponseDTO> getAllSellerApprovalHistory(
+            Optional<SellerApprovalHistory.ActionType> typeFilter,
+            Optional<String> keyword,
+            Pageable pageable,
+            Long adminId) {
+
+        // 1. 관리자 유효성 검사 (AdminService 내 공통 로직으로 분리도 가능)
+        UserEntity adminUser = userRepository.findById(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "관리자 정보를 찾을 수 없습니다."));
+        if (adminUser.getRole() != Role.ADMIN) {
+            throw new BusinessException(ErrorCode.ADMIN_ACCESS_DENIED, "관리자만 이 작업을 수행할 수 있습니다.");
+        }
+
+        // 2. 검색 및 필터링 로직 구현
+        Page<SellerApprovalHistory> historyPage;
+
+        // 여기서는 예시로 typeFilter만 사용하여 조회하고, keyword 필터는 나중에 확장
+        if (typeFilter.isPresent()) {
+            historyPage = sellerApprovalHistoryRepository.findByTypeOrderByCreatedAtDesc(typeFilter.get(), pageable);
+        } else {
+            historyPage = sellerApprovalHistoryRepository.findAll(pageable);
+        }
+        // TODO: keyword 필터링 로직 추가 (user, sellerApplication 조인하여 검색 필요)
+        // 예를 들어, Specification 또는 Querydsl/QueryjPA를 사용하면 복잡한 동적 쿼리 생성이 용이함
+
+        // 3. 엔티티 페이지를 DTO 페이지로 변환하여 반환
+        return historyPage.map(SellerApprovalHistoryResponseDTO::fromEntity);
     }
 }
