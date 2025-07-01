@@ -72,7 +72,6 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		@Param("minPrice") BigDecimal minPrice,
 		@Param("maxPrice") BigDecimal maxPrice);
 
-	@EntityGraph(attributePaths = {"concertSeats"})
 	Page<Concert> findByStatusOrderByConcertDateAsc(ConcertStatus status,
 		Pageable pageable);
 
@@ -83,7 +82,6 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 
 	List<Concert> findByStatusInOrderByConcertDateAsc(List<ConcertStatus> statuses);
 
-	@EntityGraph(attributePaths = {"concertSeats"})
 	Page<Concert> findByStatusInOrderByConcertDateAsc(List<ConcertStatus> statuses, Pageable pageable);
 
 	/**
