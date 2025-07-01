@@ -18,18 +18,34 @@ RUN ./gradlew dependencies --no-daemon || true
 COPY . /app
 
 # [빌드 타임 ARG] GitHub 패키지 인증 정보를 외부에서 받아오기 (docker-compose.yml → Dockerfile)
-ARG GITHUB_PACKAGES_USER
-ARG GITHUB_PACKAGES_TOKEN
+#ARG GH_PACKAGES_USER
+#ARG GH_PACKAGES_TOKEN
 
 # [런타임 ENV] Gradle에서 System.getenv(...)로 읽을 수 있도록 환경변수로 설정
-ENV GITHUB_PACKAGES_USER=$GITHUB_PACKAGES_USER
-ENV GITHUB_PACKAGES_TOKEN=$GITHUB_PACKAGES_TOKEN
+#ENV GH_PACKAGES_USER=$GH_PACKAGES_USER
+#ENV GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN
 
-RUN echo "🔎 GITHUB_PACKAGES_USER=$GITHUB_PACKAGES_USER" && \
-    echo "🔑 GITHUB_PACKAGES_TOKEN=$GITHUB_PACKAGES_TOKEN"
+# PAT 값을 로그에 그대로 출력하면 토큰 유출 위험 - 주석 처리
+#RUN echo "🔎 GH_PACKAGES_USER=$GH_PACKAGES_USER" && \
+#    echo "🔑 GH_PACKAGES_TOKEN=$GH_PACKAGES_TOKEN"
+
+# Dockerfile을 BuildKit secrets와 함께 사용하도록 준비 (향후 Docker 빌드 시 활용)
+# 이 방식은 이미지 레이어나 빌드 로그에 PAT가 남지 않도록 해줍니다.
+# GitHub Actions에서 docker/build-push-action 등과 함께 사용될 때,
+# docker build --secret id=gh_user,env=GH_PACKAGES_USER \
+#               --secret id=gh_token,env=GH_PACKAGES_TOKEN .
+# 와 같이 빌드 명령에 추가되어야 합니다.
+#
+# RUN --mount=type=secret,id=gh_user --mount=type=secret,id=gh_token \
+#     export GH_PACKAGES_USER=$(cat /run/secrets/gh_user) && \
+#     export GH_PACKAGES_TOKEN=$(cat /run/secrets/gh_token) && \
+#     ./gradlew clean bootJar --no-daemon
+
 
 # Spring Boot 애플리케이션의 실행 가능한 JAR 파일을 빌드
 # '--no-daemon' 옵션은 Docker 빌드 환경에서 Gradle 데몬 사용을 방지
+# ✨ 현재 CI는 Dockerfile 내부에서 GH_PACKAGES_USER/TOKEN을 환경 변수로 필요로 하지 않으므로,
+# ✨ 직접적인 ENV 설정이나 echo는 제거하고 이 명령어를 그대로 사용합니다.
 RUN ./gradlew clean bootJar --no-daemon
 
 # ✅ 2단계: 최적화된 실제 실행 환경을 구성하는 단계
