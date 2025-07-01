@@ -2,6 +2,7 @@ package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
+import com.team03.ticketmon.concert.repository.ConcertSeatRepository;
 import com.team03.ticketmon.seat.domain.SeatStatus;
 import com.team03.ticketmon.seat.dto.SeatStatusResponse;
 import com.team03.ticketmon.seat.exception.SeatReservationException;
@@ -20,14 +21,11 @@ import java.util.Optional;
 
 /**
  * 좌석 예약 관리 컨트롤러
- * - 좌석 임시 선점 (분산 락 적용)
- * - 좌석 선점 해제 (권한 검증)
- * - 실시간 동시성 제어
- *
- * ✅ 개선사항:
+ * ✅ 수정사항:
+ * - ConcertSeatRepository 의존성 추가
+ * - DB 존재성 검증 로직 추가
  * - SeatInfoHelper 활용으로 실제 DB 조회
- * - 컨트롤러 레벨 분산 락 제거 (서비스 레이어에서 처리)
- * - 클린한 코드 구조
+ * - 서비스 레이어에서 분산 락 처리
  */
 @Tag(name = "좌석 예약 관리", description = "좌석 선점/해제 API (분산 락 적용)")
 @Slf4j
@@ -37,18 +35,18 @@ import java.util.Optional;
 public class SeatReservationController {
 
     private final SeatStatusService seatStatusService;
-    private final SeatInfoHelper seatInfoHelper; // ✅ 추가: 실제 DB 조회용
+    private final SeatInfoHelper seatInfoHelper;
+    private final ConcertSeatRepository concertSeatRepository; // ✅ 추가: 존재성 검증용
 
     /**
-     * 좌석 임시 선점
-     * ✅ 개선: 실제 DB에서 좌석 정보 조회, 서비스 레이어에서 분산 락 처리
+     * ✅ 수정된 좌석 임시 선점 - 존재성 검증 추가
      */
     @Operation(summary = "좌석 임시 선점", description = "좌석을 5분간 임시 선점합니다 (분산 락 적용)")
     @PostMapping("/concerts/{concertId}/seats/{seatId}/reserve")
     public ResponseEntity<SuccessResponse<SeatStatusResponse>> reserveSeat(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
-            @Parameter(description = "좌석 ID", example = "1")
+            @Parameter(description = "좌석 ID (ConcertSeat ID)", example = "1")
             @PathVariable Long seatId,
             @AuthenticationPrincipal CustomUserDetails user) {
 
@@ -56,8 +54,18 @@ public class SeatReservationController {
             log.info("좌석 선점 요청: concertId={}, seatId={}, userId={}",
                     concertId, seatId, user.getUserId());
 
+            // === 임계 구역 시작 ===
+
             // 1. 현재 좌석 상태 확인 (빠른 검증)
             Optional<SeatStatus> currentStatus = seatStatusService.getSeatStatus(concertId, seatId);
+
+            // ✅ 1-1. DB에서 실제 좌석 존재 여부 확인 (ConcertSeat ID 기반)
+            if (!concertSeatRepository.existsByConcertIdAndConcertSeatId(concertId, seatId)) {
+                log.warn("존재하지 않는 좌석 선점 시도: concertId={}, seatId={}, userId={}",
+                        concertId, seatId, user.getUserId());
+                return ResponseEntity.badRequest()
+                        .body(SuccessResponse.of("존재하지 않는 좌석입니다.", null));
+            }
 
             if (currentStatus.isPresent() && !currentStatus.get().isAvailable()) {
                 SeatStatus seat = currentStatus.get();
@@ -80,20 +88,20 @@ public class SeatReservationController {
                 }
             }
 
-            // 2. ✅ 핵심 개선: 실제 DB에서 좌석 정보 조회
+            // 2. ✅ 수정: ConcertSeat ID 기반 좌석 정보 조회
             String seatInfo;
             try {
-                seatInfo = seatInfoHelper.getSeatInfoFromDB(concertId, seatId);
-                log.debug("DB에서 좌석 정보 조회 성공: concertId={}, seatId={}, seatInfo={}",
+                seatInfo = seatInfoHelper.getSeatInfoByConcertSeatId(concertId, seatId);
+                log.debug("ConcertSeat ID 기반 좌석 정보 조회 성공: concertId={}, concertSeatId={}, seatInfo={}",
                         concertId, seatId, seatInfo);
             } catch (Exception e) {
-                log.warn("DB 좌석 정보 조회 실패, 더미 데이터 사용: concertId={}, seatId={}, error={}",
+                log.warn("DB 좌석 정보 조회 실패, 더미 데이터 사용: concertId={}, concertSeatId={}, error={}",
                         concertId, seatId, e.getMessage());
                 // 폴백: 더미 데이터 생성 (하위 호환성)
                 seatInfo = seatInfoHelper.generateDummySeatInfo(seatId.intValue());
             }
 
-            // 3. ✅ 개선: 서비스 레이어에서 분산 락 처리 (이중 락 문제 해결)
+            // 3. 서비스 레이어에서 분산 락 처리
             SeatStatus reservedSeat = seatStatusService.reserveSeat(
                     concertId, seatId, user.getUserId(), seatInfo);
 
@@ -119,14 +127,13 @@ public class SeatReservationController {
 
     /**
      * 좌석 선점 해제
-     * ✅ 개선: 깔끔한 예외 처리, 권한 검증 강화
      */
     @Operation(summary = "좌석 선점 해제", description = "임시 선점된 좌석을 해제합니다 (권한 검증 포함)")
     @DeleteMapping("/concerts/{concertId}/seats/{seatId}/release")
     public ResponseEntity<SuccessResponse<String>> releaseSeat(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
-            @Parameter(description = "좌석 ID", example = "1")
+            @Parameter(description = "좌석 ID (ConcertSeat ID)", example = "1")
             @PathVariable Long seatId,
             @AuthenticationPrincipal CustomUserDetails user) {
 
@@ -161,7 +168,4 @@ public class SeatReservationController {
                     .body(SuccessResponse.of("좌석 해제 처리 중 오류가 발생했습니다.", null));
         }
     }
-
-    // ✅ 기존 더미 메서드 제거: generateSeatInfo() 삭제
-    // 이제 SeatInfoHelper.getSeatInfoFromDB() 사용
 }

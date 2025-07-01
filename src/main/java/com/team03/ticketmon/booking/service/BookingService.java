@@ -22,6 +22,7 @@ import java.util.List;
 
 /**
  * 예매(Booking)와 관련된 핵심 비즈니스 로직을 처리하는 서비스
+ * ✅ 수정사항: 매개변수명 일관성 확보 (concertSeatId 사용)
  */
 @Slf4j
 @Service
@@ -41,8 +42,7 @@ public class BookingService {
      * @param createDto 예매 생성에 필요한 데이터(콘서트 ID, 좌석 ID 목록)
      * @param userId    예매를 요청한 사용자의 ID
      * @return 생성된 Booking 엔티티
-     * @throws BusinessException     콘서트 또는 좌석 정보를 찾을 수 없을 때 (ErrorCode.CONCERT_NOT_FOUND)
-     * @throws IllegalStateException       선점된 좌석의 상태가 유효하지 않을 때 (다른 사용자가 선점했거나, 이미 예매된 경우)
+     * @throws BusinessException 콘서트 또는 좌석 정보를 찾을 수 없을 때
      */
     @Transactional
     public Booking createPendingBooking(BookingCreateRequest createDto, Long userId) {
@@ -62,7 +62,7 @@ public class BookingService {
             throw new BusinessException(ErrorCode.SEAT_NOT_FOUND);
         }
 
-        // 2-1. 모든 좌석의 선점 상태를 한번에 검증 (로직은 동일)
+        // 2-1. ✅ 수정: concertSeatId 사용으로 매개변수명 일관성 확보
         selectedSeats.forEach(seat ->
                 validateSeatReservation(seat.getConcert().getConcertId(), seat.getConcertSeatId(), userId)
         );
@@ -97,14 +97,14 @@ public class BookingService {
         // 1. 예매 상태를 CANCELED로 변경
         booking.cancel();
 
-        // [좌석 반환] 예매된 좌석들을 다시 'AVAILABLE' 상태로 변경하는 로직 추가,
-         booking.getTickets().forEach(ticket ->
-             seatStatusService.releaseSeat(
-                 booking.getConcert().getConcertId(),
-                 ticket.getConcertSeat().getSeat().getSeatId(),
-                 booking.getUserId()
-             )
-         );
+        // [좌석 반환] 예매된 좌석들을 다시 'AVAILABLE' 상태로 변경하는 로직 추가
+        booking.getTickets().forEach(ticket ->
+                seatStatusService.releaseSeat(
+                        booking.getConcert().getConcertId(),
+                        ticket.getConcertSeat().getConcertSeatId(), // ✅ 수정: concertSeatId 사용
+                        booking.getUserId()
+                )
+        );
 
         // 히스토리 테이블로 이관하는 로직 호출
         archiveBookingAndTickets(booking);
@@ -152,12 +152,14 @@ public class BookingService {
     }
 
     /**
+     * ✅ 수정된 좌석 선점 검증 메서드 - 매개변수명 일관성 확보
      * Redis의 좌석 상태를 확인하여, 해당 좌석이 주어진 사용자에 의해 유효하게 선점되었는지 검증합니다.
      */
-    private void validateSeatReservation(Long concertId, Long seatId, Long userId) {
-        seatStatusService.getSeatStatus(concertId, seatId)
+    private void validateSeatReservation(Long concertId, Long concertSeatId, Long userId) {
+        seatStatusService.getSeatStatus(concertId, concertSeatId)
                 .filter(status -> status.isReserved() && userId.equals(status.getUserId()) && !status.isExpired())
-                .orElseThrow(() -> new BusinessException(ErrorCode.SEAT_ALREADY_TAKEN, "좌석 선점 정보가 유효하지 않습니다. Seat ID: " + seatId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.SEAT_ALREADY_TAKEN,
+                        "좌석 선점 정보가 유효하지 않습니다. ConcertSeat ID: " + concertSeatId)); // ✅ 수정: 메시지 업데이트
     }
 
     /**
@@ -180,5 +182,3 @@ public class BookingService {
         log.info("[시뮬레이션] Booking ID {} 및 관련 Ticket 정보를 히스토리 테이블로 이관 완료.", booking.getBookingId());
     }
 }
-
-
