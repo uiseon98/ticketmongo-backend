@@ -15,11 +15,11 @@ import java.util.Optional;
 
 /**
  * 좌석 정보 헬퍼 서비스
- * ✅ 개선사항:
+ * ✅ 수정사항:
+ * - ConcertSeatId 기반 조회 메서드 추가
  * - 실제 DB 조회 기능 완전 구현
  * - 성능 최적화: 캐시 적용
  * - 더미 데이터 폴백 지원 (하위 호환성)
- * - 에러 처리 강화
  */
 @Slf4j
 @Service
@@ -30,19 +30,74 @@ public class SeatInfoHelper {
     private final ConcertSeatRepository concertSeatRepository;
 
     /**
-     * ✅ 핵심 개선: 실제 DB에서 좌석 정보 조회 (캐시 적용)
+     * ✅ 새로운 메서드: ConcertSeat ID 기반 좌석 정보 조회
+     * 컨트롤러에서 ConcertSeat ID를 사용할 때 호출
      *
      * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
+     * @param concertSeatId ConcertSeat ID
      * @return 좌석 정보 문자열 (예: "A-1-15" = 구역-열-번호)
+     * @throws BusinessException 좌석을 찾을 수 없는 경우
+     */
+    @Cacheable(value = "seatInfoByConcertSeatId", key = "#concertId + ':' + #concertSeatId", unless = "#result == null")
+    public String getSeatInfoByConcertSeatId(Long concertId, Long concertSeatId) {
+        try {
+            log.debug("ConcertSeat ID로 좌석 정보 조회: concertId={}, concertSeatId={}", concertId, concertSeatId);
+
+            // ConcertSeat ID로 직접 조회
+            Optional<ConcertSeat> concertSeatOpt = concertSeatRepository.findById(concertSeatId);
+
+            if (concertSeatOpt.isEmpty()) {
+                log.warn("ConcertSeat을 찾을 수 없음: concertSeatId={}", concertSeatId);
+                throw new BusinessException(ErrorCode.SEAT_NOT_FOUND,
+                        String.format("ConcertSeat을 찾을 수 없습니다. ConcertSeat ID: %d", concertSeatId));
+            }
+
+            ConcertSeat concertSeat = concertSeatOpt.get();
+
+            // 콘서트 ID 일치 확인
+            if (!concertSeat.getConcert().getConcertId().equals(concertId)) {
+                log.warn("콘서트 ID 불일치: expected={}, actual={}, concertSeatId={}",
+                        concertId, concertSeat.getConcert().getConcertId(), concertSeatId);
+                throw new BusinessException(ErrorCode.SEAT_NOT_FOUND,
+                        "해당 콘서트에 속하지 않는 좌석입니다.");
+            }
+
+            Seat seat = concertSeat.getSeat();
+
+            // 좌석 정보 포맷: 구역-열-번호 (A-1-15)
+            String seatInfo = String.format("%s-%s-%d",
+                    seat.getSection() != null ? seat.getSection() : "?",
+                    seat.getSeatRow() != null ? seat.getSeatRow() : "?",
+                    seat.getSeatNumber() != null ? seat.getSeatNumber() : 0);
+
+            log.debug("ConcertSeat ID 기반 좌석 정보 조회 성공: concertSeatId={}, seatInfo={}",
+                    concertSeatId, seatInfo);
+
+            return seatInfo;
+
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("ConcertSeat ID 기반 좌석 정보 조회 중 오류: concertSeatId={}", concertSeatId, e);
+            throw new BusinessException(ErrorCode.SERVER_ERROR,
+                    "좌석 정보 조회 중 오류가 발생했습니다.");
+        }
+    }
+
+    /**
+     * 기존 메서드: Seat ID 기반 좌석 정보 조회 (하위 호환성 유지)
+     *
+     * @param concertId 콘서트 ID
+     * @param seatId Seat ID
+     * @return 좌석 정보 문자열
      * @throws BusinessException 좌석을 찾을 수 없는 경우
      */
     @Cacheable(value = "seatInfo", key = "#concertId + ':' + #seatId", unless = "#result == null")
     public String getSeatInfoFromDB(Long concertId, Long seatId) {
         try {
-            log.debug("DB에서 좌석 정보 조회 시작: concertId={}, seatId={}", concertId, seatId);
+            log.debug("Seat ID로 좌석 정보 조회: concertId={}, seatId={}", concertId, seatId);
 
-            // ✅ 성능 최적화: 직접 쿼리로 특정 좌석만 조회 (기존 전체 조회 후 필터링 방식 개선)
+            // Seat ID로 ConcertSeat 조회
             Optional<ConcertSeat> concertSeatOpt = concertSeatRepository
                     .findByConcertIdAndSeatId(concertId, seatId);
 
@@ -55,33 +110,27 @@ public class SeatInfoHelper {
             ConcertSeat concertSeat = concertSeatOpt.get();
             Seat seat = concertSeat.getSeat();
 
-            // ✅ 좌석 정보 포맷 개선: 구역-열-번호 (A-1-15)
             String seatInfo = String.format("%s-%s-%d",
                     seat.getSection() != null ? seat.getSection() : "?",
                     seat.getSeatRow() != null ? seat.getSeatRow() : "?",
                     seat.getSeatNumber() != null ? seat.getSeatNumber() : 0);
 
-            log.debug("좌석 정보 조회 성공: concertId={}, seatId={}, seatInfo={}",
+            log.debug("Seat ID 기반 좌석 정보 조회 성공: concertId={}, seatId={}, seatInfo={}",
                     concertId, seatId, seatInfo);
 
             return seatInfo;
 
         } catch (BusinessException e) {
-            // 비즈니스 예외는 그대로 전파
             throw e;
         } catch (Exception e) {
-            log.error("좌석 정보 조회 중 예상치 못한 오류: concertId={}, seatId={}", concertId, seatId, e);
+            log.error("Seat ID 기반 좌석 정보 조회 중 오류: concertId={}, seatId={}", concertId, seatId, e);
             throw new BusinessException(ErrorCode.SERVER_ERROR,
                     "좌석 정보 조회 중 오류가 발생했습니다.");
         }
     }
 
     /**
-     * ✅ 새로운 메서드: 좌석 존재 여부만 빠르게 확인
-     *
-     * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
-     * @return 좌석 존재 여부
+     * 좌석 존재 여부만 빠르게 확인 (Seat ID 기반)
      */
     @Cacheable(value = "seatExists", key = "#concertId + ':' + #seatId")
     public boolean seatExists(Long concertId, Long seatId) {
@@ -94,11 +143,20 @@ public class SeatInfoHelper {
     }
 
     /**
-     * ✅ 개선된 더미 데이터 생성 (하위 호환성 + 폴백용)
-     * 실제 DB 조회 실패 시 폴백으로 사용
-     *
-     * @param seatNumber 좌석 번호 (1부터 시작)
-     * @return 더미 좌석 정보 문자열 (예: "A-1")
+     * ✅ 새로운 메서드: ConcertSeat 존재 여부 확인
+     */
+    @Cacheable(value = "concertSeatExists", key = "#concertId + ':' + #concertSeatId")
+    public boolean concertSeatExists(Long concertId, Long concertSeatId) {
+        try {
+            return concertSeatRepository.existsByConcertIdAndConcertSeatId(concertId, concertSeatId);
+        } catch (Exception e) {
+            log.error("ConcertSeat 존재 여부 확인 중 오류: concertId={}, concertSeatId={}", concertId, concertSeatId, e);
+            return false;
+        }
+    }
+
+    /**
+     * 더미 데이터 생성 (하위 호환성 + 폴백용)
      */
     public String generateDummySeatInfo(int seatNumber) {
         log.debug("더미 좌석 정보 생성: seatNumber={}", seatNumber);
@@ -115,15 +173,12 @@ public class SeatInfoHelper {
         int seatInSection;
 
         if (seatNumber <= SEATS_PER_SECTION) {
-            // A구역: 1-50
             section = "A";
             seatInSection = seatNumber;
         } else if (seatNumber <= SEATS_PER_SECTION * 2) {
-            // B구역: 51-100
             section = "B";
             seatInSection = seatNumber - SEATS_PER_SECTION;
         } else {
-            // C구역: 101-150
             section = "C";
             seatInSection = seatNumber - (SEATS_PER_SECTION * 2);
         }
@@ -135,23 +190,8 @@ public class SeatInfoHelper {
     }
 
     /**
-     * ✅ 새로운 메서드: 좌석 정보 캐시 무효화
-     * 좌석 정보가 변경될 때 호출
-     *
-     * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
-     */
-    public void evictSeatInfoCache(Long concertId, Long seatId) {
-        // Spring Cache 무효화는 @CacheEvict 애노테이션으로 처리
-        log.debug("좌석 정보 캐시 무효화: concertId={}, seatId={}", concertId, seatId);
-    }
-
-    /**
-     * ✅ 개선된 정적 메서드: Seat 엔티티로부터 좌석 정보 생성
+     * 정적 메서드: Seat 엔티티로부터 좌석 정보 생성
      * SeatCacheInitService에서 사용
-     *
-     * @param seat Seat 엔티티
-     * @return 좌석 정보 문자열
      */
     public static String generateSeatInfoFromEntity(Seat seat) {
         if (seat == null) {
