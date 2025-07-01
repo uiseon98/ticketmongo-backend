@@ -1,8 +1,15 @@
 app:
   max-active-users: 5 # 예매 페이지에 동시 진입 가능한 최대 사용자 수
   access-key-ttl-minutes: 1 # 예매 페이지 접근 키의 유효시간 (단위: 분)
-  # ✅ 새로 추가: 스케줄러 관련 설정 - [좌석 관리 및 예매 모듈]
+    # ✅ 새로 추가: 스케줄러 관련 설정 - [좌석 관리 및 예매 모듈]
   scheduler:
+    # 좌석 동기화 스케줄러 설정
+    seat-sync:
+      enabled: true          # 좌석 동기화 스케줄러 활성화
+      interval-minutes: 30   # 실행 주기 (분) - 현재는 cron으로 설정되어 있음
+      lock-wait-seconds: 5   # 분산 락 획득 대기 시간
+      lock-lease-seconds: 1800  # 분산 락 유지 시간 (30분)
+      emergency-enabled: true   # 긴급 동기화 기능 활성화
     seat-cache-warmup:
       enabled: true          # 좌석 캐시 Warm-up 스케줄러 활성화
       interval-minutes: 5    # 실행 주기 (분)
@@ -55,6 +62,9 @@ server:
 logging:
   level:
     root: ${LOG_LEVEL:INFO}  # 로그 레벨 설정 (INFO / WARN / ERROR)
+    com.team03.ticketmon.seat.service.SeatSyncService: DEBUG
+    com.team03.ticketmon.seat.scheduler.SeatSyncScheduler: INFO
+    com.team03.ticketmon.seat.controller.SeatSyncController: INFO
 
 toss:
   api:
