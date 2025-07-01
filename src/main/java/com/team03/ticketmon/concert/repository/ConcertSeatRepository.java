@@ -11,8 +11,8 @@ import java.util.Optional;
 /**
  * Concert Seat Repository
  * 콘서트 좌석 데이터 접근 계층
+ * ✅ 수정사항: ConcertSeat ID 기반 존재성 검증 메서드 추가
  */
-
 @Repository
 public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> {
 
@@ -20,13 +20,12 @@ public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> 
 	 * 예약 가능한 좌석 조회
 	 */
 	@Query("SELECT cs FROM ConcertSeat cs " +
-		"LEFT JOIN cs.ticket t " +
-		"WHERE cs.concert.concertId = :concertId " +
-		"AND t.ticketId IS NULL " +
-		"ORDER BY cs.seat.section, cs.seat.seatRow, cs.seat.seatNumber")
+			"LEFT JOIN cs.ticket t " +
+			"WHERE cs.concert.concertId = :concertId " +
+			"AND t.ticketId IS NULL " +
+			"ORDER BY cs.seat.section, cs.seat.seatRow, cs.seat.seatNumber")
 	List<ConcertSeat> findAvailableSeatsByConcertId(@Param("concertId") Long concertId);
 
-	// 📌 아래 메서드들은 [좌석 관리 및 예매 모듈] 파트에서 사용하는 메서드 입니다.
 	/**
 	 * 기존 메서드: 특정 콘서트의 모든 좌석 조회 (Fetch Join 최적화)
 	 */
@@ -39,7 +38,7 @@ public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> 
 	List<ConcertSeat> findByConcertIdWithDetails(@Param("concertId") Long concertId);
 
 	/**
-	 * ✅ 새로운 메서드: 특정 콘서트의 특정 좌석만 조회 (성능 최적화)
+	 * 특정 콘서트의 특정 좌석만 조회 (성능 최적화)
 	 * SeatInfoHelper에서 사용
 	 */
 	@Query("SELECT cs FROM ConcertSeat cs " +
@@ -51,7 +50,7 @@ public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> 
 												   @Param("seatId") Long seatId);
 
 	/**
-	 * ✅ 새로운 메서드: 좌석 존재 여부만 빠르게 확인 (EXISTS 쿼리)
+	 * 좌석 존재 여부만 빠르게 확인 (EXISTS 쿼리)
 	 * SeatInfoHelper에서 사용
 	 */
 	@Query("SELECT CASE WHEN COUNT(cs) > 0 THEN true ELSE false END " +
@@ -62,7 +61,18 @@ public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> 
 									   @Param("seatId") Long seatId);
 
 	/**
-	 * ✅ 새로운 메서드: 특정 콘서트의 예매 가능한 좌석 수 조회
+	 * ✅ 새로운 메서드: ConcertSeat ID 기반 존재성 검증
+	 * 컨트롤러와 서비스에서 실제 좌석 존재 여부 확인용
+	 */
+	@Query("SELECT CASE WHEN COUNT(cs) > 0 THEN true ELSE false END " +
+			"FROM ConcertSeat cs " +
+			"WHERE cs.concert.concertId = :concertId " +
+			"AND cs.concertSeatId = :concertSeatId")
+	boolean existsByConcertIdAndConcertSeatId(@Param("concertId") Long concertId,
+											  @Param("concertSeatId") Long concertSeatId);
+
+	/**
+	 * 특정 콘서트의 예매 가능한 좌석 수 조회
 	 * 통계/모니터링용
 	 */
 	@Query("SELECT COUNT(cs) FROM ConcertSeat cs " +
@@ -71,7 +81,7 @@ public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> 
 	long countAvailableSeatsByConcertId(@Param("concertId") Long concertId);
 
 	/**
-	 * ✅ 새로운 메서드: 특정 콘서트의 예매 완료된 좌석 수 조회
+	 * 특정 콘서트의 예매 완료된 좌석 수 조회
 	 * 통계/모니터링용
 	 */
 	@Query("SELECT COUNT(cs) FROM ConcertSeat cs " +
@@ -80,7 +90,7 @@ public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> 
 	long countBookedSeatsByConcertId(@Param("concertId") Long concertId);
 
 	/**
-	 * ✅ 새로운 메서드: 구역별 좌석 조회 (구역별 배치도용)
+	 * 구역별 좌석 조회 (구역별 배치도용)
 	 * SeatLayoutService에서 사용
 	 */
 	@Query("SELECT cs FROM ConcertSeat cs " +
@@ -94,7 +104,7 @@ public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> 
 												@Param("section") String section);
 
 	/**
-	 * ✅ 새로운 메서드: 특정 사용자의 예매 좌석 조회
+	 * 특정 사용자의 예매 좌석 조회
 	 * 사용자별 예매 내역 확인용
 	 */
 	@Query("SELECT cs FROM ConcertSeat cs " +
