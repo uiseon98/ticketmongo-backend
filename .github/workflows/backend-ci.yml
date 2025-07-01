@@ -71,11 +71,11 @@ jobs:
         if: always() # 빌드 성공, 실패, 취소와 상관없이 항상 실행
         uses: appleboy/discord-action@v1.2.0 # Discord 알림 액션 사용
         with:
-          webhook_id: ${{ secrets.DISCORD_WEBHOOK_ID }} # Discord 웹훅 ID (Secrets에서 가져옴)
-          webhook_token: ${{ secrets.DISCORD_WEBHOOK_TOKEN }} # Discord 웹훅 토큰 Secrets에서 가져옴)
+          # 기존 webhook_id와 webhook_token 대신 webhook_url 사용
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }} # Discord 웹훅 URL (Secrets에서 가져옴)
           username: 'GitHub Actions CI Bot' # Discord에 표시될 봇 이름
           avatar_url: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png' # 봇 아바타 URL
-          message: | # Discord에 보낼 메시지 내용
+          message: |  # Discord에 보낼 메시지 내용
             **Backend CI Pipeline Status**
             Repository: `${{ github.repository }}`
             Branch: `${{ github.ref_name }}`
@@ -83,7 +83,4 @@ jobs:
             Status: `${{ job.status }}`
             <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Workflow Run>
           # 색상 설정 (선택 사항, job.status에 따라 변경 가능)
-          color: |
-              ${{ job.status == 'success' && '00FF00' || '' }}
-              ${{ job.status == 'failure' && 'FF0000' || '' }}
-              ${{ job.status == 'cancelled' && 'FFFF00' || '' }}
+          color: ${{ job.status == 'success' && '#00FF00' || job.status == 'failure' && '#FF0000' || '#FFFF00' }}
