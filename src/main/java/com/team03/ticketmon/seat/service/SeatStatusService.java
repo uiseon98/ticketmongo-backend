@@ -146,19 +146,21 @@ public class SeatStatusService {
     }
 
     /**
-     * 좌석 임시 선점 (원자적 처리, 분산 락 사용)
+     * ✅ 수정된 좌석 임시 선점 메서드 (4개 매개변수 버전)
      * - 좌석 가용성 확인과 선점 처리를 원자적으로 수행
      * - Race Condition 방지 및 중복 예약 차단
-     * - 초기 Redis 캐시의 seatInfo를 보존
+     * - TTL 키 생성으로 자동 만료 처리 지원
+     * - SeatInfoHelper에서 전달받은 좌석 정보 활용
      *
      * @param concertId 콘서트 ID
      * @param seatId 좌석 ID
-     * @param userId 요청 사용자 ID
+     * @param userId 사용자 ID
+     * @param seatInfo 좌석 정보 (SeatInfoHelper에서 제공)
      * @return 선점된 좌석 상태
      * @throws SeatReservationException 좌석 선점 실패 시
      */
     @Transactional
-    public SeatStatus reserveSeat(Long concertId, Long seatId, Long userId) {
+    public SeatStatus reserveSeat(Long concertId, Long seatId, Long userId, String seatInfo) {
         String lockKey = SEAT_LOCK_KEY_PREFIX + concertId + ":" + seatId;
         RLock lock = redissonClient.getLock(lockKey);
 
@@ -171,50 +173,62 @@ public class SeatStatusService {
             }
             log.debug("좌석 락 획득 성공: concertId={}, seatId={}, userId={}", concertId, seatId, userId);
 
-            // 2) 기존 상태 조회
-            SeatStatus old = getSeatStatus(concertId, seatId)
-                    .orElseThrow(() -> new SeatReservationException("존재하지 않는 좌석입니다."));
+            // === 임계 구역 시작 ===
 
-            // 3) BOOKED 상태 검사
-            if (old.getStatus() == SeatStatusEnum.BOOKED) {
-                throw new SeatReservationException("이미 예매 완료된 좌석입니다.");
-            }
-            // 4) 이미 RESERVED 상태일 경우 만료 여부 확인
-            if (old.getStatus() == SeatStatusEnum.RESERVED && !old.isExpired()) {
-                if (userId.equals(old.getUserId())) {
-                    log.info("동일 사용자의 재선점 요청: concertId={}, seatId={}, userId={}", concertId, seatId, userId);
-                    return old;
-                } else {
-                    throw new SeatReservationException("다른 사용자가 선점 중인 좌석입니다.");
+            // 1. 현재 좌석 상태 확인
+            Optional<SeatStatus> currentStatus = getSeatStatus(concertId, seatId);
+
+            if (currentStatus.isPresent()) {
+                SeatStatus seat = currentStatus.get();
+
+                // 이미 예매 완료된 좌석
+                if (seat.getStatus() == SeatStatusEnum.BOOKED) {
+                    throw new SeatReservationException("이미 예매 완료된 좌석입니다.");
+                }
+
+                // 현재 선점 중인 좌석 (만료 여부 확인)
+                if (seat.getStatus() == SeatStatusEnum.RESERVED) {
+                    if (!seat.isExpired()) {
+                        // 같은 사용자의 재요청인지 확인
+                        if (userId.equals(seat.getUserId())) {
+                            log.info("동일 사용자의 좌석 재선점 요청: concertId={}, seatId={}, userId={}",
+                                    concertId, seatId, userId);
+                            return seat; // 기존 선점 상태 반환
+                        } else {
+                            throw new SeatReservationException("다른 사용자가 선점 중인 좌석입니다.");
+                        }
+                    } else {
+                        log.info("만료된 선점 좌석 해제 후 재선점: concertId={}, seatId={}",
+                                concertId, seatId);
+                        // 만료된 선점은 아래에서 새로 선점 처리
+                    }
                 }
             }
 
-            // 5) 새로운 선점 처리
-            LocalDateTime now       = LocalDateTime.now();
+            // 2. 새로운 선점 처리
+            LocalDateTime now = LocalDateTime.now();
             LocalDateTime expiresAt = now.plusMinutes(SEAT_RESERVATION_TTL_MINUTES);
 
-            // 5-1) 기존 캐시의 seatInfo 보존
-            String info = old.getSeatInfo();
-
+            // ✅ 핵심 개선: SeatInfoHelper에서 전달받은 좌석 정보 활용
             SeatStatus reserved = SeatStatus.builder()
-                    .id(old.getId())
-                    .concertId(old.getConcertId())
-                    .seatId(old.getSeatId())
+                    .id(concertId + "-" + seatId)
+                    .concertId(concertId)
+                    .seatId(seatId)
                     .status(SeatStatusEnum.RESERVED)
                     .userId(userId)
                     .reservedAt(now)
                     .expiresAt(expiresAt)
-                    .seatInfo(info)
+                    .seatInfo(seatInfo) // 컨트롤러에서 전달받은 좌석 정보 사용
                     .build();
 
-            // 6) Redis에 저장 및 이벤트 발행
+            // 3. Redis에 저장 및 이벤트 발행
             updateSeatStatus(reserved);
 
-            // 7) TTL 키 생성 (자동 만료 지원)
+            // 4. TTL 키 생성 (자동 만료 지원)
             createSeatTTLKey(concertId, seatId);
 
-            log.info("좌석 선점 완료: concertId={}, seatId={}, userId={}, expiresAt={}",
-                    concertId, seatId, userId, expiresAt);
+            log.info("좌석 선점 완료: concertId={}, seatId={}, userId={}, expiresAt={}, seatInfo={}",
+                    concertId, seatId, userId, expiresAt, seatInfo);
 
             return reserved;
 

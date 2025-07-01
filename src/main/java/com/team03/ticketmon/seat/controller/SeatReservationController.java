@@ -1,4 +1,3 @@
-// src/main/java/com/team03/ticketmon/seat/controller/SeatReservationController.java
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
