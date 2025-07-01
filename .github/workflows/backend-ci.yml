@@ -15,6 +15,10 @@ jobs:
   build-only: # 작업 이름 변경: 테스트 제외하고 빌드만 수행
     runs-on: ubuntu-latest
 
+    permissions: # GHCR에 푸시하기 위한 권한 추가
+      contents: read
+      packages: write # <--- 이 권한이 필요합니다.
+
     services:
       # redis-cache 서비스 제거: Aiven Redis를 사용하므로 CI 환경에서 Redis를 띄울 필요 없음
       localstack: # LocalStack 서비스 (SQS, S3 등 AWS 서비스 모킹)
@@ -63,6 +67,26 @@ jobs:
 
       - name: Build with Gradle (Excluding Tests) # 테스트 제외하고 빌드만 수행하도록 명령 변경
         run: ./gradlew build -x test # '-x test' 옵션으로 테스트 태스크 제외
+
+      - name: Set up Docker Buildx # Docker Buildx 설정 (Docker 빌드 성능 향상)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry # GHCR 로그인
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }} # GitHub 사용자명
+          password: ${{ secrets.GITHUB_TOKEN }} # GitHub Actions에서 제공하는 기본 토큰
+
+      - name: Build and Push Docker Image # Docker 이미지 빌드 및 GHCR에 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: . # Dockerfile이 있는 경로 (프로젝트 루트)
+          file: ./Dockerfile # Dockerfile 경로
+          push: true # GHCR로 푸시
+          tags: ghcr.io/${{ github.repository }}:latest # 이미지 태그 (예: ghcr.io/your-org/your-repo:latest)
+          # cache-from: type=gha # GitHub Actions 캐시 사용 (선택 사항, 빌드 속도 향상)
+          # cache-to: type=gha,mode=max # GitHub Actions 캐시 저장 (선택 사항, 빌드 속도 향상)
 
         # Upload Test Report 단계 제거: 테스트를 수행하지 않으므로 테스트 보고서를 업로드할 필요 없음
         # 만약 나중에 테스트를 다시 포함할 경우 이 단계를 다시 추가
