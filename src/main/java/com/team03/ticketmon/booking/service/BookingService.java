@@ -55,7 +55,7 @@ public class BookingService {
 
         // 1. 콘서트 정보 조회
         Concert concert = concertRepository.findById(createDto.getConcertId())
-            .orElseThrow(() -> new BusinessException(ErrorCode.CONCERT_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.CONCERT_NOT_FOUND));
 
         // 2. 선택된 좌석 목록 및 총액 계산
         List<ConcertSeat> selectedSeats = concertSeatRepository.findAllById(createDto.getConcertSeatIds());
@@ -65,7 +65,7 @@ public class BookingService {
 
         // 2-1. ✅ 수정: concertSeatId 사용으로 매개변수명 일관성 확보
         selectedSeats.forEach(seat ->
-            validateSeatReservation(seat.getConcert().getConcertId(), seat.getConcertSeatId(), userId)
+                validateSeatReservation(seat.getConcert().getConcertId(), seat.getConcertSeatId(), userId)
         );
 
         // 3. Ticket & Booking 생성
@@ -108,11 +108,11 @@ public class BookingService {
 
         // [좌석 반환] 예매된 좌석들을 다시 'AVAILABLE' 상태로 변경하는 로직 추가
         booking.getTickets().forEach(ticket ->
-            seatStatusService.releaseSeat(
-                booking.getConcert().getConcertId(),
-                ticket.getConcertSeat().getConcertSeatId(), // ✅ 수정: concertSeatId 사용
-                booking.getUserId()
-            )
+                seatStatusService.releaseSeat(
+                        booking.getConcert().getConcertId(),
+                        ticket.getConcertSeat().getConcertSeatId(), // ✅ 수정: concertSeatId 사용
+                        booking.getUserId()
+                )
         );
 
         // 히스토리 테이블로 이관하는 로직 호출
@@ -135,7 +135,7 @@ public class BookingService {
     public Booking validateCancellableBooking(Long bookingId, Long userId) {
         // 1. 예매 정보 조회
         Booking booking = bookingRepository.findById(bookingId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.BOOKING_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.BOOKING_NOT_FOUND));
 
         // 2. 예매 취소 권한 확인
         if (!booking.getUserId().equals(userId)) {
@@ -166,9 +166,9 @@ public class BookingService {
      */
     private void validateSeatReservation(Long concertId, Long concertSeatId, Long userId) {
         seatStatusService.getSeatStatus(concertId, concertSeatId)
-            .filter(status -> status.isReserved() && userId.equals(status.getUserId()) && !status.isExpired())
-            .orElseThrow(() -> new BusinessException(ErrorCode.SEAT_ALREADY_TAKEN,
-                "좌석 선점 정보가 유효하지 않습니다. ConcertSeat ID: " + concertSeatId)); // ✅ 수정: 메시지 업데이트
+                .filter(status -> status.isReserved() && userId.equals(status.getUserId()) && !status.isExpired())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SEAT_ALREADY_TAKEN,
+                        "좌석 선점 정보가 유효하지 않습니다. ConcertSeat ID: " + concertSeatId)); // ✅ 수정: 메시지 업데이트
     }
 
     /**

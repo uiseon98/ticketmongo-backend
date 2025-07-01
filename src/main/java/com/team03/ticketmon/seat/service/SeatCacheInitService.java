@@ -79,22 +79,22 @@ public class SeatCacheInitService {
 
                     // 7. ✅ 수정된 SeatStatus 객체 생성 (ConcertSeat ID 사용)
                     SeatStatus seatStatus = SeatStatus.builder()
-                        .id(concertId + "-" + concertSeatId)  // ← 수정
-                        .concertId(concertId)
-                        .seatId(concertSeatId)                // ← 수정: ConcertSeat ID 사용
-                        .status(status)
-                        .userId(null) // 초기화 시에는 선점 사용자 없음
-                        .reservedAt(null)
-                        .expiresAt(null)
-                        .seatInfo(seatInfo)
-                        .build();
+                            .id(concertId + "-" + concertSeatId)  // ← 수정
+                            .concertId(concertId)
+                            .seatId(concertSeatId)                // ← 수정: ConcertSeat ID 사용
+                            .status(status)
+                            .userId(null) // 초기화 시에는 선점 사용자 없음
+                            .reservedAt(null)
+                            .expiresAt(null)
+                            .seatInfo(seatInfo)
+                            .build();
 
                     // 8. ✅ 수정된 키 사용 (ConcertSeat ID로 저장)
                     batchSeatData.put(concertSeatId.toString(), seatStatus); // ← 수정
 
                 } catch (Exception e) {
                     log.error("좌석 상태 생성 중 오류: concertId={}, concertSeat={}",
-                        concertId, concertSeat.getConcertSeatId(), e);
+                            concertId, concertSeat.getConcertSeatId(), e);
                     // 개별 좌석 오류는 스킵하고 계속 처리
                 }
             }
@@ -104,7 +104,7 @@ public class SeatCacheInitService {
                 seatMap.putAll(batchSeatData);
 
                 log.info("DB 기반 좌석 캐시 초기화 완료: concertId={}, totalSeats={}, bookedSeats={}, availableSeats={}",
-                    concertId, batchSeatData.size(), bookedCount, batchSeatData.size() - bookedCount);
+                        concertId, batchSeatData.size(), bookedCount, batchSeatData.size() - bookedCount);
             } else {
                 log.warn("처리 가능한 좌석 데이터가 없습니다: concertId={}", concertId);
             }
@@ -149,15 +149,15 @@ public class SeatCacheInitService {
                 String seatInfo = generateDummySeatInfo(i);
 
                 SeatStatus seatStatus = SeatStatus.builder()
-                    .id(concertId + "-" + i)
-                    .concertId(concertId)
-                    .seatId((long) i)
-                    .status(SeatStatusEnum.AVAILABLE)
-                    .userId(null)
-                    .reservedAt(null)
-                    .expiresAt(null)
-                    .seatInfo(seatInfo)
-                    .build();
+                        .id(concertId + "-" + i)
+                        .concertId(concertId)
+                        .seatId((long) i)
+                        .status(SeatStatusEnum.AVAILABLE)
+                        .userId(null)
+                        .reservedAt(null)
+                        .expiresAt(null)
+                        .seatInfo(seatInfo)
+                        .build();
 
                 batchSeatData.put(String.valueOf(i), seatStatus);
             } catch (Exception e) {
@@ -204,10 +204,10 @@ public class SeatCacheInitService {
 
         if (!seatMap.isExists()) {
             return Map.of(
-                "concertId", concertId,
-                "cacheKey", key,
-                "cacheExists", false,
-                "message", "캐시가 존재하지 않습니다."
+                    "concertId", concertId,
+                    "cacheKey", key,
+                    "cacheExists", false,
+                    "message", "캐시가 존재하지 않습니다."
             );
         }
 
@@ -215,26 +215,26 @@ public class SeatCacheInitService {
         Map<String, SeatStatus> allSeats = seatMap.readAllMap();
 
         long availableSeats = allSeats.values().stream()
-            .mapToLong(seat -> seat.getStatus() == SeatStatusEnum.AVAILABLE ? 1 : 0)
-            .sum();
+                .mapToLong(seat -> seat.getStatus() == SeatStatusEnum.AVAILABLE ? 1 : 0)
+                .sum();
 
         long reservedSeats = allSeats.values().stream()
-            .mapToLong(seat -> seat.getStatus() == SeatStatusEnum.RESERVED ? 1 : 0)
-            .sum();
+                .mapToLong(seat -> seat.getStatus() == SeatStatusEnum.RESERVED ? 1 : 0)
+                .sum();
 
         long bookedSeats = allSeats.values().stream()
-            .mapToLong(seat -> seat.getStatus() == SeatStatusEnum.BOOKED ? 1 : 0)
-            .sum();
+                .mapToLong(seat -> seat.getStatus() == SeatStatusEnum.BOOKED ? 1 : 0)
+                .sum();
 
         Map<String, Object> status = Map.of(
-            "concertId", concertId,
-            "cacheKey", key,
-            "cacheExists", true,
-            "totalSeats", allSeats.size(),
-            "availableSeats", availableSeats,
-            "reservedSeats", reservedSeats,
-            "bookedSeats", bookedSeats,
-            "lastUpdated", java.time.LocalDateTime.now()
+                "concertId", concertId,
+                "cacheKey", key,
+                "cacheExists", true,
+                "totalSeats", allSeats.size(),
+                "availableSeats", availableSeats,
+                "reservedSeats", reservedSeats,
+                "bookedSeats", bookedSeats,
+                "lastUpdated", java.time.LocalDateTime.now()
         );
 
         log.debug("캐시 상태 조회: {}", status);

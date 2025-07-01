@@ -67,10 +67,10 @@ public class SeatStatusService {
         }
 
         return rawMap.entrySet().stream()
-            .collect(Collectors.toMap(
-                entry -> Long.valueOf(entry.getKey()),
-                Map.Entry::getValue
-            ));
+                .collect(Collectors.toMap(
+                        entry -> Long.valueOf(entry.getKey()),
+                        Map.Entry::getValue
+                ));
     }
 
     /**
@@ -113,11 +113,11 @@ public class SeatStatusService {
             eventPublisher.publishSeatUpdate(seatStatus);
         } catch (Exception e) {
             log.warn("좌석 상태 이벤트 발행 실패 (서비스 계속 진행): concertId={}, seatId={}",
-                seatStatus.getConcertId(), seatStatus.getSeatId(), e);
+                    seatStatus.getConcertId(), seatStatus.getSeatId(), e);
         }
 
         log.info("좌석 상태 업데이트: concertId={}, seatId={}, status={}",
-            seatStatus.getConcertId(), seatStatus.getSeatId(), seatStatus.getStatus());
+                seatStatus.getConcertId(), seatStatus.getSeatId(), seatStatus.getStatus());
     }
 
     /**
@@ -202,14 +202,14 @@ public class SeatStatusService {
                         // 같은 사용자의 재요청인지 확인
                         if (userId.equals(seat.getUserId())) {
                             log.info("동일 사용자의 좌석 재선점 요청: concertId={}, seatId={}, userId={}",
-                                concertId, seatId, userId);
+                                    concertId, seatId, userId);
                             return seat; // 기존 선점 상태 반환
                         } else {
                             throw new SeatReservationException("다른 사용자가 선점 중인 좌석입니다.");
                         }
                     } else {
                         log.info("만료된 선점 좌석 해제 후 재선점: concertId={}, seatId={}",
-                            concertId, seatId);
+                                concertId, seatId);
                         // 만료된 선점은 아래에서 새로 선점 처리
                     }
                 }
@@ -220,15 +220,15 @@ public class SeatStatusService {
             LocalDateTime expiresAt = now.plusMinutes(SEAT_RESERVATION_TTL_MINUTES);
 
             SeatStatus reserved = SeatStatus.builder()
-                .id(concertId + "-" + seatId)
-                .concertId(concertId)
-                .seatId(seatId)
-                .status(SeatStatusEnum.RESERVED)
-                .userId(userId)
-                .reservedAt(now)
-                .expiresAt(expiresAt)
-                .seatInfo(seatInfo)
-                .build();
+                    .id(concertId + "-" + seatId)
+                    .concertId(concertId)
+                    .seatId(seatId)
+                    .status(SeatStatusEnum.RESERVED)
+                    .userId(userId)
+                    .reservedAt(now)
+                    .expiresAt(expiresAt)
+                    .seatInfo(seatInfo)
+                    .build();
 
             // 3. Redis에 저장 및 이벤트 발행
             updateSeatStatus(reserved);
@@ -237,7 +237,7 @@ public class SeatStatusService {
             createSeatTTLKey(concertId, seatId);
 
             log.info("좌석 선점 완료: concertId={}, seatId={}, userId={}, expiresAt={}, seatInfo={}",
-                concertId, seatId, userId, expiresAt, seatInfo);
+                    concertId, seatId, userId, expiresAt, seatInfo);
 
             return reserved;
 
@@ -261,7 +261,7 @@ public class SeatStatusService {
 
         if (!currentStatus.isPresent()) {
             log.warn("존재하지 않는 좌석 해제 시도: concertId={}, seatId={}, userId={}",
-                concertId, seatId, userId);
+                    concertId, seatId, userId);
             throw new SeatReservationException("존재하지 않는 좌석입니다.");
         }
 
@@ -270,28 +270,28 @@ public class SeatStatusService {
         // 1. 좌석 상태가 RESERVED인지 확인
         if (!currentSeat.isReserved()) {
             log.warn("선점되지 않은 좌석 해제 시도: concertId={}, seatId={}, userId={}, currentStatus={}",
-                concertId, seatId, userId, currentSeat.getStatus());
+                    concertId, seatId, userId, currentSeat.getStatus());
             throw new SeatReservationException("선점되지 않은 좌석은 해제할 수 없습니다. 현재 상태: " + currentSeat.getStatus());
         }
 
         // 2. 해제 요청 사용자가 선점한 사용자와 일치하는지 확인
         if (!userId.equals(currentSeat.getUserId())) {
             log.warn("권한 없는 좌석 해제 시도: concertId={}, seatId={}, requestUserId={}, reservedUserId={}",
-                concertId, seatId, userId, currentSeat.getUserId());
+                    concertId, seatId, userId, currentSeat.getUserId());
             throw new SeatReservationException("다른 사용자가 선점한 좌석은 해제할 수 없습니다.");
         }
 
         // 3. 검증 통과 시 좌석 해제 처리
         SeatStatus updatedStatus = SeatStatus.builder()
-            .id(concertId + "-" + seatId)
-            .concertId(concertId)
-            .seatId(seatId)
-            .status(SeatStatusEnum.AVAILABLE)
-            .userId(null)
-            .reservedAt(null)
-            .expiresAt(null)
-            .seatInfo(currentSeat.getSeatInfo())
-            .build();
+                .id(concertId + "-" + seatId)
+                .concertId(concertId)
+                .seatId(seatId)
+                .status(SeatStatusEnum.AVAILABLE)
+                .userId(null)
+                .reservedAt(null)
+                .expiresAt(null)
+                .seatInfo(currentSeat.getSeatInfo())
+                .build();
 
         updateSeatStatus(updatedStatus);
 
@@ -311,21 +311,21 @@ public class SeatStatusService {
             SeatStatus currentSeat = currentStatus.get();
 
             SeatStatus updatedStatus = SeatStatus.builder()
-                .id(concertId + "-" + seatId)
-                .concertId(concertId)
-                .seatId(seatId)
-                .status(SeatStatusEnum.AVAILABLE)
-                .userId(null)
-                .reservedAt(null)
-                .expiresAt(null)
-                .seatInfo(currentSeat.getSeatInfo())
-                .build();
+                    .id(concertId + "-" + seatId)
+                    .concertId(concertId)
+                    .seatId(seatId)
+                    .status(SeatStatusEnum.AVAILABLE)
+                    .userId(null)
+                    .reservedAt(null)
+                    .expiresAt(null)
+                    .seatInfo(currentSeat.getSeatInfo())
+                    .build();
 
             updateSeatStatus(updatedStatus);
             removeSeatTTLKey(concertId, seatId);
 
             log.info("좌석 강제 해제 완료 (관리자): concertId={}, seatId={}, previousUserId={}",
-                concertId, seatId, currentSeat.getUserId());
+                    concertId, seatId, currentSeat.getUserId());
         }
     }
 
@@ -340,33 +340,33 @@ public class SeatStatusService {
 
             if (currentSeat.isExpired()) {
                 log.warn("만료된 선점 좌석 예매 시도: concertId={}, seatId={}, userId={}",
-                    concertId, seatId, currentSeat.getUserId());
+                        concertId, seatId, currentSeat.getUserId());
                 throw new SeatReservationException("선점이 만료된 좌석입니다. 다시 선점해주세요.");
             }
 
             SeatStatus bookedStatus = SeatStatus.builder()
-                .id(concertId + "-" + seatId)
-                .concertId(concertId)
-                .seatId(seatId)
-                .status(SeatStatusEnum.BOOKED)
-                .userId(currentSeat.getUserId())
-                .reservedAt(currentSeat.getReservedAt())
-                .expiresAt(null)
-                .seatInfo(currentSeat.getSeatInfo())
-                .build();
+                    .id(concertId + "-" + seatId)
+                    .concertId(concertId)
+                    .seatId(seatId)
+                    .status(SeatStatusEnum.BOOKED)
+                    .userId(currentSeat.getUserId())
+                    .reservedAt(currentSeat.getReservedAt())
+                    .expiresAt(null)
+                    .seatInfo(currentSeat.getSeatInfo())
+                    .build();
 
             updateSeatStatus(bookedStatus);
             removeSeatTTLKey(concertId, seatId);
 
             log.info("좌석 예매 완료: concertId={}, seatId={}, userId={}",
-                concertId, seatId, currentSeat.getUserId());
+                    concertId, seatId, currentSeat.getUserId());
 
         } else {
             String currentState = currentStatus.isPresent() ?
-                currentStatus.get().getStatus().toString() : "NOT_FOUND";
+                    currentStatus.get().getStatus().toString() : "NOT_FOUND";
 
             log.warn("예매 불가능한 좌석 상태: concertId={}, seatId={}, currentState={}",
-                concertId, seatId, currentState);
+                    concertId, seatId, currentState);
             throw new SeatReservationException("선점되지 않은 좌석은 예매할 수 없습니다. 현재 상태: " + currentState);
         }
     }
@@ -382,7 +382,7 @@ public class SeatStatusService {
             if (seat.isReserved() && seat.getExpiresAt() != null && now.isAfter(seat.getExpiresAt())) {
                 forceReleaseSeat(concertId, seat.getSeatId());
                 log.info("만료된 선점 좌석 해제: concertId={}, seatId={}, expiredUserId={}",
-                    concertId, seat.getSeatId(), seat.getUserId());
+                        concertId, seat.getSeatId(), seat.getUserId());
             }
         }
     }
@@ -394,7 +394,7 @@ public class SeatStatusService {
         Map<Long, SeatStatus> allSeats = getAllSeatStatus(concertId);
 
         return allSeats.values().stream()
-            .filter(seat -> seat.isReserved() && userId.equals(seat.getUserId()))
-            .collect(Collectors.toList());
+                .filter(seat -> seat.isReserved() && userId.equals(seat.getUserId()))
+                .collect(Collectors.toList());
     }
 }
