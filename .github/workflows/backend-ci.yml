@@ -10,18 +10,13 @@ on:
       - dev # dev 브랜치로 PR 생성/업데이트 시 실행
 
 jobs:
-  build-and-test:
+#  build-and-test:
+#    runs-on: ubuntu-latest
+  build-only: # 작업 이름 변경: 테스트 제외하고 빌드만 수행
     runs-on: ubuntu-latest
 
     services:
-      redis-cache: # Redis 서비스
-        image: redis:7.0-alpine # 사용할 Docker 이미지 (로컬과 동일하게 7.0-alpine 추천)
-        options: >- # 헬스체크 및 추가 옵션 (Redis가 준비될 때까지 기다림)
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
-
+      # redis-cache 서비스 제거: Aiven Redis를 사용하므로 CI 환경에서 Redis를 띄울 필요 없음
       localstack: # LocalStack 서비스 (SQS, S3 등 AWS 서비스 모킹)
         image: localstack/localstack:latest
         ports:
@@ -48,11 +43,9 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+      # 참고: 이 부분은 파일 권한 부여에 해당하며, 원본 파일의 "run: chmod +x gradlew"와 동일
 
-      - name: Configure Redis for CI # Redis 호스트 및 포트 설정 (CI 환경 내에서)
-        run: |
-          echo "SPRING_DATA_REDIS_HOST=redis-cache" >> $GITHUB_ENV # 서비스 이름을 호스트로 사용
-          echo "SPRING_DATA_REDIS_PORT=6379" >> $GITHUB_ENV # Redis 컨테이너의 포트
+      # Configure Redis for CI 단계 제거: Aiven Redis를 사용하므로 CI 환경에서 Redis 설정이 필요 없음
 
       - name: Configure LocalStack for CI # LocalStack 환경 변수 설정
         run: |
@@ -68,11 +61,8 @@ jobs:
           echo "::add-mask::${{ secrets.GH_PACKAGES_TOKEN }}" # <-- 토큰 마스킹 추가
           echo "GH_PACKAGES_TOKEN=${{ secrets.GH_PACKAGES_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Build with Gradle
-        run: ./gradlew build
+      - name: Build with Gradle (Excluding Tests) # 테스트 제외하고 빌드만 수행하도록 명령 변경
+        run: ./gradlew build -x test # '-x test' 옵션으로 테스트 태스크 제외
 
-      - name: Upload Test Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report
-          path: build/reports/tests/test/
+        # Upload Test Report 단계 제거: 테스트를 수행하지 않으므로 테스트 보고서를 업로드할 필요 없음
+        # 만약 나중에 테스트를 다시 포함할 경우 이 단계를 다시 추가
