@@ -81,10 +81,10 @@ jobs:
       - name: Convert Repository Name to Lowercase
         id: repo_lower_step # 스텝 ID
         run: |
-          # github.repository 값을 소문자로 변환하여 환경 변수에 저장
+        # github.repository 값을 소문자로 변환하여 환경 변수에 저장
           REPO_LOWERCASE=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "REPO_LOWERCASE=$REPO_LOWERCASE" >> $GITHUB_ENV
-          # 이 환경 변수는 이후 스텝에서 ${{ env.REPO_LOWERCASE }} 로 접근 가능합니다.
+        # 이 환경 변수는 이후 스텝에서 ${{ env.REPO_LOWERCASE }} 로 접근 가능
 
       - name: Build and Push Docker Image # Docker 이미지 빌드 및 GHCR에 푸시
         uses: docker/build-push-action@v5
@@ -95,6 +95,9 @@ jobs:
           tags: ghcr.io/${{ env.REPO_LOWERCASE }}:latest # 이미지 태그 (예: ghcr.io/your-org/your-repo:latest)
           cache-from: type=gha # GitHub Actions 캐시 사용 (선택 사항, 빌드 속도 향상)
           cache-to: type=gha,mode=max # GitHub Actions 캐시 저장 (선택 사항, 빌드 속도 향상)
+          build-args: |
+            GH_PACKAGES_USER=${{ secrets.GH_PACKAGES_USER }}
+            GH_PACKAGES_TOKEN=${{ secrets.GH_PACKAGES_TOKEN }}
 
         # Upload Test Report 단계 제거: 테스트를 수행하지 않으므로 테스트 보고서를 업로드할 필요 없음
         # 만약 나중에 테스트를 다시 포함할 경우 이 단계를 다시 추가
