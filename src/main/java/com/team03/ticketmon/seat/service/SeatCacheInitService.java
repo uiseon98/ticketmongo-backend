@@ -18,10 +18,10 @@ import java.util.Map;
 
 /**
  * 좌석 상태 캐시 초기화 서비스
- * ✅ 개선사항:
- * - SeatInfoHelper 활용으로 코드 중복 제거
- * - 성능 최적화 및 에러 처리 강화
- * - 배치 처리 개선
+ * ✅ 수정사항:
+ * - ID 매핑 수정: seat.getSeatId() → concertSeat.getConcertSeatId()
+ * - Cache-Aside 패턴 지원
+ * - 배치 처리 최적화
  */
 @Slf4j
 @Service
@@ -33,8 +33,8 @@ public class SeatCacheInitService {
     private static final String SEAT_STATUS_KEY_PREFIX = "seat:status:";
 
     /**
-     * ✅ 개선된 DB 기반 좌석 캐시 초기화
-     * SeatInfoHelper.generateSeatInfoFromEntity() 활용
+     * ✅ 수정된 DB 기반 좌석 캐시 초기화
+     * 핵심 수정: ConcertSeat ID 사용으로 ID 매핑 일관성 확보
      */
     @Transactional(readOnly = true)
     public void initializeSeatCacheFromDB(Long concertId) {
@@ -62,9 +62,9 @@ public class SeatCacheInitService {
 
             for (ConcertSeat concertSeat : concertSeats) {
                 try {
-                    // 4. 좌석 정보 추출
+                    // 4. ✅ 핵심 수정: ConcertSeat ID 사용
                     Seat seat = concertSeat.getSeat();
-                    Long seatId = seat.getSeatId();
+                    Long concertSeatId = concertSeat.getConcertSeatId(); // ← 수정: ConcertSeat의 ID 사용
 
                     // 5. 예매 여부 확인 (Ticket 존재 여부로 판별)
                     boolean isBooked = concertSeat.getTicket() != null;
@@ -74,14 +74,14 @@ public class SeatCacheInitService {
                         bookedCount++;
                     }
 
-                    // 6. ✅ 핵심 개선: SeatInfoHelper 활용으로 코드 중복 제거
-                    String seatInfo = SeatInfoHelper.generateSeatInfoFromEntity(seat);
+                    // 6. 좌석 정보 생성
+                    String seatInfo = generateSeatInfoFromDB(seat);
 
-                    // 7. SeatStatus 객체 생성
+                    // 7. ✅ 수정된 SeatStatus 객체 생성 (ConcertSeat ID 사용)
                     SeatStatus seatStatus = SeatStatus.builder()
-                            .id(concertId + "-" + seatId)
+                            .id(concertId + "-" + concertSeatId)  // ← 수정
                             .concertId(concertId)
-                            .seatId(seatId)
+                            .seatId(concertSeatId)                // ← 수정: ConcertSeat ID 사용
                             .status(status)
                             .userId(null) // 초기화 시에는 선점 사용자 없음
                             .reservedAt(null)
@@ -89,8 +89,8 @@ public class SeatCacheInitService {
                             .seatInfo(seatInfo)
                             .build();
 
-                    // 8. 로컬 맵에 누적 (Redis 호출 없음)
-                    batchSeatData.put(seatId.toString(), seatStatus);
+                    // 8. ✅ 수정된 키 사용 (ConcertSeat ID로 저장)
+                    batchSeatData.put(concertSeatId.toString(), seatStatus); // ← 수정
 
                 } catch (Exception e) {
                     log.error("좌석 상태 생성 중 오류: concertId={}, concertSeat={}",
@@ -116,6 +116,22 @@ public class SeatCacheInitService {
     }
 
     /**
+     * ✅ 내부 헬퍼 메서드: Seat 엔티티로부터 좌석 정보 생성
+     */
+    private String generateSeatInfoFromDB(Seat seat) {
+        if (seat == null) {
+            log.warn("Seat 엔티티가 null입니다.");
+            return "UNKNOWN";
+        }
+
+        String section = seat.getSection() != null ? seat.getSection() : "?";
+        String seatRow = seat.getSeatRow() != null ? seat.getSeatRow() : "?";
+        Integer seatNumber = seat.getSeatNumber() != null ? seat.getSeatNumber() : 0;
+
+        return String.format("%s-%s-%d", section, seatRow, seatNumber);
+    }
+
+    /**
      * 더미 데이터 기반 캐시 초기화 (기존 메서드, 테스트용 유지)
      */
     public void initializeSeatCache(Long concertId, int totalSeats) {
@@ -128,12 +144,9 @@ public class SeatCacheInitService {
         // 로컬 HashMap에 모든 좌석 데이터 준비 (네트워크 호출 최소화)
         Map<String, SeatStatus> batchSeatData = new HashMap<>();
 
-        // ✅ 개선: SeatInfoHelper 활용
-        SeatInfoHelper seatInfoHelper = new SeatInfoHelper(null); // 더미용
-
         for (int i = 1; i <= totalSeats; i++) {
             try {
-                String seatInfo = seatInfoHelper.generateDummySeatInfo(i);
+                String seatInfo = generateDummySeatInfo(i);
 
                 SeatStatus seatStatus = SeatStatus.builder()
                         .id(concertId + "-" + i)
@@ -158,6 +171,28 @@ public class SeatCacheInitService {
         }
 
         log.info("더미 좌석 캐시 초기화 완료: concertId={}, totalSeats={}", concertId, batchSeatData.size());
+    }
+
+    /**
+     * 더미 좌석 정보 생성 (테스트용)
+     */
+    private String generateDummySeatInfo(int seatNumber) {
+        final int SEATS_PER_SECTION = 50;
+        String section;
+        int seatInSection;
+
+        if (seatNumber <= SEATS_PER_SECTION) {
+            section = "A";
+            seatInSection = seatNumber;
+        } else if (seatNumber <= SEATS_PER_SECTION * 2) {
+            section = "B";
+            seatInSection = seatNumber - SEATS_PER_SECTION;
+        } else {
+            section = "C";
+            seatInSection = seatNumber - (SEATS_PER_SECTION * 2);
+        }
+
+        return String.format("%s-%d", section, seatInSection);
     }
 
     /**
@@ -207,23 +242,19 @@ public class SeatCacheInitService {
     }
 
     /**
-     * ✅ 개선된 캐시 삭제
+     * ✅ 캐시 삭제
      */
     public String clearSeatCache(Long concertId) {
         try {
             String key = SEAT_STATUS_KEY_PREFIX + concertId;
             RMap<String, SeatStatus> seatMap = redissonClient.getMap(key);
 
-            // 캐시 존재 여부 확인
             if (!seatMap.isExists()) {
                 log.info("삭제할 좌석 캐시가 존재하지 않음: concertId={}, key={}", concertId, key);
                 return "삭제할 캐시가 없습니다.";
             }
 
-            // 삭제 전 통계 수집
             int seatCount = seatMap.size();
-
-            // 캐시 삭제
             boolean deleted = seatMap.delete();
 
             if (deleted) {

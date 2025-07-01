@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RTopic;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -242,9 +243,18 @@ public class SeatStatusEventPublisher {
     /**
      * 테스트용 이벤트 발행 (개발/테스트 환경용)
      */
+    @Value("${spring.profiles.active:}")
+    private String activeProfile;
+
     public void publishTestEvent(Long concertId, Long seatId) {
         if (concertId == null || seatId == null) {
             log.warn("테스트 이벤트 발행 실패: concertId 또는 seatId가 null");
+            return;
+        }
+
+        // 프로덕션 환경 체크
+        if ("prod".equals(activeProfile) || "production".equals(activeProfile)) {
+            log.error("테스트 이벤트는 프로덕션 환경에서 사용할 수 없습니다");
             return;
         }
 
