@@ -85,8 +85,8 @@ jobs:
           file: ./Dockerfile # Dockerfile 경로
           push: true # GHCR로 푸시
           tags: ghcr.io/${{ github.repository }}:latest # 이미지 태그 (예: ghcr.io/your-org/your-repo:latest)
-          # cache-from: type=gha # GitHub Actions 캐시 사용 (선택 사항, 빌드 속도 향상)
-          # cache-to: type=gha,mode=max # GitHub Actions 캐시 저장 (선택 사항, 빌드 속도 향상)
+          cache-from: type=gha # GitHub Actions 캐시 사용 (선택 사항, 빌드 속도 향상)
+          cache-to: type=gha,mode=max # GitHub Actions 캐시 저장 (선택 사항, 빌드 속도 향상)
 
         # Upload Test Report 단계 제거: 테스트를 수행하지 않으므로 테스트 보고서를 업로드할 필요 없음
         # 만약 나중에 테스트를 다시 포함할 경우 이 단계를 다시 추가
