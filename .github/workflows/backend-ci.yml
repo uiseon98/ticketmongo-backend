@@ -17,7 +17,7 @@ jobs:
 
     permissions: # GHCR에 푸시하기 위한 권한 추가
       contents: read
-      packages: write # <--- 이 권한이 필요합니다.
+      packages: write
 
     services:
       # redis-cache 서비스 제거: Aiven Redis를 사용하므로 CI 환경에서 Redis를 띄울 필요 없음
@@ -62,7 +62,7 @@ jobs:
       - name: Configure GitHub Packages for Gradle  # GH_PACKAGES 환경변수 설정
         run: |
           echo "GH_PACKAGES_USER=${{ secrets.GH_PACKAGES_USER }}" >> $GITHUB_ENV
-          echo "::add-mask::${{ secrets.GH_PACKAGES_TOKEN }}" # <-- 토큰 마스킹 추가
+          echo "::add-mask::${{ secrets.GH_PACKAGES_TOKEN }}"
           echo "GH_PACKAGES_TOKEN=${{ secrets.GH_PACKAGES_TOKEN }}" >> $GITHUB_ENV
 
       - name: Build with Gradle (Excluding Tests) # 테스트 제외하고 빌드만 수행하도록 명령 변경
@@ -78,13 +78,21 @@ jobs:
           username: ${{ github.actor }} # GitHub 사용자명
           password: ${{ secrets.GITHUB_TOKEN }} # GitHub Actions에서 제공하는 기본 토큰
 
+      - name: Convert Repository Name to Lowercase
+        id: repo_lower_step # 스텝 ID
+        run: |
+          # github.repository 값을 소문자로 변환하여 환경 변수에 저장
+          REPO_LOWERCASE=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "REPO_LOWERCASE=$REPO_LOWERCASE" >> $GITHUB_ENV
+          # 이 환경 변수는 이후 스텝에서 ${{ env.REPO_LOWERCASE }} 로 접근 가능합니다.
+
       - name: Build and Push Docker Image # Docker 이미지 빌드 및 GHCR에 푸시
         uses: docker/build-push-action@v5
         with:
           context: . # Dockerfile이 있는 경로 (프로젝트 루트)
           file: ./Dockerfile # Dockerfile 경로
           push: true # GHCR로 푸시
-          tags: ghcr.io/${{ github.repository }}:latest # 이미지 태그 (예: ghcr.io/your-org/your-repo:latest)
+          tags: ghcr.io/${{ env.REPO_LOWERCASE }}:latest # 이미지 태그 (예: ghcr.io/your-org/your-repo:latest)
           cache-from: type=gha # GitHub Actions 캐시 사용 (선택 사항, 빌드 속도 향상)
           cache-to: type=gha,mode=max # GitHub Actions 캐시 저장 (선택 사항, 빌드 속도 향상)
 
