@@ -30,6 +30,7 @@ import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.ToString;
 
 /**
@@ -41,6 +42,7 @@ import lombok.ToString;
 @Table(name = "bookings")
 @Builder
 @Getter
+@Setter
 @ToString(exclude = {"concert", "tickets", "payment"})
 @EqualsAndHashCode(of = "bookingNumber", callSuper = false)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -69,8 +71,8 @@ public class Booking extends BaseTimeEntity {
 	private BookingStatus status;
 
 	@Builder.Default
-	@OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-	private List<Ticket> tickets = new ArrayList<>(); // NPE 방지를 위한 초기화
+	@OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
+	private List<Ticket> tickets = new ArrayList<>();
 
 	@OneToOne(mappedBy = "booking", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
 	private Payment payment;
@@ -142,7 +144,7 @@ public class Booking extends BaseTimeEntity {
 	public static Booking createBooking(Long userId, Concert concert, List<ConcertSeat> selectedSeats) {
 		// 1. 선택된 좌석들로 Ticket들을 생성하고, Booking과의 관계 설정
 		List<Ticket> tickets = selectedSeats.stream()
-			.map(Ticket::createTicket) // Ticket 생성 시 Booking 정보도 함께 전달
+			.map(Ticket::createTicket)
 			.toList();
 
 		// 2. Booking 뼈대 생성
@@ -159,7 +161,20 @@ public class Booking extends BaseTimeEntity {
 
 		// 3. 생성된 Booking에 Ticket 목록 설정 (양방향 관계 확립)
 		booking.setTickets(tickets);
-
 		return booking;
+	}
+
+	/**
+	 * Helper to clear all associated tickets and break bidirectional links,
+	 * triggering orphanRemoval for tickets and releasing concertSeat linkage.
+	 */
+	public void removeAllTickets() {
+		for (Ticket ticket : new ArrayList<>(tickets)) {
+			ticket.setBooking(null);
+			if (ticket.getConcertSeat() != null) {
+				ticket.getConcertSeat().releaseTicket();
+			}
+		}
+		tickets.clear();
 	}
 }
