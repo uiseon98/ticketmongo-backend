@@ -1,6 +1,7 @@
 package com.team03.ticketmon.websocket.subscriber;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.queue.dto.AdmissionEvent;
 import com.team03.ticketmon.websocket.handler.CustomWebSocketHandler;
 import jakarta.annotation.PostConstruct;
@@ -25,7 +26,7 @@ public class RedisMessageSubscriber {
     private final RedissonClient redissonClient;
     private final ObjectMapper objectMapper;
     private final CustomWebSocketHandler webSocketHandler;
-    private static final String ADMISSION_TOPIC = "admission-channel";
+    private static final String ADMISSION_TOPIC = RedisKeyGenerator.ADMISSION_TOPIC;
 
     /**
      * 빈(Bean)이 생성되고 의존성 주입이 완료된 후, 자동으로 Redis 토픽 구독을 시작
@@ -36,12 +37,11 @@ public class RedisMessageSubscriber {
 
         // 메시지를 수신했을 때 실행될 리스너를 등록.
         topic.addListener(CharSequence.class, (channel, msg) -> {
-//            log.debug("Redis 채널에서 메시지 수신. 채널: {}, 원본 메시지: {}", channel, msg);
-            log.info("Redis 채널에서 메시지 수신. 채널: {}, 원본 메시지: {}", channel, msg);
+            log.debug("Redis 채널에서 메시지 수신. 채널: {}, 원본 메시지: {}", channel, msg);
             try {
                 // 1. 수신된 JSON 메시지를 AdmissionEvent 객체로 역직렬화
                 AdmissionEvent event = objectMapper.readValue(msg.toString(), AdmissionEvent.class);
-                log.info("입장 알림 이벤트 수신 완료. 사용자: {}", event.userId());
+                log.debug("입장 알림 이벤트 수신 완료. 사용자: {}", event.userId());
 
                 // 2. WebSocket 핸들러를 통해 해당 사용자에게 전송할 메시지(Payload)를 구성
                 Map<String, Object> payload = Map.of(
