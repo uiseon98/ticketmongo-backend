@@ -1,5 +1,14 @@
 package com.team03.ticketmon.booking.service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
 import com.team03.ticketmon.booking.domain.Booking;
@@ -23,6 +32,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+
 
 /**
  * 예매(Booking)와 관련된 핵심 비즈니스 로직을 처리하는 서비스
