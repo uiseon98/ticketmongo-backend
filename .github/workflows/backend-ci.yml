@@ -81,10 +81,8 @@ jobs:
       - name: Convert Repository Name to Lowercase
         id: repo_lower_step # 스텝 ID
         run: |
-        # github.repository 값을 소문자로 변환하여 환경 변수에 저장
           REPO_LOWERCASE=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "REPO_LOWERCASE=$REPO_LOWERCASE" >> $GITHUB_ENV
-        # 이 환경 변수는 이후 스텝에서 ${{ env.REPO_LOWERCASE }} 로 접근 가능
 
       - name: Build and Push Docker Image # Docker 이미지 빌드 및 GHCR에 푸시
         uses: docker/build-push-action@v5
