@@ -2,6 +2,7 @@ package com.team03.ticketmon.seat.service;
 
 import com.team03.ticketmon.seat.domain.SeatStatus;
 import com.team03.ticketmon.seat.domain.SeatStatus.SeatStatusEnum;
+import com.team03.ticketmon.seat.dto.BulkSeatLockResult;
 import com.team03.ticketmon.seat.dto.SeatLockResult;
 import com.team03.ticketmon.seat.exception.SeatReservationException;
 import lombok.RequiredArgsConstructor;
@@ -11,27 +12,26 @@ import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
- * 좌석 영구 선점 처리 서비스
+ * 좌석 영구 선점 처리 서비스 (확장된 버전)
  *
  * 목적: Redis TTL 삭제 후 좌석 상태를 영구적으로 선점 상태로 변경
  *
  * 주요 기능:
+ * - 단일 좌석 영구 선점/복원 (기존 기능)
+ * - 다중 좌석 일괄 영구 선점/복원 (신규 기능)
  * - TTL 키 삭제하여 자동 만료 방지
- * - 추후 명시 고려 - PERMANENTLY_RESERVED (현재는 RESERVED)
  * - 권한 검증 및 상태 검증
  * - 실시간 이벤트 발행
  *
  * 사용 시나리오:
  * - 결제 진행 시: 결제 처리 중 좌석이 만료되지 않도록 보장
  * - 예매 확정 직전: 최종 확정 전 좌석을 안전하게 고정
- *
- * 기술 스택 선택 이유:
- * - SeatStatusService: 기존 좌석 상태 관리 로직 재사용
- * - Redisson: TTL 키 관리 및 안정적인 Redis 연산
- * - 분산 락 없음: 이미 선점된 좌석의 상태 변경이므로 단순 업데이트
+ * - 다중 좌석 선택 시: 사용자가 선점한 모든 좌석을 한 번에 처리
  */
 @Slf4j
 @Service
@@ -45,6 +45,8 @@ public class SeatLockService {
     // TTL 키 패턴 (SeatStatusService와 동일)
     private static final String SEAT_TTL_KEY_PREFIX = "seat:expire:";
 
+    // ========== 기존 단일 좌석 처리 메서드들 ==========
+
     /**
      * 좌석을 영구 선점 상태로 변경
      *
@@ -56,7 +58,7 @@ public class SeatLockService {
      * 5. 실시간 이벤트 발행
      *
      * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID  
+     * @param seatId 좌석 ID
      * @param userId 요청 사용자 ID
      * @return 영구 선점 처리 결과
      * @throws SeatReservationException 검증 실패 시
@@ -209,6 +211,167 @@ public class SeatLockService {
                     .build();
         }
     }
+
+    // ========== 신규 다중 좌석 처리 메서드들 ==========
+
+    /**
+     * 사용자가 선점한 모든 좌석을 일괄 영구 선점 처리
+     *
+     * 프로세스:
+     * 1. 사용자의 모든 선점 좌석 조회
+     * 2. 각 좌석에 대해 영구 선점 처리 (순차 실행)
+     * 3. 결과 집계 및 통계 생성
+     *
+     * @param concertId 콘서트 ID
+     * @param userId 사용자 ID
+     * @return 일괄 영구 선점 처리 결과
+     */
+    public BulkSeatLockResult lockAllUserSeatsPermanently(Long concertId, Long userId) {
+        log.info("사용자 모든 좌석 일괄 영구 선점 요청: concertId={}, userId={}", concertId, userId);
+
+        LocalDateTime bulkStartTime = LocalDateTime.now();
+
+        try {
+            // 1. 사용자의 모든 선점 좌석 조회
+            List<SeatStatus> userReservedSeats = seatStatusService.getUserReservedSeats(concertId, userId);
+
+            if (userReservedSeats.isEmpty()) {
+                log.info("영구 선점할 좌석이 없음: concertId={}, userId={}", concertId, userId);
+                return BulkSeatLockResult.failure(concertId, userId,
+                        BulkSeatLockResult.BulkOperationType.LOCK, "선점된 좌석이 없습니다.");
+            }
+
+            log.info("일괄 영구 선점 대상 좌석 수: {} (concertId={}, userId={})",
+                    userReservedSeats.size(), concertId, userId);
+
+            // 2. 각 좌석에 대해 영구 선점 처리 (순차 실행)
+            List<SeatLockResult> seatResults = new ArrayList<>();
+
+            for (SeatStatus seat : userReservedSeats) {
+                log.debug("좌석 영구 선점 처리 중: concertId={}, seatId={}, userId={}",
+                        concertId, seat.getSeatId(), userId);
+
+                SeatLockResult result = lockSeatPermanently(concertId, seat.getSeatId(), userId);
+                seatResults.add(result);
+
+                // 성공/실패 로그
+                if (result.isSuccess()) {
+                    log.debug("좌석 영구 선점 성공: seatId={}", seat.getSeatId());
+                } else {
+                    log.warn("좌석 영구 선점 실패: seatId={}, error={}",
+                            seat.getSeatId(), result.getErrorMessage());
+                }
+            }
+
+            // 3. 결과 집계 및 반환
+            LocalDateTime bulkEndTime = LocalDateTime.now();
+            BulkSeatLockResult bulkResult = BulkSeatLockResult.allSuccess(
+                    concertId, userId, seatResults,
+                    BulkSeatLockResult.BulkOperationType.LOCK,
+                    bulkStartTime, bulkEndTime
+            );
+
+            log.info("사용자 모든 좌석 일괄 영구 선점 완료: {}", bulkResult.getSummary());
+            return bulkResult;
+
+        } catch (Exception e) {
+            log.error("사용자 모든 좌석 일괄 영구 선점 중 예외 발생: concertId={}, userId={}",
+                    concertId, userId, e);
+
+            return BulkSeatLockResult.failure(concertId, userId,
+                    BulkSeatLockResult.BulkOperationType.LOCK,
+                    "시스템 오류: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 사용자가 영구 선점한 모든 좌석을 일괄 상태 복원
+     *
+     * 프로세스:
+     * 1. 사용자의 모든 영구 선점 좌석 조회 (expiresAt이 null인 RESERVED 상태)
+     * 2. 각 좌석에 대해 상태 복원 처리 (순차 실행)
+     * 3. 결과 집계 및 통계 생성
+     *
+     * @param concertId 콘서트 ID
+     * @param userId 사용자 ID
+     * @param restoreWithTTL TTL을 다시 설정할지 여부
+     * @return 일괄 상태 복원 처리 결과
+     */
+    public BulkSeatLockResult restoreAllUserSeats(Long concertId, Long userId, boolean restoreWithTTL) {
+        log.info("사용자 모든 좌석 일괄 상태 복원 요청: concertId={}, userId={}, withTTL={}",
+                concertId, userId, restoreWithTTL);
+
+        LocalDateTime bulkStartTime = LocalDateTime.now();
+
+        try {
+            // 1. 사용자의 모든 영구 선점 좌석 조회
+            List<SeatStatus> userPermanentlyLockedSeats = getUserPermanentlyLockedSeats(concertId, userId);
+
+            if (userPermanentlyLockedSeats.isEmpty()) {
+                log.info("복원할 영구 선점 좌석이 없음: concertId={}, userId={}", concertId, userId);
+                return BulkSeatLockResult.failure(concertId, userId,
+                        BulkSeatLockResult.BulkOperationType.RESTORE, "영구 선점된 좌석이 없습니다.");
+            }
+
+            log.info("일괄 상태 복원 대상 좌석 수: {} (concertId={}, userId={})",
+                    userPermanentlyLockedSeats.size(), concertId, userId);
+
+            // 2. 각 좌석에 대해 상태 복원 처리 (순차 실행)
+            List<SeatLockResult> seatResults = new ArrayList<>();
+
+            for (SeatStatus seat : userPermanentlyLockedSeats) {
+                log.debug("좌석 상태 복원 처리 중: concertId={}, seatId={}, userId={}",
+                        concertId, seat.getSeatId(), userId);
+
+                SeatLockResult result = restoreSeatReservation(concertId, seat.getSeatId(), userId, restoreWithTTL);
+                seatResults.add(result);
+
+                // 성공/실패 로그
+                if (result.isSuccess()) {
+                    log.debug("좌석 상태 복원 성공: seatId={}", seat.getSeatId());
+                } else {
+                    log.warn("좌석 상태 복원 실패: seatId={}, error={}",
+                            seat.getSeatId(), result.getErrorMessage());
+                }
+            }
+
+            // 3. 결과 집계 및 반환
+            LocalDateTime bulkEndTime = LocalDateTime.now();
+            BulkSeatLockResult bulkResult = BulkSeatLockResult.allSuccess(
+                    concertId, userId, seatResults,
+                    BulkSeatLockResult.BulkOperationType.RESTORE,
+                    bulkStartTime, bulkEndTime
+            );
+
+            log.info("사용자 모든 좌석 일괄 상태 복원 완료: {}", bulkResult.getSummary());
+            return bulkResult;
+
+        } catch (Exception e) {
+            log.error("사용자 모든 좌석 일괄 상태 복원 중 예외 발생: concertId={}, userId={}",
+                    concertId, userId, e);
+
+            return BulkSeatLockResult.failure(concertId, userId,
+                    BulkSeatLockResult.BulkOperationType.RESTORE,
+                    "시스템 오류: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 사용자의 영구 선점 좌석 목록 조회
+     *
+     * @param concertId 콘서트 ID
+     * @param userId 사용자 ID
+     * @return 영구 선점된 좌석 목록 (expiresAt이 null인 RESERVED 상태)
+     */
+    public List<SeatStatus> getUserPermanentlyLockedSeats(Long concertId, Long userId) {
+        List<SeatStatus> userReservedSeats = seatStatusService.getUserReservedSeats(concertId, userId);
+
+        return userReservedSeats.stream()
+                .filter(seat -> seat.isReserved() && seat.getExpiresAt() == null) // 영구 선점 조건
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    // ========== 기존 공통 메서드들 (변경 없음) ==========
 
     /**
      * 좌석 영구 선점 가능 여부 확인 (실제 처리 없이 검증만)
