@@ -2,11 +2,15 @@ package com.team03.ticketmon.queue.service;
 
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
+import com.team03.ticketmon.concert.service.ConcertService;
+import com.team03.ticketmon.queue.dto.EnterResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RAtomicLong;
 import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RedissonClient;
+import org.redisson.client.codec.LongCodec;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -25,12 +29,13 @@ import java.util.List;
 public class WaitingQueueService {
 
     private final RedissonClient redissonClient;
-    private static final String QUEUE_KEY_PREFIX = "waitqueue:";
+    private final ConcertService concertService;
+    private final AdmissionService admissionService;
+    private final RedisKeyGenerator keyGenerator;
+
     private static final String SEQUENCE_KEY_SUFFIX = ":seq:";
 
-    // 시퀀스를 저장할 비트 수 (21비트 = 약 210만)
     private static final int SEQUENCE_BITS = 21;
-    // 시퀀스 최대값 (2^21 - 1)
     private static final long MAX_SEQUENCE = (1L << SEQUENCE_BITS) - 1;
 
     /**
@@ -41,46 +46,57 @@ public class WaitingQueueService {
      * @param userId    대기열에 추가할 사용자 ID
      * @return 1부터 시작하는 사용자의 대기 순번
      */
-    public Long apply(Long concertId, String userId) {
-        String queueKey = generateKey(concertId);
-        RScoredSortedSet<String> queue = redissonClient.getScoredSortedSet(queueKey);
+    public EnterResponse apply(Long concertId, Long userId) {
 
-        // [핵심] 유니크하고 순서가 보장되는 score 생성
-        long uniqueScore = generateUniqueScore(concertId);
+        // [1단계] 콘서트 정보를 조회하여 대기열 활성화 여부 확인
+        boolean isQueueActive = concertService.isQueueActive(concertId);
 
-        // addIfAbsent를 사용하여 '추가'와 '존재 확인'을 원자적으로 실행
-        boolean isNewUser = queue.addIfAbsent(uniqueScore, userId);
+        if (isQueueActive) {
+            // [2-1단계] 대기열이 활성화된 경우: 기존 대기열 등록 로직 수행
+            String queueKey = generateKey(concertId);
+            RScoredSortedSet<Long> queue = redissonClient.getScoredSortedSet(queueKey, LongCodec.INSTANCE);
 
-        // 만약 새로운 사용자가 아니라면 (이미 대기열에 존재했다면) 예외를 발생
-        if (!isNewUser) {
-            log.warn("사용자 {}는(은) 이미 대기열에 등록된 상태에서 중복 요청을 보냈습니다.", userId);
-            throw new BusinessException(ErrorCode.QUEUE_ALREADY_JOINED);
+            long uniqueScore = generateUniqueScore(queueKey);
+
+            if (!queue.addIfAbsent(uniqueScore, userId)) {
+                log.warn("[userId: {}] 이미 대기열에 등록된 상태", userId);
+                Integer existingRank = queue.rank(userId);
+                if (existingRank != null) {
+                    return EnterResponse.waiting(existingRank.longValue() + 1);
+                }
+                throw new BusinessException(ErrorCode.QUEUE_ALREADY_JOINED);
+            }
+
+            log.debug("[userId: {}] 대기열 신규 신청. [콘서트: {}, 대기열 키: {}, 부여된 점수: {}]", userId, concertId, queueKey, uniqueScore);
+            Integer rankIndex = queue.rank(userId);
+
+            if (rankIndex == null) {
+                log.error("[userId: {}] 대기열 순위 조회 실패", userId);
+                throw new BusinessException(ErrorCode.SERVER_ERROR);
+            }
+
+            return EnterResponse.waiting(rankIndex.longValue() + 1);
+
+        } else {
+            // [2-2단계] 대기열이 비활성화된 경우: 즉시 입장 처리
+            log.debug("[userId: {}] 대기열 비활성 상태. 즉시 입장 처리 시작.", userId);
+
+            return EnterResponse.immediateEntry(admissionService.grantAccess(concertId, userId));
         }
 
-        // 정상적으로 추가된 경우, 로그를 남기고 순위를 계산하여 반환
-        log.info("대기열 신규 신청. 사용자: {}, 대기열 키: {}, 부여된 점수: {}", userId, queueKey, uniqueScore);
-        Integer rankIndex = queue.rank(userId);
-
-        if (rankIndex == null) {
-            // 로직상 rankIndex가 null이 될 가능성 희박함, 안정성을 위해 방어적 코드를 유지
-            log.error("대기열 순위 조회 실패! 사용자가 정상적으로 추가되지 않았을 수 있습니다. 사용자: {}, 대기열 키: {}", userId, queueKey);
-            throw new BusinessException(ErrorCode.SERVER_ERROR);
-        }
-
-        return rankIndex.longValue() + 1;
     }
 
     /**
      * 타임스탬프와 원자적 시퀀스를 조합하여 유니크한 score를 생성합니다.
      * 예: (timestamp << 22) | sequence
-     * @param concertId 콘서트 ID
+     * @param queueKey queueKey
      * @return 유니크한 score(long)
      */
-    private long generateUniqueScore(Long concertId) {
+    private long generateUniqueScore(String queueKey) {
         long timestamp = System.currentTimeMillis();
 
         // 1ms 단위로 시퀀스 키를 생성하여 자동으로 초기화되도록 함
-        String sequenceKey = QUEUE_KEY_PREFIX + concertId + SEQUENCE_KEY_SUFFIX + timestamp;
+        String sequenceKey = queueKey + SEQUENCE_KEY_SUFFIX + timestamp;
         RAtomicLong sequence = redissonClient.getAtomicLong(sequenceKey);
 
         // 키가 처음 생성될 때 2초의 만료 시간을 설정 (메모리 릭 방지)
@@ -105,11 +121,11 @@ public class WaitingQueueService {
      * @param count     입장시킬 사용자 수
      * @return 입장 처리된 사용자 ID 리스트 (순서 보장)
      */
-    public List<String> poll(Long concertId, int count) {
-        RScoredSortedSet<String> queue = redissonClient.getScoredSortedSet(generateKey(concertId));
+    public List<Long> poll(Long concertId, int count) {
+        RScoredSortedSet<Long> queue = redissonClient.getScoredSortedSet(generateKey(concertId), LongCodec.INSTANCE);
 
         // pollFirst(count)는 가장 점수가 낮은(오래된) N개의 원소를 Set에서 원자적으로 제거하고 반환
-        Collection<String> polledItems = queue.pollFirst(count);
+        Collection<Long> polledItems = queue.pollFirst(count);
 
         // Collection을 List로 변환하여 반환 (일반적으로 순서가 보장됨)
         return new ArrayList<>(polledItems);
@@ -132,6 +148,6 @@ public class WaitingQueueService {
      * @return "waitqueue:{concertId}" 형식의 Redis 키
      */
     private String generateKey(Long concertId) {
-        return QUEUE_KEY_PREFIX + concertId;
+        return keyGenerator.getWaitQueueKey(concertId);
     }
 }
