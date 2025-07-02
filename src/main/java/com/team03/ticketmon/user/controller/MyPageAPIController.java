@@ -1,10 +1,7 @@
 package com.team03.ticketmon.user.controller;
 
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
-import com.team03.ticketmon.user.dto.UpdatePasswordDTO;
-import com.team03.ticketmon.user.dto.UpdateUserProfileDTO;
-import com.team03.ticketmon.user.dto.UserBookingSummaryDTO;
-import com.team03.ticketmon.user.dto.UserProfileDTO;
+import com.team03.ticketmon.user.dto.*;
 import com.team03.ticketmon.user.service.MyBookingService;
 import com.team03.ticketmon.user.service.MyPageService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -101,5 +98,32 @@ public class MyPageAPIController {
         List<UserBookingSummaryDTO> booking = myBookingService.findBookingList(userDetails.getUserId());
 
         return ResponseEntity.ok().body(booking);
+    }
+
+    @GetMapping("/bookingDetail/{bookingNumber}")
+    @Operation(summary = "사용자 예매 상세 내역 조회", description = "현재 로그인된 사용자의 예매 상세 내역을 불러옵니다.")
+    public ResponseEntity<?> getBookingDetail(
+            @AuthenticationPrincipal CustomUserDetails userDetails, @PathVariable String bookingNumber) {
+
+        if (userDetails == null)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+
+        UserBookingDetailDto bookingDto = myBookingService.findBookingDetail(userDetails.getUserId(), bookingNumber);
+
+        return ResponseEntity.ok().body(bookingDto);
+    }
+
+    @DeleteMapping("/bookingDetail/cancel/{bookingId}")
+    @Operation(summary = "사용자 예매 취소", description = "현재 로그인된 사용자의 예매를 취소합니다.")
+    public ResponseEntity<?> cancelBooking(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long bookingId) {
+
+        if (userDetails == null)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+
+        myBookingService.cancelBooking(userDetails.getUserId(), bookingId);
+
+        return ResponseEntity.ok().body("예매가 성공적으로 취소되었습니다.");
     }
 }
