@@ -139,12 +139,10 @@ public class SellerApplicationService {
         // 사용자 역할 및 승인 상태
         Role userRole = user.getRole();
         ApprovalStatus userApprovalStatus = user.getApprovalStatus();
-        String lastReason = null; // UserEntity에 lastReason 필드가 없으므로 null로 초기화
 
         // 최신 판매자 신청서 정보 조회 (신청일 및 마지막 처리일 등)
-        // SellerApplication 및 SellerApprovalHistory에서 추가 정보 조회
         Optional<SellerApplication> latestApplication = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
-                user, List.of(SUBMITTED, ACCEPTED, REJECTED, REVOKED, WITHDRAWN)
+                user, List.of(SellerApplication.SellerApplicationStatus.SUBMITTED, SellerApplication.SellerApplicationStatus.ACCEPTED, SellerApplication.SellerApplicationStatus.REJECTED, SellerApplication.SellerApplicationStatus.REVOKED, SellerApplication.SellerApplicationStatus.WITHDRAWN)
         );
 
         LocalDateTime applicationDate = latestApplication.map(SellerApplication::getCreatedAt).orElse(null);
@@ -167,32 +165,30 @@ public class SellerApplicationService {
                     canReapply = true; // 반려, 자발적 철회, 관리자 회수 상태는 재신청 가능
                     break;
                 case APPROVED:
-                    // canWithdraw = true; // 승인 상태는 철회 가능 (추가 조건 확인 필요)    // 예시: if (hasActiveConcerts(userId)) { canWithdraw = false; }
-
                     // canWithdraw 조건 강화: 진행 중이거나 예정된 콘서트가 없는지 확인 로직 추가 (콘서트 도메인 의존성)
                     canWithdraw = !hasActiveConcertsForSeller(userId); // 활성 콘서트 여부로 철회 가능 여부 결정
                     break;
             }
         }
 
-        // TODO: lastReason 필드 조합 로직 개선 (SellerApprovalHistory에서 가져오기)
-        // SellerApprovalHistoryRepository가 구현되면 이곳에서 lastReason을 가져오도록 변경
-        // ✅ SellerApprovalHistory에서 최신 반려/회수 사유를 가져와 lastReason을 채웁니다.
-        /*
-        Optional<SellerApprovalHistory> latestRejectOrRevokeHistory = sellerApprovalHistoryRepository
-                .findTopByUserIdAndTypeInOrderByActionDateDesc(userId, List.of(SellerApprovalHistory.ActionType.REJECT, SellerApprovalHistory.ActionType.REVOKE));
-        lastReason = latestRejectOrRevokeHistory.map(SellerApprovalHistory::getReason).orElse(null); // 기존 lastReason이 없으면 히스토리에서
-        */
-        Optional<SellerApprovalHistory> latestRejectOrRevokeHistory = sellerApprovalHistoryRepository
-                .findTopByUserAndTypeInOrderByCreatedAtDesc(user,
-                        List.of(SellerApprovalHistory.ActionType.REJECTED, SellerApprovalHistory.ActionType.REVOKED));
-        lastReason = latestRejectOrRevokeHistory.map(SellerApprovalHistory::getReason).orElse(null);
+        String lastReason = null;
+        // lastReason은 REJECTED 또는 REVOKED일 경우에만 가져오고, WITHDRAWN일 경우 null
+        if (userApprovalStatus == ApprovalStatus.REJECTED || userApprovalStatus == ApprovalStatus.REVOKED) {
+            Optional<SellerApprovalHistory> latestRejectOrRevokeHistory = sellerApprovalHistoryRepository
+                    .findTopByUserAndTypeInOrderByCreatedAtDesc(user,
+                            List.of(SellerApprovalHistory.ActionType.REJECTED, SellerApprovalHistory.ActionType.REVOKED));
+            lastReason = latestRejectOrRevokeHistory.map(SellerApprovalHistory::getReason).orElse(null);
+        }
+        // WITHDRAWN 상태일 때는 lastReason을 명시적으로 null로 설정
+        else if (userApprovalStatus == ApprovalStatus.WITHDRAWN) {
+            lastReason = null;
+        }
 
 
         return SellerApplicationStatusResponseDTO.builder()
                 .role(userRole)
                 .approvalStatus(userApprovalStatus)
-                .lastReason(lastReason)
+                .lastReason(lastReason) // 수정된 lastReason 사용
                 .canReapply(canReapply)
                 .canWithdraw(canWithdraw)
                 .applicationDate(applicationDate)
