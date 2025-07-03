@@ -5,8 +5,9 @@ import com.team03.ticketmon._global.exception.ErrorCode;
 import com.team03.ticketmon._global.exception.BusinessException;
 
 import com.team03.ticketmon.auth.jwt.CustomUserDetails; // 로그인 유저 정보 주입
-import com.team03.ticketmon.user.domain.entity.UserEntity;
-import com.team03.ticketmon.user.repository.UserRepository;
+
+// import com.team03.ticketmon.user.domain.entity.UserEntity; // 이 줄을 삭제
+// import com.team03.ticketmon.user.repository.UserRepository; // 이 줄을 삭제
 
 import com.team03.ticketmon.seller_application.dto.ApplicantInformationResponseDTO;
 import com.team03.ticketmon.seller_application.dto.SellerApplicationRequestDTO;
@@ -41,7 +42,7 @@ import org.springframework.web.multipart.MultipartFile; // 파일 업로드에 �
 public class SellerApplicationController {
 
     private final SellerApplicationService sellerApplicationService; // 서비스 계층 주입
-    private final UserRepository userRepository; // UserEntity 조회용
+    // private final UserRepository userRepository; // UserEntity 조회용
 
     /**
      * API-03-05: 로그인 사용자의 현재 판매자 권한 상태 조회
@@ -128,10 +129,6 @@ public class SellerApplicationController {
     public ResponseEntity<SuccessResponse<Void>> withdrawSellerRole(
             @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails userDetails) {
 
-        // Spring Security가 인증 처리중
-        // if (userDetails == null) {
-        //    throw new BusinessException(ErrorCode.AUTHENTICATION_REQUIRED, "로그인이 필요합니다.");
-        // }
         Long userId = userDetails.getUserId();
 
         sellerApplicationService.withdrawSellerRole(userId);
@@ -163,10 +160,8 @@ public class SellerApplicationController {
             throw new BusinessException(ErrorCode.AUTHENTICATION_REQUIRED, "로그인이 필요합니다.");
         }
 
-        UserEntity userEntity = userRepository.findById(userDetails.getUserId()) //
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자 정보를 찾을 수 없습니다."));
-
-        ApplicantInformationResponseDTO responseDTO = ApplicantInformationResponseDTO.fromEntity(userEntity);
+        // 기존 userRepository 직접 호출 부분을 sellerApplicationService 호출로 변경
+        ApplicantInformationResponseDTO responseDTO = sellerApplicationService.getUserApplicantInfo(userDetails.getUserId());
 
         return ResponseEntity.ok(SuccessResponse.of("현재 사용자 신청자 정보 조회 성공", responseDTO));
     }
