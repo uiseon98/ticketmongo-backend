@@ -116,7 +116,7 @@ public class PaymentService {
                         "존재하지 않는 주문 ID 입니다: " + confirmRequest.getOrderId()));
 
         log.info("[Server Validation] DB 금액: {}, 요청 금액: {}", payment.getAmount(), confirmRequest.getAmount());
-		
+
         // 2. 상태 검증: 이미 처리된 주문인지 확인
         if (payment.getStatus() != PaymentStatus.PENDING) {
             log.warn("이미 처리된 주문에 대한 승인 요청 무시: orderId={}, 현재 상태: {}", confirmRequest.getOrderId(), payment.getStatus());
@@ -356,5 +356,23 @@ public class PaymentService {
             }
         }
         return LocalDateTime.now();
+    }
+
+    /**
+     * 주문 ID로 결제 정보를 조회하여 연결된 예매번호를 반환합니다.
+     *
+     * @param orderId TossPayments 주문 ID
+     * @return 예매번호
+     * @throws BusinessException 결제 정보나 예매가 없을 때
+     */
+    public String getBookingNumberByOrderId(String orderId) {
+        Payment payment = paymentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                        "존재하지 않는 주문 ID 입니다: " + orderId));
+        if (payment.getBooking() == null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
+                    "결제에 연결된 예매 정보가 없습니다. orderId=" + orderId);
+        }
+        return payment.getBooking().getBookingNumber();
     }
 }
