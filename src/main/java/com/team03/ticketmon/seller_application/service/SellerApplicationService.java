@@ -11,6 +11,7 @@ import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
 import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
 
+import com.team03.ticketmon.seller_application.dto.ApplicantInformationResponseDTO; // 추가됨
 import com.team03.ticketmon.seller_application.dto.SellerApplicationRequestDTO;
 import com.team03.ticketmon.seller_application.dto.SellerApplicationStatusResponseDTO;
 
@@ -111,7 +112,7 @@ public class SellerApplicationService {
         user.setApprovalStatus(ApprovalStatus.PENDING); // 사용자의 승인 상태를 PENDING으로 변경
         userRepository.save(user); // 변경사항 저장
 
-        // 7. SellerApprovalHistory에 REQUEST 타입의 이력 기록 (추후(3.1 단계 구현 후) 활성화)
+        // 7. SellerApprovalHistory에 REQUEST 타입의 이력 기록
         SellerApprovalHistory history = SellerApprovalHistory.builder()
                 .user(user)     // UserEntity 객체 'user'를 전달
                 .sellerApplication(sellerApplication)     // SellerApplication 객체 'sellerApplication'을 전달
@@ -225,26 +226,35 @@ public class SellerApplicationService {
         userRepository.save(user);
 
         // 4. 해당 유저의 가장 최근 APPROVED 상태의 SellerApplication 상태 업데이트 (WITHDRAWN)
-        // findTopByUserIdAndStatusInOrderByCreatedAtDesc 등으로 APPROVED 상태의 신청서를 찾아 업데이트하는 로직 필요
         Optional<SellerApplication> latestApprovedApplication = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
                 user, List.of(ACCEPTED)); // APPROVED 대신 ACCEPTED 사용
         latestApprovedApplication.ifPresent(app -> {
-                    app.setStatus(WITHDRAWN);
-                    sellerApplicationRepository.save(app);
+            app.setStatus(WITHDRAWN);
+            sellerApplicationRepository.save(app);
 
-                    // 4. SellerApprovalHistory에 WITHDRAW 로그 기록
-                    SellerApprovalHistory history = SellerApprovalHistory.builder()
-                            .user(user) // userId 대신 UserEntity 객체 user를 전달
-                            .sellerApplication(app) // SellerApplication 객체 'app'을 전달
-                            .type(SellerApprovalHistory.ActionType.WITHDRAWN) // WITHDRAWN 타입
-                            .reason(null) // 자발적 철회이므로 reason은 null
-                            .build();
-                    sellerApprovalHistoryRepository.save(history);
-                });
+            // 4. SellerApprovalHistory에 WITHDRAW 로그 기록
+            SellerApprovalHistory history = SellerApprovalHistory.builder()
+                    .user(user) // userId 대신 UserEntity 객체 user를 전달
+                    .sellerApplication(app) // SellerApplication 객체 'app'을 전달
+                    .type(SellerApprovalHistory.ActionType.WITHDRAWN) // WITHDRAWN 타입
+                    .reason(null) // 자발적 철회이므로 reason은 null
+                    .build();
+            sellerApprovalHistoryRepository.save(history);
+        });
+    }
 
-        // 5. 개인정보 처리 (스케줄러에 의해 처리될 예정)
-        // SellerApplication의 representative_name, representative_phone 마스킹 및 uploaded_file_url 파일 삭제/NULL 처리
-
+    /**
+     * 사용자의 신청자 관련 상세 정보를 조회합니다.
+     * 컨트롤러에서 직접 리포지토리를 사용하는 대신 서비스 계층을 통해 조회합니다.
+     * @param userId 조회할 사용자 ID
+     * @return ApplicantInformationResponseDTO
+     * @throws BusinessException 사용자를 찾을 수 없는 경우
+     */
+    @Transactional(readOnly = true)
+    public ApplicantInformationResponseDTO getUserApplicantInfo(Long userId) {
+        UserEntity userEntity = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자 정보를 찾을 수 없습니다."));
+        return ApplicantInformationResponseDTO.fromEntity(userEntity);
     }
 
     /**
