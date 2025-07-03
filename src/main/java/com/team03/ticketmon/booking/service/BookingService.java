@@ -12,14 +12,19 @@ import com.team03.ticketmon.concert.repository.ConcertRepository;
 import com.team03.ticketmon.concert.repository.ConcertSeatRepository;
 import com.team03.ticketmon.seat.service.SeatStatusService;
 import com.team03.ticketmon.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+
 
 /**
  * 예매(Booking)와 관련된 핵심 비즈니스 로직을 처리하는 서비스
@@ -35,6 +40,7 @@ public class BookingService {
     private final ConcertRepository concertRepository;
     private final ConcertSeatRepository concertSeatRepository;
     private final SeatStatusService seatStatusService;
+    private final EntityManager entityManager;
 
     /**
      * '결제 대기' 상태의 새로운 예매를 생성
@@ -110,7 +116,7 @@ public class BookingService {
         booking.getTickets().forEach(ticket ->
                 seatStatusService.releaseSeat(
                         booking.getConcert().getConcertId(),
-                        ticket.getConcertSeat().getConcertSeatId(), // ✅ 수정: concertSeatId 사용
+                        ticket.getConcertSeat().getConcertSeatId(),
                         booking.getUserId()
                 )
         );
@@ -118,7 +124,7 @@ public class BookingService {
         // 히스토리 테이블로 이관하는 로직 호출
         archiveBookingAndTickets(booking);
 
-        bookingRepository.delete(booking);
+        bookingRepository.save(booking);
         log.info("예매가 성공적으로 취소(삭제)되었습니다. Booking ID: {}", booking.getBookingId());
     }
 
@@ -127,7 +133,7 @@ public class BookingService {
      * 취소할 예매 엔티티를 반환
      *
      * @param bookingId 검사할 예매 ID
-     * @param userId 요청한 사용자 ID
+     * @param userId    요청한 사용자 ID
      * @return 검증이 완료된 Booking 엔티티
      * @throws BusinessException 유효성 검사 실패 시 (소유권, 상태, 취소 기간 등)
      */
@@ -190,4 +196,55 @@ public class BookingService {
 
         log.info("[시뮬레이션] Booking ID {} 및 관련 Ticket 정보를 히스토리 테이블로 이관 완료.", booking.getBookingId());
     }
+
+    /**
+     * 1분마다 실행되어, 결제 대기 상태로 15분 이상 방치된 예매를 자동 취소 및 데이터 정리합니다.
+     */
+    @Scheduled(fixedRate = 60000)
+    @Transactional
+    public void cleanupExpiredPendingBookings() {
+        LocalDateTime expirationTime = LocalDateTime.now().minusMinutes(15);
+        log.info("취소 기준 시각(expirationTime): {}", expirationTime);
+        List<Booking> expiredBookings = bookingRepository.findExpiredPendingBookings(expirationTime);
+
+        for (Booking booking : expiredBookings) {
+            // Redis 좌석 해제
+            Long concertId = booking.getConcert().getConcertId();
+            booking.getTickets().forEach(ticket -> {
+                Long concertSeatId = ticket.getConcertSeat().getConcertSeatId();
+                seatStatusService.forceReleaseSeat(concertId, concertSeatId);
+            });
+
+            // 아카이빙 스텁 (추후 구현)
+            archiveBookingAndTickets(booking);
+
+            // Hibernate orphanRemoval을 통해 자식 티켓 먼저 삭제
+            booking.removeAllTickets();
+            bookingRepository.delete(booking);
+
+            log.info("자동 취소 처리된 예매: {}", booking.getBookingNumber());
+        }
+    }
+
+    /**
+     * bookingNumber로 예매를 조회하고,
+     * 요청한 userId와 소유자가 다르면 예외를 던집니다.
+     *
+     * @param bookingNumber 예매 조회 키
+     * @param userId        요청한 사용자 ID
+     * @return 조회된 Booking 엔티티
+     */
+    @Transactional(readOnly = true)
+    public Booking findByBookingNumberForUser(String bookingNumber, Long userId) {
+        Booking booking = bookingRepository.findByBookingNumber(bookingNumber)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND,
+                        "존재하지 않는 예매번호입니다: " + bookingNumber
+                ));
+        if (!booking.getUserId().equals(userId)) {
+            throw new AccessDeniedException("본인의 예매 내역만 조회할 수 있습니다.");
+        }
+        return booking;
+    }
 }
+
