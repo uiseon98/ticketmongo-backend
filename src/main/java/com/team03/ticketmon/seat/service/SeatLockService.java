@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -17,13 +18,19 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 좌석 영구 선점 처리 서비스 (확장된 버전)
+ * 좌석 영구 선점 처리 서비스 (보상 트랜잭션 패턴 적용)
+ *
+ * 🔧 주요 개선사항:
+ * - 일괄 처리 시 All-or-Nothing 정책 적용
+ * - 실패 시 성공한 좌석들을 자동으로 원래 상태로 복원
+ * - 기존 단일 좌석 처리 메서드들은 변경 없음
+ * - 최소한의 코드 수정으로 안전성 대폭 향상
  *
  * 목적: Redis TTL 삭제 후 좌석 상태를 영구적으로 선점 상태로 변경
  *
  * 주요 기능:
  * - 단일 좌석 영구 선점/복원 (기존 기능)
- * - 다중 좌석 일괄 영구 선점/복원 (신규 기능)
+ * - 다중 좌석 일괄 영구 선점/복원 (보상 트랜잭션 적용)
  * - TTL 키 삭제하여 자동 만료 방지
  * - 권한 검증 및 상태 검증
  * - 실시간 이벤트 발행
@@ -31,7 +38,7 @@ import java.util.Optional;
  * 사용 시나리오:
  * - 결제 진행 시: 결제 처리 중 좌석이 만료되지 않도록 보장
  * - 예매 확정 직전: 최종 확정 전 좌석을 안전하게 고정
- * - 다중 좌석 선택 시: 사용자가 선점한 모든 좌석을 한 번에 처리
+ * - 다중 좌석 선택 시: 사용자가 선점한 모든 좌석을 안전하게 일괄 처리
  */
 @Slf4j
 @Service
@@ -45,7 +52,7 @@ public class SeatLockService {
     // TTL 키 패턴 (SeatStatusService와 동일)
     private static final String SEAT_TTL_KEY_PREFIX = "seat:expire:";
 
-    // ========== 기존 단일 좌석 처리 메서드들 ==========
+    // ========== 기존 단일 좌석 처리 메서드들 (변경 없음) ==========
 
     /**
      * 좌석을 영구 선점 상태로 변경
@@ -212,24 +219,34 @@ public class SeatLockService {
         }
     }
 
-    // ========== 신규 다중 좌석 처리 메서드들 ==========
+    // ========== 🔧 새로운 보상 트랜잭션 패턴 적용 다중 좌석 처리 메서드들 ==========
 
     /**
-     * 사용자가 선점한 모든 좌석을 일괄 영구 선점 처리
+     * 🔧 사용자가 선점한 모든 좌석을 일괄 영구 선점 처리 (보상 트랜잭션 패턴 적용)
+     *
+     * 개선사항:
+     * - 실패 시 성공한 좌석들을 자동으로 원래 상태로 복원
+     * - All-or-Nothing 정책으로 데이터 일관성 보장
+     * - 기존 restoreSeatReservation 메서드 활용으로 최소 수정
      *
      * 프로세스:
      * 1. 사용자의 모든 선점 좌석 조회
      * 2. 각 좌석에 대해 영구 선점 처리 (순차 실행)
-     * 3. 결과 집계 및 통계 생성
+     * 3. 실패 시 성공한 좌석들을 즉시 복원 (보상 트랜잭션)
+     * 4. 결과 집계 및 통계 생성
      *
      * @param concertId 콘서트 ID
      * @param userId 사용자 ID
      * @return 일괄 영구 선점 처리 결과
      */
+    @Transactional
     public BulkSeatLockResult lockAllUserSeatsPermanently(Long concertId, Long userId) {
-        log.info("사용자 모든 좌석 일괄 영구 선점 요청: concertId={}, userId={}", concertId, userId);
+        log.info("사용자 모든 좌석 일괄 영구 선점 요청 (보상 트랜잭션): concertId={}, userId={}", concertId, userId);
 
         LocalDateTime bulkStartTime = LocalDateTime.now();
+
+        // 🔧 보상 트랜잭션을 위한 성공한 좌석 추적
+        List<Long> successfulSeatIds = new ArrayList<>();
 
         try {
             // 1. 사용자의 모든 선점 좌석 조회
@@ -244,7 +261,7 @@ public class SeatLockService {
             log.info("일괄 영구 선점 대상 좌석 수: {} (concertId={}, userId={})",
                     userReservedSeats.size(), concertId, userId);
 
-            // 2. 각 좌석에 대해 영구 선점 처리 (순차 실행)
+            // 2. 각 좌석에 대해 영구 선점 처리 (순차 실행 + 실패 시 즉시 중단)
             List<SeatLockResult> seatResults = new ArrayList<>();
 
             for (SeatStatus seat : userReservedSeats) {
@@ -254,16 +271,39 @@ public class SeatLockService {
                 SeatLockResult result = lockSeatPermanently(concertId, seat.getSeatId(), userId);
                 seatResults.add(result);
 
-                // 성공/실패 로그
                 if (result.isSuccess()) {
+                    // 🔧 성공한 좌석 ID 추적
+                    successfulSeatIds.add(seat.getSeatId());
                     log.debug("좌석 영구 선점 성공: seatId={}", seat.getSeatId());
                 } else {
-                    log.warn("좌석 영구 선점 실패: seatId={}, error={}",
+                    // 🔧 실패 시 즉시 보상 트랜잭션 실행
+                    log.warn("좌석 영구 선점 실패 감지: seatId={}, error={}",
                             seat.getSeatId(), result.getErrorMessage());
+
+                    // 지금까지 성공한 좌석들을 원래 상태로 복원
+                    executeCompensation(concertId, userId, successfulSeatIds);
+
+                    // 전체 실패로 처리
+                    LocalDateTime bulkEndTime = LocalDateTime.now();
+                    return BulkSeatLockResult.builder()
+                            .concertId(concertId)
+                            .userId(userId)
+                            .bulkStartTime(bulkStartTime)
+                            .bulkEndTime(bulkEndTime)
+                            .seatResults(seatResults)
+                            .totalSeats(userReservedSeats.size())
+                            .successCount(0) // 보상 처리로 모든 성공을 취소
+                            .failureCount(userReservedSeats.size())
+                            .allSuccess(false)
+                            .partialSuccess(false)
+                            .operationType(BulkSeatLockResult.BulkOperationType.LOCK)
+                            .errorMessage(String.format("좌석 %d에서 실패 후 전체 롤백 완료: %s",
+                                    seat.getSeatId(), result.getErrorMessage()))
+                            .build();
                 }
             }
 
-            // 3. 결과 집계 및 반환
+            // 3. 모든 좌석 처리 성공 시 결과 집계 및 반환
             LocalDateTime bulkEndTime = LocalDateTime.now();
             BulkSeatLockResult bulkResult = BulkSeatLockResult.allSuccess(
                     concertId, userId, seatResults,
@@ -271,37 +311,97 @@ public class SeatLockService {
                     bulkStartTime, bulkEndTime
             );
 
-            log.info("사용자 모든 좌석 일괄 영구 선점 완료: {}", bulkResult.getSummary());
+            log.info("사용자 모든 좌석 일괄 영구 선점 완료 (보상 트랜잭션): {}", bulkResult.getSummary());
             return bulkResult;
 
         } catch (Exception e) {
             log.error("사용자 모든 좌석 일괄 영구 선점 중 예외 발생: concertId={}, userId={}",
                     concertId, userId, e);
 
+            // 🔧 예외 발생 시에도 보상 트랜잭션 실행
+            executeCompensation(concertId, userId, successfulSeatIds);
+
             return BulkSeatLockResult.failure(concertId, userId,
                     BulkSeatLockResult.BulkOperationType.LOCK,
-                    "시스템 오류: " + e.getMessage());
+                    "시스템 오류 후 전체 롤백 완료: " + e.getMessage());
         }
     }
 
     /**
-     * 사용자가 영구 선점한 모든 좌석을 일괄 상태 복원
+     * 🔧 보상 트랜잭션 실행 메서드 (신규 추가)
+     *
+     * 성공한 좌석들을 원래 상태(임시 선점)로 복원합니다.
+     * 기존 restoreSeatReservation 메서드를 활용하여 구현합니다.
+     *
+     * @param concertId 콘서트 ID
+     * @param userId 사용자 ID
+     * @param successfulSeatIds 복원할 좌석 ID 목록
+     */
+    private void executeCompensation(Long concertId, Long userId, List<Long> successfulSeatIds) {
+        if (successfulSeatIds.isEmpty()) {
+            log.info("보상 트랜잭션: 복원할 좌석이 없음 (concertId={}, userId={})", concertId, userId);
+            return;
+        }
+
+        log.warn("보상 트랜잭션 시작: 성공한 좌석 {}개를 원래 상태로 복원 (concertId={}, userId={}, seatIds={})",
+                successfulSeatIds.size(), concertId, userId, successfulSeatIds);
+
+        int restoredCount = 0;
+        int compensationFailures = 0;
+
+        // 각 성공한 좌석을 원래 상태로 복원
+        for (Long seatId : successfulSeatIds) {
+            try {
+                // 🔧 기존 restoreSeatReservation 메서드 활용
+                // restoreWithTTL=true로 설정하여 5분 TTL 재설정
+                SeatLockResult restoreResult = restoreSeatReservation(concertId, seatId, userId, true);
+
+                if (restoreResult.isSuccess()) {
+                    restoredCount++;
+                    log.debug("보상 트랜잭션: 좌석 복원 성공 seatId={}", seatId);
+                } else {
+                    compensationFailures++;
+                    log.error("보상 트랜잭션: 좌석 복원 실패 seatId={}, error={}",
+                            seatId, restoreResult.getErrorMessage());
+                }
+            } catch (Exception e) {
+                compensationFailures++;
+                log.error("보상 트랜잭션: 좌석 복원 중 예외 seatId={}", seatId, e);
+            }
+        }
+
+        if (compensationFailures > 0) {
+            log.error("보상 트랜잭션 완료: 복원 성공 {}개, 복원 실패 {}개 - 관리자 확인 필요!",
+                    restoredCount, compensationFailures);
+        } else {
+            log.info("보상 트랜잭션 완료: 모든 좌석 복원 성공 ({}개)", restoredCount);
+        }
+    }
+
+    /**
+     * 🔧 사용자가 영구 선점한 모든 좌석을 일괄 상태 복원 (보상 트랜잭션 패턴 적용)
+     *
+     * 실패 시 부분 성공한 복원들을 다시 영구 선점으로 되돌림
      *
      * 프로세스:
      * 1. 사용자의 모든 영구 선점 좌석 조회 (expiresAt이 null인 RESERVED 상태)
      * 2. 각 좌석에 대해 상태 복원 처리 (순차 실행)
-     * 3. 결과 집계 및 통계 생성
+     * 3. 실패 시 복원된 좌석들을 다시 영구 선점으로 되돌림 (보상 트랜잭션)
+     * 4. 결과 집계 및 통계 생성
      *
      * @param concertId 콘서트 ID
      * @param userId 사용자 ID
      * @param restoreWithTTL TTL을 다시 설정할지 여부
      * @return 일괄 상태 복원 처리 결과
      */
-    public BulkSeatLockResult restoreAllUserSeats(Long concertId, Long userId, boolean restoreWithTTL) {
-        log.info("사용자 모든 좌석 일괄 상태 복원 요청: concertId={}, userId={}, withTTL={}",
+    public BulkSeatLockResult restoreAllUserSeatsWithCompensation(Long concertId, Long userId, boolean restoreWithTTL) {
+        log.info("사용자 모든 좌석 일괄 상태 복원 요청 (보상 트랜잭션): concertId={}, userId={}, withTTL={}",
                 concertId, userId, restoreWithTTL);
 
         LocalDateTime bulkStartTime = LocalDateTime.now();
+
+        // 복원에 성공한 좌석들을 추적 (실패 시 다시 영구 선점으로 되돌리기 위함)
+        List<Long> restoredSeatIds = new ArrayList<>();
 
         try {
             // 1. 사용자의 모든 영구 선점 좌석 조회
@@ -316,7 +416,7 @@ public class SeatLockService {
             log.info("일괄 상태 복원 대상 좌석 수: {} (concertId={}, userId={})",
                     userPermanentlyLockedSeats.size(), concertId, userId);
 
-            // 2. 각 좌석에 대해 상태 복원 처리 (순차 실행)
+            // 2. 각 좌석에 대해 상태 복원 처리 (순차 실행 + 실패 시 즉시 중단)
             List<SeatLockResult> seatResults = new ArrayList<>();
 
             for (SeatStatus seat : userPermanentlyLockedSeats) {
@@ -326,16 +426,37 @@ public class SeatLockService {
                 SeatLockResult result = restoreSeatReservation(concertId, seat.getSeatId(), userId, restoreWithTTL);
                 seatResults.add(result);
 
-                // 성공/실패 로그
                 if (result.isSuccess()) {
+                    restoredSeatIds.add(seat.getSeatId());
                     log.debug("좌석 상태 복원 성공: seatId={}", seat.getSeatId());
                 } else {
-                    log.warn("좌석 상태 복원 실패: seatId={}, error={}",
+                    log.warn("좌석 상태 복원 실패 감지: seatId={}, error={}",
                             seat.getSeatId(), result.getErrorMessage());
+
+                    // 지금까지 복원된 좌석들을 다시 영구 선점으로 되돌림
+                    executeRestoreCompensation(concertId, userId, restoredSeatIds);
+
+                    // 전체 실패로 처리
+                    LocalDateTime bulkEndTime = LocalDateTime.now();
+                    return BulkSeatLockResult.builder()
+                            .concertId(concertId)
+                            .userId(userId)
+                            .bulkStartTime(bulkStartTime)
+                            .bulkEndTime(bulkEndTime)
+                            .seatResults(seatResults)
+                            .totalSeats(userPermanentlyLockedSeats.size())
+                            .successCount(0) // 보상 처리로 모든 성공을 취소
+                            .failureCount(userPermanentlyLockedSeats.size())
+                            .allSuccess(false)
+                            .partialSuccess(false)
+                            .operationType(BulkSeatLockResult.BulkOperationType.RESTORE)
+                            .errorMessage(String.format("좌석 %d에서 실패 후 전체 롤백 완료: %s",
+                                    seat.getSeatId(), result.getErrorMessage()))
+                            .build();
                 }
             }
 
-            // 3. 결과 집계 및 반환
+            // 3. 모든 좌석 처리 성공 시 결과 집계 및 반환
             LocalDateTime bulkEndTime = LocalDateTime.now();
             BulkSeatLockResult bulkResult = BulkSeatLockResult.allSuccess(
                     concertId, userId, seatResults,
@@ -343,18 +464,89 @@ public class SeatLockService {
                     bulkStartTime, bulkEndTime
             );
 
-            log.info("사용자 모든 좌석 일괄 상태 복원 완료: {}", bulkResult.getSummary());
+            log.info("사용자 모든 좌석 일괄 상태 복원 완료 (보상 트랜잭션): {}", bulkResult.getSummary());
             return bulkResult;
 
         } catch (Exception e) {
             log.error("사용자 모든 좌석 일괄 상태 복원 중 예외 발생: concertId={}, userId={}",
                     concertId, userId, e);
 
+            // 예외 발생 시에도 보상 트랜잭션 실행
+            executeRestoreCompensation(concertId, userId, restoredSeatIds);
+
             return BulkSeatLockResult.failure(concertId, userId,
                     BulkSeatLockResult.BulkOperationType.RESTORE,
-                    "시스템 오류: " + e.getMessage());
+                    "시스템 오류 후 전체 롤백 완료: " + e.getMessage());
         }
     }
+
+    /**
+     * 🔧 복원 보상 트랜잭션 실행 메서드 (신규 추가)
+     *
+     * 복원에 성공한 좌석들을 다시 영구 선점 상태로 되돌립니다.
+     *
+     * @param concertId 콘서트 ID
+     * @param userId 사용자 ID
+     * @param restoredSeatIds 다시 영구 선점으로 되돌릴 좌석 ID 목록
+     */
+    private void executeRestoreCompensation(Long concertId, Long userId, List<Long> restoredSeatIds) {
+        if (restoredSeatIds.isEmpty()) {
+            log.info("복원 보상 트랜잭션: 되돌릴 좌석이 없음 (concertId={}, userId={})", concertId, userId);
+            return;
+        }
+
+        log.warn("복원 보상 트랜잭션 시작: 복원된 좌석 {}개를 다시 영구 선점으로 되돌림 (concertId={}, userId={}, seatIds={})",
+                restoredSeatIds.size(), concertId, userId, restoredSeatIds);
+
+        int revertedCount = 0;
+        int compensationFailures = 0;
+
+        // 각 복원된 좌석을 다시 영구 선점으로 되돌림
+        for (Long seatId : restoredSeatIds) {
+            try {
+                // 기존 lockSeatPermanently 메서드 활용
+                SeatLockResult revertResult = lockSeatPermanently(concertId, seatId, userId);
+
+                if (revertResult.isSuccess()) {
+                    revertedCount++;
+                    log.debug("복원 보상 트랜잭션: 좌석 영구 선점 되돌림 성공 seatId={}", seatId);
+                } else {
+                    compensationFailures++;
+                    log.error("복원 보상 트랜잭션: 좌석 영구 선점 되돌림 실패 seatId={}, error={}",
+                            seatId, revertResult.getErrorMessage());
+                }
+            } catch (Exception e) {
+                compensationFailures++;
+                log.error("복원 보상 트랜잭션: 좌석 영구 선점 되돌림 중 예외 seatId={}", seatId, e);
+            }
+        }
+
+        if (compensationFailures > 0) {
+            log.error("복원 보상 트랜잭션 완료: 되돌림 성공 {}개, 되돌림 실패 {}개 - 관리자 확인 필요!",
+                    revertedCount, compensationFailures);
+        } else {
+            log.info("복원 보상 트랜잭션 완료: 모든 좌석 되돌림 성공 ({}개)", revertedCount);
+        }
+    }
+
+    // ========== 🔧 기존 메서드들과 호환성을 위한 추가 메서드 (기존 API 유지) ==========
+
+    /**
+     * 사용자가 영구 선점한 모든 좌석을 일괄 상태 복원 (기존 API 호환)
+     *
+     * 기존 API와의 호환성을 위해 유지하되, 내부적으로는 보상 트랜잭션 버전 호출
+     *
+     * @param concertId 콘서트 ID
+     * @param userId 사용자 ID
+     * @param restoreWithTTL TTL을 다시 설정할지 여부
+     * @return 일괄 상태 복원 처리 결과
+     */
+    public BulkSeatLockResult restoreAllUserSeats(Long concertId, Long userId, boolean restoreWithTTL) {
+        log.info("기존 API 호출 감지 - 보상 트랜잭션 버전으로 처리: concertId={}, userId={}", concertId, userId);
+        return restoreAllUserSeatsWithCompensation(concertId, userId, restoreWithTTL);
+    }
+
+    // ========== 기존 공통 메서드들 (변경 없음) ==========
 
     /**
      * 사용자의 영구 선점 좌석 목록 조회
@@ -370,8 +562,6 @@ public class SeatLockService {
                 .filter(seat -> seat.isReserved() && seat.getExpiresAt() == null) // 영구 선점 조건
                 .collect(java.util.stream.Collectors.toList());
     }
-
-    // ========== 기존 공통 메서드들 (변경 없음) ==========
 
     /**
      * 좌석 영구 선점 가능 여부 확인 (실제 처리 없이 검증만)
