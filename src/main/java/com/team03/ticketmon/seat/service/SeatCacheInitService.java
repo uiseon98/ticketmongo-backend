@@ -1,5 +1,6 @@
 package com.team03.ticketmon.seat.service;
 
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.concert.domain.ConcertSeat;
 import com.team03.ticketmon.concert.repository.ConcertSeatRepository;
 import com.team03.ticketmon.seat.domain.SeatStatus;
@@ -30,7 +31,7 @@ public class SeatCacheInitService {
 
     private final RedissonClient redissonClient;
     private final ConcertSeatRepository concertSeatRepository;
-    private static final String SEAT_STATUS_KEY_PREFIX = "seat:status:";
+    private static final String SEAT_STATUS_KEY_PREFIX = RedisKeyGenerator.SEAT_STATUS_KEY_PREFIX;
 
     /**
      * ✅ 수정된 DB 기반 좌석 캐시 초기화
@@ -116,7 +117,7 @@ public class SeatCacheInitService {
     }
 
     /**
-     * ✅ 내부 헬퍼 메서드: Seat 엔티티로부터 좌석 정보 생성
+     * ✅ 내부 헬퍼 메서드: Seat 엔티티로부터 좌석 정보 생성 - seatInfo
      */
     private String generateSeatInfoFromDB(Seat seat) {
         if (seat == null) {
@@ -133,6 +134,7 @@ public class SeatCacheInitService {
 
     /**
      * 더미 데이터 기반 캐시 초기화 (기존 메서드, 테스트용 유지)
+     * ⚠️ 사용하지 않는 메서드
      */
     public void initializeSeatCache(Long concertId, int totalSeats) {
         String key = SEAT_STATUS_KEY_PREFIX + concertId;
@@ -175,6 +177,7 @@ public class SeatCacheInitService {
 
     /**
      * 더미 좌석 정보 생성 (테스트용)
+     * ⚠️ 사용하지 않는 메서드에서 사용하는 메서드
      */
     private String generateDummySeatInfo(int seatNumber) {
         final int SEATS_PER_SECTION = 50;
