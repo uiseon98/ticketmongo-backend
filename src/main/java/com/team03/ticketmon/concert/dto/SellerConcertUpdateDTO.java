@@ -82,8 +82,7 @@ public class SellerConcertUpdateDTO {
 		allowableValues = {"SCHEDULED", "ON_SALE", "SOLD_OUT", "CANCELLED", "COMPLETED"})
 	private ConcertStatus status;
 
-	@Pattern(regexp = "^https?://.*\\.(jpg|jpeg|png|gif|webp)$",
-		message = "포스터 이미지 URL은 올바른 이미지 URL 형식이어야 합니다")
+	@Size(max = 2000, message = "URL이 너무 깁니다")
 	@Schema(description = "포스터 이미지 URL", example = "https://example.com/posters/iu-2025.jpg",
 		pattern = "^https?://.*\\.(jpg|jpeg|png|gif|webp)$")
 	private String posterImageUrl;
