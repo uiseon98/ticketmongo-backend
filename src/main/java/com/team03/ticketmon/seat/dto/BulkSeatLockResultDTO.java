@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
  */
 @Getter
 @Builder
-public class BulkSeatLockResult {
+public class BulkSeatLockResultDTO {
 
     /** 콘서트 ID */
     private final Long concertId;
@@ -36,7 +36,7 @@ public class BulkSeatLockResult {
     private final LocalDateTime bulkEndTime;
 
     /** 개별 좌석 처리 결과 목록 */
-    private final List<SeatLockResult> seatResults;
+    private final List<SeatLockResultDTO> seatResults;
 
     /** 전체 좌석 수 */
     private final int totalSeats;
@@ -76,9 +76,9 @@ public class BulkSeatLockResult {
      *
      * @return 성공한 좌석의 SeatLockResult 목록
      */
-    public List<SeatLockResult> getSuccessfulSeats() {
+    public List<SeatLockResultDTO> getSuccessfulSeats() {
         return seatResults.stream()
-                .filter(SeatLockResult::isSuccess)
+                .filter(SeatLockResultDTO::isSuccess)
                 .collect(Collectors.toList());
     }
 
@@ -87,7 +87,7 @@ public class BulkSeatLockResult {
      *
      * @return 실패한 좌석의 SeatLockResult 목록
      */
-    public List<SeatLockResult> getFailedSeats() {
+    public List<SeatLockResultDTO> getFailedSeats() {
         return seatResults.stream()
                 .filter(result -> !result.isSuccess())
                 .collect(Collectors.toList());
@@ -153,8 +153,8 @@ public class BulkSeatLockResult {
 
         if (!seatResults.isEmpty()) {
             sb.append("개별 좌석 결과:\n");
-            for (SeatLockResult result : seatResults) {
-                sb.append("  - 좌석 ").append(result.getSeatId())
+            for (SeatLockResultDTO result : seatResults) {
+                sb.append("  - 좌석 ").append(result.getConcertSeatId())
                         .append(": ").append(result.isSuccess() ? "성공" : "실패");
                 if (!result.isSuccess() && result.getErrorMessage() != null) {
                     sb.append(" (").append(result.getErrorMessage()).append(")");
@@ -177,13 +177,13 @@ public class BulkSeatLockResult {
      * @param endTime 종료 시간
      * @return 성공 결과
      */
-    public static BulkSeatLockResult allSuccess(Long concertId, Long userId,
-                                                List<SeatLockResult> seatResults,
-                                                BulkOperationType operationType,
-                                                LocalDateTime startTime, LocalDateTime endTime) {
-        int successCount = (int) seatResults.stream().filter(SeatLockResult::isSuccess).count();
+    public static BulkSeatLockResultDTO allSuccess(Long concertId, Long userId,
+                                                   List<SeatLockResultDTO> seatResults,
+                                                   BulkOperationType operationType,
+                                                   LocalDateTime startTime, LocalDateTime endTime) {
+        int successCount = (int) seatResults.stream().filter(SeatLockResultDTO::isSuccess).count();
 
-        return BulkSeatLockResult.builder()
+        return BulkSeatLockResultDTO.builder()
                 .concertId(concertId)
                 .userId(userId)
                 .bulkStartTime(startTime)
@@ -207,11 +207,11 @@ public class BulkSeatLockResult {
      * @param errorMessage 오류 메시지
      * @return 실패 결과
      */
-    public static BulkSeatLockResult failure(Long concertId, Long userId,
-                                             BulkOperationType operationType, String errorMessage) {
+    public static BulkSeatLockResultDTO failure(Long concertId, Long userId,
+                                                BulkOperationType operationType, String errorMessage) {
         LocalDateTime now = LocalDateTime.now();
 
-        return BulkSeatLockResult.builder()
+        return BulkSeatLockResultDTO.builder()
                 .concertId(concertId)
                 .userId(userId)
                 .bulkStartTime(now)
