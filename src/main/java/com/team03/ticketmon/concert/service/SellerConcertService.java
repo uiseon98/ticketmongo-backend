@@ -133,11 +133,6 @@ public class SellerConcertService {
 
 		updateConcertEntity(concert, updateDTO);
 
-		if (updateDTO.getStatus() == null) {
-			ConcertStatus determinedStatus = concert.determineCurrentStatus(false);
-			concert.setStatus(determinedStatus);
-		}
-
 		Concert updatedConcert = sellerConcertRepository.save(concert);
 		return convertToSellerDTO(updatedConcert);
 	}
@@ -249,8 +244,8 @@ public class SellerConcertService {
 
 		// 시스템 설정값들
 		concert.setSellerId(sellerId);
-		ConcertStatus determinedStatus = concert.determineCurrentStatus(false);
-		concert.setStatus(determinedStatus);
+		ConcertStatus requestedStatus = createDTO.getStatus();
+		concert.setStatus(requestedStatus != null ? requestedStatus : ConcertStatus.SCHEDULED);
 
 		return concert;
 	}

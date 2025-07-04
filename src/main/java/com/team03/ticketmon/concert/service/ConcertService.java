@@ -336,7 +336,7 @@ public class ConcertService {
 			concert.getBookingEndDate(),
 			concert.getMinAge(),
 			concert.getMaxTicketsPerUser(),
-			currentStatus,
+			concert.getStatus(),
 			concert.getPosterImageUrl(),
 			concert.getAiSummary(),
 			concert.getCreatedAt(),
