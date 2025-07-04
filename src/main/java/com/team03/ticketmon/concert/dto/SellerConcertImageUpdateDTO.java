@@ -16,7 +16,6 @@ import lombok.AllArgsConstructor;
 public class SellerConcertImageUpdateDTO {
 
 	@NotBlank(message = "포스터 이미지 URL은 필수입니다")
-	@Pattern(regexp = "^https?://.*\\.(jpg|jpeg|png|gif|webp)$",
-		message = "포스터 이미지 URL은 올바른 이미지 URL 형식이어야 합니다")
+	@Size(max = 2000, message = "URL이 너무 깁니다")
 	private String posterImageUrl;
 }

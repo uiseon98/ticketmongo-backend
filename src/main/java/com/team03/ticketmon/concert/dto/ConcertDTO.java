@@ -36,4 +36,6 @@ public class ConcertDTO {
 	private ConcertStatus status;
 	private String posterImageUrl;
 	private String aiSummary;
+	private LocalDateTime createdAt;
+	private LocalDateTime updatedAt;
 }
