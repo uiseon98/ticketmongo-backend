@@ -5,13 +5,13 @@ import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import com.team03.ticketmon._global.util.UploadPathUtil;
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
-import com.team03.ticketmon._global.config.supabase.SupabaseProperties; // SupabaseProperties 임포트 추가(동적으로 버킷명 적용하기 위해)
+import com.team03.ticketmon._global.config.supabase.SupabaseProperties; // SupabaseProperties 임포트(동적으로 버킷명 적용하기 위해)
 
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
 import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
 
-import com.team03.ticketmon.seller_application.dto.ApplicantInformationResponseDTO; // 추가됨
+import com.team03.ticketmon.seller_application.dto.ApplicantInformationResponseDTO;
 import com.team03.ticketmon.seller_application.dto.SellerApplicationRequestDTO;
 import com.team03.ticketmon.seller_application.dto.SellerApplicationStatusResponseDTO;
 
@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.Arrays; // Arrays 임포트 추가
 import java.util.List;
 import java.util.Optional;
 
@@ -80,7 +81,16 @@ public class SellerApplicationService {
             throw new BusinessException(ErrorCode.SELLER_APPLY_ONCE, "이미 판매자 권한 신청이 접수되어 처리 대기 중입니다."); // PENDING 상태이면 재신청 불가
         }
         if (user.getRole() == Role.SELLER && user.getApprovalStatus() == ApprovalStatus.APPROVED) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 판매자 권한을 가지고 있습니다."); // 이미 판매자이면 신청 불가
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 판매자 권한을 가지고 있습니다.");   // 이미 판매자이면 신청 불가
+        }
+
+        // 추가: 사업자등록번호 중복 검사 (SUBMITTED 또는 ACCEPTED 상태인 경우)
+        boolean isBusinessNumberAlreadyInUse = sellerApplicationRepository.existsByBusinessNumberAndStatusIn(
+                request.getBusinessNumber(),
+                Arrays.asList(SUBMITTED, ACCEPTED) // SUBMITTED (신청 대기 중) 또는 ACCEPTED (승인됨) 상태
+        );
+        if (isBusinessNumberAlreadyInUse) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 사용 중이거나 처리 대기 중인 사업자등록번호입니다.");
         }
 
         // 3. 제출 서류 파일 유효성 검사 (FileValidator 사용)
