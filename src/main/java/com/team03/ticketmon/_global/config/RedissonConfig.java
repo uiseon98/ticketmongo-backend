@@ -1,6 +1,8 @@
 // src/main/java/com/team03/ticketmon/_global/config/RedissonConfig.java
 package com.team03.ticketmon._global.config;
 
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -10,6 +12,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
+import org.redisson.codec.JsonJacksonCodec;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Redisson 설정 클래스
@@ -44,10 +48,17 @@ public class RedissonConfig {
     public RedissonClient redissonClient() {
         Config config = new Config();
 
+        // 1) JSON 직렬화용 Codec 설정, Java 8 Date/Time 모듈 등록
+        ObjectMapper om = new ObjectMapper()
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .registerModule(new JavaTimeModule());
+        // 필요에 따라 모듈 등록, 옵션 설정…
+        config.setCodec(new JsonJacksonCodec(om));
+
         String protocol = sslEnabled ? "rediss" : "redis";
         String redisUrl = "%s://%s:%d".formatted(protocol, redisHost, redisPort);
 
-        log.info("Redisson Client를 생성합니다. Address: {}", redisUrl);
+        log.debug("Redisson Client를 생성합니다. Address: {}", redisUrl);
 
         // 단일 서버 모드 설정
         SingleServerConfig serverConfig = config.useSingleServer()
