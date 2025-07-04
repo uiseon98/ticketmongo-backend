@@ -20,13 +20,13 @@ import java.time.LocalDateTime;
  */
 @Getter
 @Builder
-public class SeatLockResult {
+public class SeatLockResultDTO {
 
     /** 콘서트 ID */
     private final Long concertId;
 
     /** 좌석 ID */
-    private final Long seatId;
+    private final Long concertSeatId;
 
     /** 사용자 ID */
     private final Long userId;
@@ -75,13 +75,13 @@ public class SeatLockResult {
     public String getSummary() {
         if (!success) {
             return String.format("영구 선점 실패 - 콘서트: %d, 좌석: %d, 사용자: %d, 오류: %s",
-                    concertId, seatId, userId, errorMessage);
+                    concertId, concertSeatId, userId, errorMessage);
         }
 
         return String.format(
                 "영구 선점 완료 - 콘서트: %d, 좌석: %d (%s), 사용자: %d, " +
                         "상태변경: %s→%s, TTL삭제: %s, 소요시간: %dms",
-                concertId, seatId, seatInfo, userId,
+                concertId, concertSeatId, seatInfo, userId,
                 previousStatus, newStatus, ttlKeyRemoved ? "성공" : "실패",
                 getProcessingDuration().toMillis()
         );
@@ -126,15 +126,15 @@ public class SeatLockResult {
      * 실패한 영구 선점 결과 생성
      *
      * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
+     * @param concertSeatId 좌석 ID
      * @param userId 사용자 ID
      * @param errorMessage 오류 메시지
      * @return 실패 결과
      */
-    public static SeatLockResult failure(Long concertId, Long seatId, Long userId, String errorMessage) {
-        return SeatLockResult.builder()
+    public static SeatLockResultDTO failure(Long concertId, Long concertSeatId, Long userId, String errorMessage) {
+        return SeatLockResultDTO.builder()
                 .concertId(concertId)
-                .seatId(seatId)
+                .concertSeatId(concertSeatId)
                 .userId(userId)
                 .lockStartTime(LocalDateTime.now())
                 .lockEndTime(LocalDateTime.now())
@@ -147,7 +147,7 @@ public class SeatLockResult {
      * 성공한 영구 선점 결과 생성
      *
      * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
+     * @param concertSeatId 좌석 ID
      * @param userId 사용자 ID
      * @param previousStatus 이전 상태
      * @param newStatus 새 상태
@@ -155,14 +155,14 @@ public class SeatLockResult {
      * @param seatInfo 좌석 정보
      * @return 성공 결과
      */
-    public static SeatLockResult success(Long concertId, Long seatId, Long userId,
-                                         SeatStatusEnum previousStatus, SeatStatusEnum newStatus,
-                                         boolean ttlKeyRemoved, String seatInfo) {
+    public static SeatLockResultDTO success(Long concertId, Long concertSeatId, Long userId,
+                                            SeatStatusEnum previousStatus, SeatStatusEnum newStatus,
+                                            boolean ttlKeyRemoved, String seatInfo) {
         LocalDateTime now = LocalDateTime.now();
 
-        return SeatLockResult.builder()
+        return SeatLockResultDTO.builder()
                 .concertId(concertId)
-                .seatId(seatId)
+                .concertSeatId(concertSeatId)
                 .userId(userId)
                 .lockStartTime(now)
                 .lockEndTime(now)

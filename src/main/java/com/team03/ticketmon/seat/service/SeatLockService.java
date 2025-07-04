@@ -1,9 +1,10 @@
 package com.team03.ticketmon.seat.service;
 
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.seat.domain.SeatStatus;
 import com.team03.ticketmon.seat.domain.SeatStatus.SeatStatusEnum;
-import com.team03.ticketmon.seat.dto.BulkSeatLockResult;
-import com.team03.ticketmon.seat.dto.SeatLockResult;
+import com.team03.ticketmon.seat.dto.BulkSeatLockResultDTO;
+import com.team03.ticketmon.seat.dto.SeatLockResultDTO;
 import com.team03.ticketmon.seat.exception.SeatReservationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,7 +51,7 @@ public class SeatLockService {
     private final SeatStatusEventPublisher eventPublisher;
 
     // TTL 키 패턴 (SeatStatusService와 동일)
-    private static final String SEAT_TTL_KEY_PREFIX = "seat:expire:";
+    private static final String SEAT_TTL_KEY_PREFIX = RedisKeyGenerator.SEAT_TTL_KEY_PREFIX;
 
     // ========== 기존 단일 좌석 처리 메서드들 (변경 없음) ==========
 
@@ -65,22 +66,22 @@ public class SeatLockService {
      * 5. 실시간 이벤트 발행
      *
      * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
+     * @param concertSeatId 좌석 ID
      * @param userId 요청 사용자 ID
      * @return 영구 선점 처리 결과
      * @throws SeatReservationException 검증 실패 시
      */
-    public SeatLockResult lockSeatPermanently(Long concertId, Long seatId, Long userId) {
-        log.info("좌석 영구 선점 요청: concertId={}, seatId={}, userId={}", concertId, seatId, userId);
+    public SeatLockResultDTO lockSeatPermanently(Long concertId, Long concertSeatId, Long userId) {
+        log.info("좌석 영구 선점 요청: concertId={}, concertSeatId={}, userId={}", concertId, concertSeatId, userId);
 
         LocalDateTime lockStartTime = LocalDateTime.now();
 
         try {
             // 1. 현재 좌석 상태 조회 및 검증
-            SeatStatus currentSeat = validateSeatForLocking(concertId, seatId, userId);
+            SeatStatus currentSeat = validateSeatForLocking(concertId, concertSeatId, userId);
 
             // 2. TTL 키 삭제 (자동 만료 방지)
-            boolean ttlRemoved = removeSeatTTLKey(concertId, seatId);
+            boolean ttlRemoved = removeSeatTTLKey(concertId, concertSeatId);
 
             // 3. 좌석 상태를 영구 선점으로 변경
             SeatStatus permanentlyLockedSeat = createPermanentlyLockedSeat(currentSeat);
@@ -91,9 +92,9 @@ public class SeatLockService {
 
             LocalDateTime lockEndTime = LocalDateTime.now();
 
-            SeatLockResult result = SeatLockResult.builder()
+            SeatLockResultDTO result = SeatLockResultDTO.builder()
                     .concertId(concertId)
-                    .seatId(seatId)
+                    .concertSeatId(concertSeatId)
                     .userId(userId)
                     .lockStartTime(lockStartTime)
                     .lockEndTime(lockEndTime)
@@ -108,12 +109,12 @@ public class SeatLockService {
             return result;
 
         } catch (SeatReservationException e) {
-            log.warn("좌석 영구 선점 실패 - 검증 오류: concertId={}, seatId={}, userId={}, message={}",
-                    concertId, seatId, userId, e.getMessage());
+            log.warn("좌석 영구 선점 실패 - 검증 오류: concertId={}, concertSeatId={}, userId={}, message={}",
+                    concertId, concertSeatId, userId, e.getMessage());
 
-            return SeatLockResult.builder()
+            return SeatLockResultDTO.builder()
                     .concertId(concertId)
-                    .seatId(seatId)
+                    .concertSeatId(concertSeatId)
                     .userId(userId)
                     .lockStartTime(lockStartTime)
                     .lockEndTime(LocalDateTime.now())
@@ -122,12 +123,12 @@ public class SeatLockService {
                     .build();
 
         } catch (Exception e) {
-            log.error("좌석 영구 선점 중 예기치 않은 오류: concertId={}, seatId={}, userId={}",
-                    concertId, seatId, userId, e);
+            log.error("좌석 영구 선점 중 예기치 않은 오류: concertId={}, concertSeatId={}, userId={}",
+                    concertId, concertSeatId, userId, e);
 
-            return SeatLockResult.builder()
+            return SeatLockResultDTO.builder()
                     .concertId(concertId)
-                    .seatId(seatId)
+                    .concertSeatId(concertSeatId)
                     .userId(userId)
                     .lockStartTime(lockStartTime)
                     .lockEndTime(LocalDateTime.now())
@@ -145,20 +146,20 @@ public class SeatLockService {
      * - 결제 취소 시: 좌석을 다시 선점 가능한 상태로 복원
      *
      * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
+     * @param concertSeatId 좌석 ID
      * @param userId 요청 사용자 ID
      * @param restoreWithTTL TTL을 다시 설정할지 여부
      * @return 복원 처리 결과
      */
-    public SeatLockResult restoreSeatReservation(Long concertId, Long seatId, Long userId, boolean restoreWithTTL) {
-        log.info("좌석 선점 상태 복원 요청: concertId={}, seatId={}, userId={}, withTTL={}",
-                concertId, seatId, userId, restoreWithTTL);
+    public SeatLockResultDTO restoreSeatReservation(Long concertId, Long concertSeatId, Long userId, boolean restoreWithTTL) {
+        log.info("좌석 선점 상태 복원 요청: concertId={}, concertSeatId={}, userId={}, withTTL={}",
+                concertId, concertSeatId, userId, restoreWithTTL);
 
         LocalDateTime restoreStartTime = LocalDateTime.now();
 
         try {
             // 1. 현재 좌석 상태 검증
-            Optional<SeatStatus> currentStatus = seatStatusService.getSeatStatus(concertId, seatId);
+            Optional<SeatStatus> currentStatus = seatStatusService.getSeatStatus(concertId, concertSeatId);
 
             if (currentStatus.isEmpty()) {
                 throw new SeatReservationException("존재하지 않는 좌석입니다.");
@@ -182,14 +183,14 @@ public class SeatLockService {
 
             // 5. TTL 키 재생성 (옵션)
             if (restoreWithTTL) {
-                createSeatTTLKey(concertId, seatId);
+                createSeatTTLKey(concertId, concertSeatId);
             }
 
             LocalDateTime restoreEndTime = LocalDateTime.now();
 
-            SeatLockResult result = SeatLockResult.builder()
+            SeatLockResultDTO result = SeatLockResultDTO.builder()
                     .concertId(concertId)
-                    .seatId(seatId)
+                    .concertSeatId(concertSeatId)
                     .userId(userId)
                     .lockStartTime(restoreStartTime)
                     .lockEndTime(restoreEndTime)
@@ -204,12 +205,12 @@ public class SeatLockService {
             return result;
 
         } catch (Exception e) {
-            log.error("좌석 선점 상태 복원 중 오류: concertId={}, seatId={}, userId={}",
-                    concertId, seatId, userId, e);
+            log.error("좌석 선점 상태 복원 중 오류: concertId={}, concertSeatId={}, userId={}",
+                    concertId, concertSeatId, userId, e);
 
-            return SeatLockResult.builder()
+            return SeatLockResultDTO.builder()
                     .concertId(concertId)
-                    .seatId(seatId)
+                    .concertSeatId(concertSeatId)
                     .userId(userId)
                     .lockStartTime(restoreStartTime)
                     .lockEndTime(LocalDateTime.now())
@@ -240,7 +241,7 @@ public class SeatLockService {
      * @return 일괄 영구 선점 처리 결과
      */
     @Transactional
-    public BulkSeatLockResult lockAllUserSeatsPermanently(Long concertId, Long userId) {
+    public BulkSeatLockResultDTO lockAllUserSeatsPermanently(Long concertId, Long userId) {
         log.info("사용자 모든 좌석 일괄 영구 선점 요청 (보상 트랜잭션): concertId={}, userId={}", concertId, userId);
 
         LocalDateTime bulkStartTime = LocalDateTime.now();
@@ -254,21 +255,21 @@ public class SeatLockService {
 
             if (userReservedSeats.isEmpty()) {
                 log.info("영구 선점할 좌석이 없음: concertId={}, userId={}", concertId, userId);
-                return BulkSeatLockResult.failure(concertId, userId,
-                        BulkSeatLockResult.BulkOperationType.LOCK, "선점된 좌석이 없습니다.");
+                return BulkSeatLockResultDTO.failure(concertId, userId,
+                        BulkSeatLockResultDTO.BulkOperationType.LOCK, "선점된 좌석이 없습니다.");
             }
 
             log.info("일괄 영구 선점 대상 좌석 수: {} (concertId={}, userId={})",
                     userReservedSeats.size(), concertId, userId);
 
             // 2. 각 좌석에 대해 영구 선점 처리 (순차 실행 + 실패 시 즉시 중단)
-            List<SeatLockResult> seatResults = new ArrayList<>();
+            List<SeatLockResultDTO> seatResults = new ArrayList<>();
 
             for (SeatStatus seat : userReservedSeats) {
                 log.debug("좌석 영구 선점 처리 중: concertId={}, seatId={}, userId={}",
                         concertId, seat.getSeatId(), userId);
 
-                SeatLockResult result = lockSeatPermanently(concertId, seat.getSeatId(), userId);
+                SeatLockResultDTO result = lockSeatPermanently(concertId, seat.getSeatId(), userId);
                 seatResults.add(result);
 
                 if (result.isSuccess()) {
@@ -285,7 +286,7 @@ public class SeatLockService {
 
                     // 전체 실패로 처리
                     LocalDateTime bulkEndTime = LocalDateTime.now();
-                    return BulkSeatLockResult.builder()
+                    return BulkSeatLockResultDTO.builder()
                             .concertId(concertId)
                             .userId(userId)
                             .bulkStartTime(bulkStartTime)
@@ -296,7 +297,7 @@ public class SeatLockService {
                             .failureCount(userReservedSeats.size())
                             .allSuccess(false)
                             .partialSuccess(false)
-                            .operationType(BulkSeatLockResult.BulkOperationType.LOCK)
+                            .operationType(BulkSeatLockResultDTO.BulkOperationType.LOCK)
                             .errorMessage(String.format("좌석 %d에서 실패 후 전체 롤백 완료: %s",
                                     seat.getSeatId(), result.getErrorMessage()))
                             .build();
@@ -305,9 +306,9 @@ public class SeatLockService {
 
             // 3. 모든 좌석 처리 성공 시 결과 집계 및 반환
             LocalDateTime bulkEndTime = LocalDateTime.now();
-            BulkSeatLockResult bulkResult = BulkSeatLockResult.allSuccess(
+            BulkSeatLockResultDTO bulkResult = BulkSeatLockResultDTO.allSuccess(
                     concertId, userId, seatResults,
-                    BulkSeatLockResult.BulkOperationType.LOCK,
+                    BulkSeatLockResultDTO.BulkOperationType.LOCK,
                     bulkStartTime, bulkEndTime
             );
 
@@ -321,8 +322,8 @@ public class SeatLockService {
             // 🔧 예외 발생 시에도 보상 트랜잭션 실행
             executeCompensation(concertId, userId, successfulSeatIds);
 
-            return BulkSeatLockResult.failure(concertId, userId,
-                    BulkSeatLockResult.BulkOperationType.LOCK,
+            return BulkSeatLockResultDTO.failure(concertId, userId,
+                    BulkSeatLockResultDTO.BulkOperationType.LOCK,
                     "시스템 오류 후 전체 롤백 완료: " + e.getMessage());
         }
     }
@@ -354,7 +355,7 @@ public class SeatLockService {
             try {
                 // 🔧 기존 restoreSeatReservation 메서드 활용
                 // restoreWithTTL=true로 설정하여 5분 TTL 재설정
-                SeatLockResult restoreResult = restoreSeatReservation(concertId, seatId, userId, true);
+                SeatLockResultDTO restoreResult = restoreSeatReservation(concertId, seatId, userId, true);
 
                 if (restoreResult.isSuccess()) {
                     restoredCount++;
@@ -394,7 +395,7 @@ public class SeatLockService {
      * @param restoreWithTTL TTL을 다시 설정할지 여부
      * @return 일괄 상태 복원 처리 결과
      */
-    public BulkSeatLockResult restoreAllUserSeatsWithCompensation(Long concertId, Long userId, boolean restoreWithTTL) {
+    public BulkSeatLockResultDTO restoreAllUserSeatsWithCompensation(Long concertId, Long userId, boolean restoreWithTTL) {
         log.info("사용자 모든 좌석 일괄 상태 복원 요청 (보상 트랜잭션): concertId={}, userId={}, withTTL={}",
                 concertId, userId, restoreWithTTL);
 
@@ -409,21 +410,21 @@ public class SeatLockService {
 
             if (userPermanentlyLockedSeats.isEmpty()) {
                 log.info("복원할 영구 선점 좌석이 없음: concertId={}, userId={}", concertId, userId);
-                return BulkSeatLockResult.failure(concertId, userId,
-                        BulkSeatLockResult.BulkOperationType.RESTORE, "영구 선점된 좌석이 없습니다.");
+                return BulkSeatLockResultDTO.failure(concertId, userId,
+                        BulkSeatLockResultDTO.BulkOperationType.RESTORE, "영구 선점된 좌석이 없습니다.");
             }
 
             log.info("일괄 상태 복원 대상 좌석 수: {} (concertId={}, userId={})",
                     userPermanentlyLockedSeats.size(), concertId, userId);
 
             // 2. 각 좌석에 대해 상태 복원 처리 (순차 실행 + 실패 시 즉시 중단)
-            List<SeatLockResult> seatResults = new ArrayList<>();
+            List<SeatLockResultDTO> seatResults = new ArrayList<>();
 
             for (SeatStatus seat : userPermanentlyLockedSeats) {
                 log.debug("좌석 상태 복원 처리 중: concertId={}, seatId={}, userId={}",
                         concertId, seat.getSeatId(), userId);
 
-                SeatLockResult result = restoreSeatReservation(concertId, seat.getSeatId(), userId, restoreWithTTL);
+                SeatLockResultDTO result = restoreSeatReservation(concertId, seat.getSeatId(), userId, restoreWithTTL);
                 seatResults.add(result);
 
                 if (result.isSuccess()) {
@@ -438,7 +439,7 @@ public class SeatLockService {
 
                     // 전체 실패로 처리
                     LocalDateTime bulkEndTime = LocalDateTime.now();
-                    return BulkSeatLockResult.builder()
+                    return BulkSeatLockResultDTO.builder()
                             .concertId(concertId)
                             .userId(userId)
                             .bulkStartTime(bulkStartTime)
@@ -449,7 +450,7 @@ public class SeatLockService {
                             .failureCount(userPermanentlyLockedSeats.size())
                             .allSuccess(false)
                             .partialSuccess(false)
-                            .operationType(BulkSeatLockResult.BulkOperationType.RESTORE)
+                            .operationType(BulkSeatLockResultDTO.BulkOperationType.RESTORE)
                             .errorMessage(String.format("좌석 %d에서 실패 후 전체 롤백 완료: %s",
                                     seat.getSeatId(), result.getErrorMessage()))
                             .build();
@@ -458,9 +459,9 @@ public class SeatLockService {
 
             // 3. 모든 좌석 처리 성공 시 결과 집계 및 반환
             LocalDateTime bulkEndTime = LocalDateTime.now();
-            BulkSeatLockResult bulkResult = BulkSeatLockResult.allSuccess(
+            BulkSeatLockResultDTO bulkResult = BulkSeatLockResultDTO.allSuccess(
                     concertId, userId, seatResults,
-                    BulkSeatLockResult.BulkOperationType.RESTORE,
+                    BulkSeatLockResultDTO.BulkOperationType.RESTORE,
                     bulkStartTime, bulkEndTime
             );
 
@@ -474,8 +475,8 @@ public class SeatLockService {
             // 예외 발생 시에도 보상 트랜잭션 실행
             executeRestoreCompensation(concertId, userId, restoredSeatIds);
 
-            return BulkSeatLockResult.failure(concertId, userId,
-                    BulkSeatLockResult.BulkOperationType.RESTORE,
+            return BulkSeatLockResultDTO.failure(concertId, userId,
+                    BulkSeatLockResultDTO.BulkOperationType.RESTORE,
                     "시스템 오류 후 전체 롤백 완료: " + e.getMessage());
         }
     }
@@ -505,7 +506,7 @@ public class SeatLockService {
         for (Long seatId : restoredSeatIds) {
             try {
                 // 기존 lockSeatPermanently 메서드 활용
-                SeatLockResult revertResult = lockSeatPermanently(concertId, seatId, userId);
+                SeatLockResultDTO revertResult = lockSeatPermanently(concertId, seatId, userId);
 
                 if (revertResult.isSuccess()) {
                     revertedCount++;
@@ -541,7 +542,7 @@ public class SeatLockService {
      * @param restoreWithTTL TTL을 다시 설정할지 여부
      * @return 일괄 상태 복원 처리 결과
      */
-    public BulkSeatLockResult restoreAllUserSeats(Long concertId, Long userId, boolean restoreWithTTL) {
+    public BulkSeatLockResultDTO restoreAllUserSeats(Long concertId, Long userId, boolean restoreWithTTL) {
         log.info("기존 API 호출 감지 - 보상 트랜잭션 버전으로 처리: concertId={}, userId={}", concertId, userId);
         return restoreAllUserSeatsWithCompensation(concertId, userId, restoreWithTTL);
     }
@@ -567,17 +568,17 @@ public class SeatLockService {
      * 좌석 영구 선점 가능 여부 확인 (실제 처리 없이 검증만)
      *
      * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
+     * @param concertSeatId 좌석 ID
      * @param userId 사용자 ID
      * @return 영구 선점 가능 여부 및 상세 정보
      */
-    public SeatLockCheckResult checkSeatLockEligibility(Long concertId, Long seatId, Long userId) {
+    public SeatLockCheckResult checkSeatLockEligibility(Long concertId, Long concertSeatId, Long userId) {
         try {
-            SeatStatus currentSeat = validateSeatForLocking(concertId, seatId, userId);
+            SeatStatus currentSeat = validateSeatForLocking(concertId, concertSeatId, userId);
 
             return SeatLockCheckResult.builder()
                     .concertId(concertId)
-                    .seatId(seatId)
+                    .seatId(concertSeatId)
                     .userId(userId)
                     .eligible(true)
                     .currentStatus(currentSeat.getStatus())
@@ -589,7 +590,7 @@ public class SeatLockService {
         } catch (Exception e) {
             return SeatLockCheckResult.builder()
                     .concertId(concertId)
-                    .seatId(seatId)
+                    .seatId(concertSeatId)
                     .userId(userId)
                     .eligible(false)
                     .message(e.getMessage())
@@ -600,9 +601,9 @@ public class SeatLockService {
     /**
      * 좌석 영구 선점을 위한 검증
      */
-    private SeatStatus validateSeatForLocking(Long concertId, Long seatId, Long userId) {
+    private SeatStatus validateSeatForLocking(Long concertId, Long concertSeatId, Long userId) {
         // 1. 좌석 상태 존재 여부 확인
-        Optional<SeatStatus> currentStatus = seatStatusService.getSeatStatus(concertId, seatId);
+        Optional<SeatStatus> currentStatus = seatStatusService.getSeatStatus(concertId, concertSeatId);
 
         if (currentStatus.isEmpty()) {
             throw new SeatReservationException("존재하지 않는 좌석입니다.");
@@ -633,9 +634,9 @@ public class SeatLockService {
     /**
      * TTL 키 삭제
      */
-    private boolean removeSeatTTLKey(Long concertId, Long seatId) {
+    private boolean removeSeatTTLKey(Long concertId, Long concertSeatId) {
         try {
-            String ttlKey = SEAT_TTL_KEY_PREFIX + concertId + ":" + seatId;
+            String ttlKey = SEAT_TTL_KEY_PREFIX + concertId + ":" + concertSeatId;
             RBucket<String> bucket = redissonClient.getBucket(ttlKey);
 
             boolean deleted = bucket.delete();
@@ -649,7 +650,7 @@ public class SeatLockService {
             return deleted;
 
         } catch (Exception e) {
-            log.error("TTL 키 삭제 실패: concertId={}, seatId={}", concertId, seatId, e);
+            log.error("TTL 키 삭제 실패: concertId={}, concertSeatId={}", concertId, concertSeatId, e);
             return false;
         }
     }
@@ -657,9 +658,9 @@ public class SeatLockService {
     /**
      * TTL 키 생성 (복원 시 사용)
      */
-    private void createSeatTTLKey(Long concertId, Long seatId) {
+    private void createSeatTTLKey(Long concertId, Long concertSeatId) {
         try {
-            String ttlKey = SEAT_TTL_KEY_PREFIX + concertId + ":" + seatId;
+            String ttlKey = SEAT_TTL_KEY_PREFIX + concertId + ":" + concertSeatId;
             RBucket<String> bucket = redissonClient.getBucket(ttlKey);
 
             // 5분 TTL로 생성
@@ -668,7 +669,7 @@ public class SeatLockService {
             log.debug("TTL 키 재생성: key={}, ttl=5분", ttlKey);
 
         } catch (Exception e) {
-            log.error("TTL 키 생성 실패: concertId={}, seatId={}", concertId, seatId, e);
+            log.error("TTL 키 생성 실패: concertId={}, concertSeatId={}", concertId, concertSeatId, e);
         }
     }
 

@@ -1,10 +1,9 @@
-// src/main/java/com/team03/ticketmon/seat/controller/SeatLockController.java
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
-import com.team03.ticketmon.seat.dto.BulkSeatLockResult;
-import com.team03.ticketmon.seat.dto.SeatLockResult;
+import com.team03.ticketmon.seat.dto.BulkSeatLockResultDTO;
+import com.team03.ticketmon.seat.dto.SeatLockResultDTO;
 import com.team03.ticketmon.seat.service.SeatLockService;
 import com.team03.ticketmon.seat.service.SeatStatusService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -60,7 +59,7 @@ public class SeatLockController {
             description = "임시 선점된 좌석을 영구 선점 상태로 변경하고 TTL을 삭제합니다."
     )
     @PostMapping("/concerts/{concertId}/seats/{seatId}/permanent")
-    public ResponseEntity<SuccessResponse<SeatLockResult>> lockSeatPermanently(
+    public ResponseEntity<SuccessResponse<SeatLockResultDTO>> lockSeatPermanently(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
             @Parameter(description = "좌석 ID", example = "1")
@@ -72,7 +71,7 @@ public class SeatLockController {
 
         try {
             // 영구 선점 처리
-            SeatLockResult result = seatLockService.lockSeatPermanently(
+            SeatLockResultDTO result = seatLockService.lockSeatPermanently(
                     concertId, seatId, user.getUserId());
 
             if (result.isSuccess()) {
@@ -124,7 +123,7 @@ public class SeatLockController {
             description = "영구 선점된 좌석을 일반 선점 상태로 되돌리고 선택적으로 TTL을 재설정합니다."
     )
     @PostMapping("/concerts/{concertId}/seats/{seatId}/restore")
-    public ResponseEntity<SuccessResponse<SeatLockResult>> restoreSeatReservation(
+    public ResponseEntity<SuccessResponse<SeatLockResultDTO>> restoreSeatReservation(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
             @Parameter(description = "좌석 ID", example = "1")
@@ -138,7 +137,7 @@ public class SeatLockController {
 
         try {
             // 선점 상태 복원
-            SeatLockResult result = seatLockService.restoreSeatReservation(
+            SeatLockResultDTO result = seatLockService.restoreSeatReservation(
                     concertId, seatId, user.getUserId(), restoreWithTTL);
 
             if (result.isSuccess()) {
@@ -193,7 +192,7 @@ public class SeatLockController {
             description = "사용자가 선점한 모든 좌석을 한 번에 영구 선점 상태로 변경합니다."
     )
     @PostMapping("/concerts/{concertId}/users/permanent-all")
-    public ResponseEntity<SuccessResponse<BulkSeatLockResult>> lockAllUserSeatsPermanently(
+    public ResponseEntity<SuccessResponse<BulkSeatLockResultDTO>> lockAllUserSeatsPermanently(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
             @AuthenticationPrincipal CustomUserDetails user) {
@@ -203,7 +202,7 @@ public class SeatLockController {
 
         try {
             // 일괄 영구 선점 처리
-            BulkSeatLockResult result = seatLockService.lockAllUserSeatsPermanently(
+            BulkSeatLockResultDTO result = seatLockService.lockAllUserSeatsPermanently(
                     concertId, user.getUserId());
 
             if (result.isPartialSuccess()) {
@@ -263,7 +262,7 @@ public class SeatLockController {
             description = "사용자가 영구 선점한 모든 좌석을 한 번에 일반 선점 상태로 복원합니다."
     )
     @PostMapping("/concerts/{concertId}/users/restore-all")
-    public ResponseEntity<SuccessResponse<BulkSeatLockResult>> restoreAllUserSeats(
+    public ResponseEntity<SuccessResponse<BulkSeatLockResultDTO>> restoreAllUserSeats(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
             @Parameter(description = "TTL 재설정 여부", example = "true")
@@ -275,7 +274,7 @@ public class SeatLockController {
 
         try {
             // 일괄 상태 복원 처리
-            BulkSeatLockResult result = seatLockService.restoreAllUserSeats(
+            BulkSeatLockResultDTO result = seatLockService.restoreAllUserSeats(
                     concertId, user.getUserId(), restoreWithTTL);
 
             if (result.isPartialSuccess()) {
