@@ -319,6 +319,7 @@ public class ConcertService {
 	 * Entity를 DTO로 변환
 	 */
 	private ConcertDTO convertToDTO(Concert concert) {
+		ConcertStatus currentStatus = concert.determineCurrentStatus(false);
 		return new ConcertDTO(
 			concert.getConcertId(),
 			concert.getTitle(),
@@ -335,9 +336,11 @@ public class ConcertService {
 			concert.getBookingEndDate(),
 			concert.getMinAge(),
 			concert.getMaxTicketsPerUser(),
-			concert.getStatus(),
+			currentStatus,
 			concert.getPosterImageUrl(),
-			concert.getAiSummary()
+			concert.getAiSummary(),
+			concert.getCreatedAt(),
+			concert.getUpdatedAt()
 		);
 	}
 

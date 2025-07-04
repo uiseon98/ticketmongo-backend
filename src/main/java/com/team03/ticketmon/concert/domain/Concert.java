@@ -151,26 +151,27 @@ public class Concert extends BaseTimeEntity {
 		}
 
 		// 필수 필드 null 체크
-		if (bookingStartDate == null || concertDate == null || startTime == null) {
-			return ConcertStatus.SCHEDULED; // 기본값
+		if (bookingStartDate == null || bookingEndDate == null ||
+			concertDate == null || startTime == null) {
+			return ConcertStatus.SCHEDULED;
 		}
 
 		LocalDateTime now = LocalDateTime.now();
 		LocalDateTime concertStartDateTime = concertDate.atTime(startTime);
 		LocalDateTime ticketCloseDateTime = concertStartDateTime.minusMinutes(30);
 
-		// 공연 30분 전부터는 COMPLETED
-		if (now.isAfter(ticketCloseDateTime) || now.isEqual(ticketCloseDateTime)) {
+		// 1. 공연 30분 전 또는 예매 마감 시간 이후면 COMPLETED
+		if (now.isAfter(ticketCloseDateTime) || now.isEqual(ticketCloseDateTime) ||
+			now.isAfter(bookingEndDate) || now.isEqual(bookingEndDate)) {
 			return ConcertStatus.COMPLETED;
 		}
 
-		// 예매 시작 전이면 SCHEDULED
+		// 2. 예매 시작 전이면 SCHEDULED
 		if (now.isBefore(bookingStartDate)) {
 			return ConcertStatus.SCHEDULED;
 		}
 
-		// 예매 기간 중이거나 이후면서 공연 30분 전까지
-		// 매진이면 SOLD_OUT, 아니면 ON_SALE
+		// 3. 예매 기간 중이면서 공연 30분 전까지
 		return isSoldOut ? ConcertStatus.SOLD_OUT : ConcertStatus.ON_SALE;
 	}
 }
