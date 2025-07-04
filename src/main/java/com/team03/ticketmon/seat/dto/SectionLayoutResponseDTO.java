@@ -11,7 +11,7 @@ import java.util.Map;
  * 특정 구역(A, B, VIP 등)의 좌석 배치 정보를 담는 DTO
  */
 @Schema(description = "구역별 좌석 배치 정보")
-public record SectionLayoutResponse(
+public record SectionLayoutResponseDTO(
 
         @Schema(description = "구역명", example = "A")
         String sectionName,
@@ -29,10 +29,10 @@ public record SectionLayoutResponse(
         PriceRange priceRange,
 
         @Schema(description = "좌석 목록")
-        List<SeatDetailResponse> seats,
+        List<SeatDetailResponseDTO> seats,
 
         @Schema(description = "열별 좌석 배치 (프론트엔드 렌더링용)")
-        Map<String, List<SeatDetailResponse>> seatsByRow
+        Map<String, List<SeatDetailResponseDTO>> seatsByRow
 ) {
 
     /**
@@ -54,9 +54,9 @@ public record SectionLayoutResponse(
      * @param seats 해당 구역의 좌석 목록
      * @return SectionLayoutResponse 객체
      */
-    public static SectionLayoutResponse from(String sectionName, List<SeatDetailResponse> seats) {
+    public static SectionLayoutResponseDTO from(String sectionName, List<SeatDetailResponseDTO> seats) {
         if (seats.isEmpty()) {
-            return new SectionLayoutResponse(
+            return new SectionLayoutResponseDTO(
                     sectionName,
                     sectionName + "구역",
                     0,
@@ -69,12 +69,12 @@ public record SectionLayoutResponse(
 
         // 가격 범위 계산
         BigDecimal minPrice = seats.stream()
-                .map(SeatDetailResponse::price)
+                .map(SeatDetailResponseDTO::price)
                 .min(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
 
         BigDecimal maxPrice = seats.stream()
-                .map(SeatDetailResponse::price)
+                .map(SeatDetailResponseDTO::price)
                 .max(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
 
@@ -84,10 +84,10 @@ public record SectionLayoutResponse(
                 .sum();
 
         // 열별 좌석 그룹핑 (프론트엔드에서 배치도 렌더링 시 사용)
-        Map<String, List<SeatDetailResponse>> seatsByRow = seats.stream()
-                .collect(java.util.stream.Collectors.groupingBy(SeatDetailResponse::seatRow));
+        Map<String, List<SeatDetailResponseDTO>> seatsByRow = seats.stream()
+                .collect(java.util.stream.Collectors.groupingBy(SeatDetailResponseDTO::seatRow));
 
-        return new SectionLayoutResponse(
+        return new SectionLayoutResponseDTO(
                 sectionName,
                 generateSectionDescription(sectionName),
                 seats.size(),
