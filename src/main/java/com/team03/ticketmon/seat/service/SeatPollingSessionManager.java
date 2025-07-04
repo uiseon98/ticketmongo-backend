@@ -1,6 +1,6 @@
 package com.team03.ticketmon.seat.service;
 
-import com.team03.ticketmon.seat.dto.SeatUpdateEvent;
+import com.team03.ticketmon.seat.dto.SeatUpdateEventDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -56,7 +56,7 @@ public class SeatPollingSessionManager {
         public String getSessionId() { return sessionId; }
         public DeferredResult<ResponseEntity<?>> getDeferredResult() { return deferredResult; }
         public LocalDateTime getStartTime() { return startTime; }
-        public Long getUserId() { return userId; } // ✅ 수정: "retursn" → "return"
+        public Long getUserId() { return userId; }
         public String getUserAgent() { return userAgent; } // 새로 추가
     }
 
@@ -103,18 +103,11 @@ public class SeatPollingSessionManager {
     }
 
     /**
-     * 기존 registerSession 메서드 호환성 유지 (오버로드)
-     */
-    public String registerSession(Long concertId, DeferredResult<ResponseEntity<?>> deferredResult, Long userId) {
-        return registerSession(concertId, deferredResult, userId, null);
-    }
-
-    /**
      * 특정 콘서트의 모든 대기 세션에 이벤트 알림 (개선된 버전)
      *
      * @param event 좌석 업데이트 이벤트
      */
-    public void notifyWaitingSessions(SeatUpdateEvent event) {
+    public void notifyWaitingSessions(SeatUpdateEventDTO event) {
         Long concertId = event.concertId();
         List<PollingSession> sessions = activeSessions.get(concertId);
 
@@ -260,7 +253,7 @@ public class SeatPollingSessionManager {
     /**
      * 이벤트 응답 데이터 구성 (개선된 버전)
      */
-    private Map<String, Object> createEventResponse(SeatUpdateEvent event) {
+    private Map<String, Object> createEventResponse(SeatUpdateEventDTO event) {
         return Map.of(
                 "hasUpdate", true,
                 "updateTime", event.timestamp(),

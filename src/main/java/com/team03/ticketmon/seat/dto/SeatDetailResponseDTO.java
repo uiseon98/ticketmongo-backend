@@ -11,7 +11,7 @@ import java.math.BigDecimal;
  * 좌석 배치도에서 각 좌석의 상세 정보를 담는 DTO
  */
 @Schema(description = "개별 좌석 정보")
-public record SeatDetailResponse(
+public record SeatDetailResponseDTO(
 
         @Schema(description = "좌석 ID", example = "1")
         Long seatId,
@@ -44,7 +44,7 @@ public record SeatDetailResponse(
      * @param concertSeat 콘서트 좌석 정보
      * @return SeatDetailResponse 객체
      */
-    public static SeatDetailResponse from(ConcertSeat concertSeat) {
+    public static SeatDetailResponseDTO from(ConcertSeat concertSeat) {
         Seat seat = concertSeat.getSeat();
 
         // 좌석 표시명 생성 (구역-열-번호 형식)
@@ -56,7 +56,7 @@ public record SeatDetailResponse(
         // 예매 가능 여부 판단 (티켓이 없으면 예매 가능)
         boolean isAvailable = concertSeat.getTicket() == null;
 
-        return new SeatDetailResponse(
+        return new SeatDetailResponseDTO(
                 seat.getSeatId(),
                 seat.getSection(),
                 seat.getSeatRow(),

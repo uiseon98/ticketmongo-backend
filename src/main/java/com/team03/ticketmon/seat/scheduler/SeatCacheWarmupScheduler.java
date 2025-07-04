@@ -1,5 +1,6 @@
 package com.team03.ticketmon.seat.scheduler;
 
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
 import com.team03.ticketmon.seat.service.SeatCacheInitService;
@@ -33,8 +34,8 @@ public class SeatCacheWarmupScheduler {
     private final RedissonClient redissonClient;
 
     // Redis 키 정의
-    private static final String WARMUP_LOCK_KEY = "lock:seat:cache:warmup";
-    private static final String PROCESSED_CONCERT_KEY_PREFIX = "processed:warmup:concert:";
+    private static final String WARMUP_LOCK_KEY = RedisKeyGenerator.WARMUP_LOCK_KEY;
+    private static final String SEAT_PROCESSED_CONCERT_KEY_PREFIX = RedisKeyGenerator.SEAT_PROCESSED_CONCERT_KEY_PREFIX;
 
     // 설정값
     private static final int WARMUP_MINUTES_BEFORE = 10; // 예매 시작 10분 전에 캐시 초기화
@@ -137,7 +138,7 @@ public class SeatCacheWarmupScheduler {
      * @return 처리 여부
      */
     private boolean isAlreadyProcessed(Long concertId) {
-        String key = PROCESSED_CONCERT_KEY_PREFIX + concertId;
+        String key = SEAT_PROCESSED_CONCERT_KEY_PREFIX + concertId;
         return redissonClient.getBucket(key).isExists();
     }
 
@@ -147,7 +148,7 @@ public class SeatCacheWarmupScheduler {
      * @param concertId 콘서트 ID
      */
     private void markAsProcessed(Long concertId) {
-        String key = PROCESSED_CONCERT_KEY_PREFIX + concertId;
+        String key = SEAT_PROCESSED_CONCERT_KEY_PREFIX + concertId;
         // 24시간 후 자동 삭제 (중복 처리 방지용)
         redissonClient.getBucket(key).set("processed", 24, TimeUnit.HOURS);
     }

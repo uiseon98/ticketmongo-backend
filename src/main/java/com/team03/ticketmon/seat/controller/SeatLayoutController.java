@@ -1,8 +1,8 @@
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
-import com.team03.ticketmon.seat.dto.SeatLayoutResponse;
-import com.team03.ticketmon.seat.dto.SectionLayoutResponse;
+import com.team03.ticketmon.seat.dto.SeatLayoutResponseDTO;
+import com.team03.ticketmon.seat.dto.SectionLayoutResponseDTO;
 import com.team03.ticketmon.seat.service.SeatLayoutService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -142,14 +142,14 @@ public class SeatLayoutController {
             )
     })
     @GetMapping("/{concertId}/seat-layout")
-    public ResponseEntity<SuccessResponse<SeatLayoutResponse>> getSeatLayout(
+    public ResponseEntity<SuccessResponse<SeatLayoutResponseDTO>> getSeatLayout(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId) {
 
         try {
             log.info("좌석 배치도 조회 요청: concertId={}", concertId);
 
-            SeatLayoutResponse seatLayout = seatLayoutService.getSeatLayout(concertId);
+            SeatLayoutResponseDTO seatLayout = seatLayoutService.getSeatLayout(concertId);
 
             log.info("좌석 배치도 조회 성공: concertId={}, 총좌석={}, 구역수={}",
                     concertId,
@@ -255,7 +255,7 @@ public class SeatLayoutController {
             )
     })
     @GetMapping("/{concertId}/seat-layout/sections/{sectionName}")
-    public ResponseEntity<SuccessResponse<SectionLayoutResponse>> getSectionLayout(
+    public ResponseEntity<SuccessResponse<SectionLayoutResponseDTO>> getSectionLayout(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
             @Parameter(description = "구역명", example = "A")
@@ -264,7 +264,7 @@ public class SeatLayoutController {
         try {
             log.info("구역별 좌석 배치도 조회 요청: concertId={}, section={}", concertId, sectionName);
 
-            SectionLayoutResponse sectionLayout = seatLayoutService.getSectionLayout(concertId, sectionName);
+            SectionLayoutResponseDTO sectionLayout = seatLayoutService.getSectionLayout(concertId, sectionName);
 
             log.info("구역별 좌석 배치도 조회 성공: concertId={}, section={}, 좌석수={}",
                     concertId, sectionName, sectionLayout.totalSeats());
@@ -299,15 +299,15 @@ public class SeatLayoutController {
             """
     )
     @GetMapping("/{concertId}/seat-layout/summary")
-    public ResponseEntity<SuccessResponse<SeatLayoutResponse.SeatStatistics>> getSeatLayoutSummary(
+    public ResponseEntity<SuccessResponse<SeatLayoutResponseDTO.SeatStatistics>> getSeatLayoutSummary(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId) {
 
         try {
             log.info("좌석 배치도 요약 조회 요청: concertId={}", concertId);
 
-            SeatLayoutResponse fullLayout = seatLayoutService.getSeatLayout(concertId);
-            SeatLayoutResponse.SeatStatistics summary = fullLayout.statistics();
+            SeatLayoutResponseDTO fullLayout = seatLayoutService.getSeatLayout(concertId);
+            SeatLayoutResponseDTO.SeatStatistics summary = fullLayout.statistics();
 
             log.info("좌석 배치도 요약 조회 성공: concertId={}, 예매가능률={}%",
                     concertId, summary.availabilityRate());
