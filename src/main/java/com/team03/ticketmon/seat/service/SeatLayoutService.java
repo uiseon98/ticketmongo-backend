@@ -201,20 +201,6 @@ public class SeatLayoutService {
     }
 
     /**
-     * 좌석 배치도 캐시 무효화 (선택적 기능)
-     * 콘서트 정보나 좌석 정보가 변경되었을 때 호출
-     *
-     * @param concertId 콘서트 ID
-     *
-     * ⚠️ 사용하지 않는 메서드
-     */
-    public void invalidateSeatLayoutCache(Long concertId) {
-        log.info("좌석 배치도 캐시 무효화: concertId={}", concertId);
-        // TODO: 향후 캐시 도입 시 구현
-        // cacheManager.evict("seat-layout", concertId);
-    }
-
-    /**
      * 🔧 공연장 정보를 찾을 수 없을 때 사용할 대체 VenueDTO 생성
      * 시스템의 안정성을 위해 좌석 배치도는 여전히 제공하되, 공연장 정보는 기본값 사용
      *

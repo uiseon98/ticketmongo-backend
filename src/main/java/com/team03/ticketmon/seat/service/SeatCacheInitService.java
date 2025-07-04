@@ -133,49 +133,6 @@ public class SeatCacheInitService {
     }
 
     /**
-     * 더미 데이터 기반 캐시 초기화 (기존 메서드, 테스트용 유지)
-     * ⚠️ 사용하지 않는 메서드
-     */
-    public void initializeSeatCache(Long concertId, int totalSeats) {
-        String key = SEAT_STATUS_KEY_PREFIX + concertId;
-        RMap<String, SeatStatus> seatMap = redissonClient.getMap(key);
-
-        // 기존 캐시 클리어
-        seatMap.clear();
-
-        // 로컬 HashMap에 모든 좌석 데이터 준비 (네트워크 호출 최소화)
-        Map<String, SeatStatus> batchSeatData = new HashMap<>();
-
-        for (int i = 1; i <= totalSeats; i++) {
-            try {
-                String seatInfo = generateDummySeatInfo(i);
-
-                SeatStatus seatStatus = SeatStatus.builder()
-                        .id(concertId + "-" + i)
-                        .concertId(concertId)
-                        .seatId((long) i)
-                        .status(SeatStatusEnum.AVAILABLE)
-                        .userId(null)
-                        .reservedAt(null)
-                        .expiresAt(null)
-                        .seatInfo(seatInfo)
-                        .build();
-
-                batchSeatData.put(String.valueOf(i), seatStatus);
-            } catch (Exception e) {
-                log.error("더미 좌석 데이터 생성 오류: concertId={}, seatNumber={}", concertId, i, e);
-            }
-        }
-
-        // 한 번의 Redis 호출로 모든 데이터 일괄 저장
-        if (!batchSeatData.isEmpty()) {
-            seatMap.putAll(batchSeatData);
-        }
-
-        log.info("더미 좌석 캐시 초기화 완료: concertId={}, totalSeats={}", concertId, batchSeatData.size());
-    }
-
-    /**
      * 더미 좌석 정보 생성 (테스트용)
      * ⚠️ 사용하지 않는 메서드에서 사용하는 메서드
      */

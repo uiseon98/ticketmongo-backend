@@ -103,14 +103,6 @@ public class SeatPollingSessionManager {
     }
 
     /**
-     * 기존 registerSession 메서드 호환성 유지 (오버로드)
-     * ⚠️ 사용하지 않는 메서드
-     */
-    public String registerSession(Long concertId, DeferredResult<ResponseEntity<?>> deferredResult, Long userId) {
-        return registerSession(concertId, deferredResult, userId, null);
-    }
-
-    /**
      * 특정 콘서트의 모든 대기 세션에 이벤트 알림 (개선된 버전)
      *
      * @param event 좌석 업데이트 이벤트
