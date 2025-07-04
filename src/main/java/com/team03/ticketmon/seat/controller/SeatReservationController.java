@@ -4,7 +4,7 @@ import com.team03.ticketmon._global.exception.SuccessResponse;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
 import com.team03.ticketmon.concert.repository.ConcertSeatRepository;
 import com.team03.ticketmon.seat.domain.SeatStatus;
-import com.team03.ticketmon.seat.dto.SeatStatusResponse;
+import com.team03.ticketmon.seat.dto.SeatStatusResponseDTO;
 import com.team03.ticketmon.seat.exception.SeatReservationException;
 import com.team03.ticketmon.seat.service.SeatInfoHelper;
 import com.team03.ticketmon.seat.service.SeatStatusService;
@@ -43,7 +43,7 @@ public class SeatReservationController {
      */
     @Operation(summary = "좌석 임시 선점", description = "좌석을 5분간 임시 선점합니다 (분산 락 적용)")
     @PostMapping("/concerts/{concertId}/seats/{seatId}/reserve")
-    public ResponseEntity<SuccessResponse<SeatStatusResponse>> reserveSeat(
+    public ResponseEntity<SuccessResponse<SeatStatusResponseDTO>> reserveSeat(
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
             @Parameter(description = "좌석 ID (ConcertSeat ID)", example = "1")
@@ -73,7 +73,7 @@ public class SeatReservationController {
                 if (seat.isReserved() && user.getUserId().equals(seat.getUserId())) {
                     log.info("동일 사용자 재선점 요청: concertId={}, seatId={}, userId={}",
                             concertId, seatId, user.getUserId());
-                    SeatStatusResponse response = SeatStatusResponse.from(seat);
+                    SeatStatusResponseDTO response = SeatStatusResponseDTO.from(seat);
                     return ResponseEntity.ok(SuccessResponse.of("이미 선점한 좌석입니다", response));
                 }
 
@@ -95,6 +95,7 @@ public class SeatReservationController {
                 log.debug("ConcertSeat ID 기반 좌석 정보 조회 성공: concertId={}, concertSeatId={}, seatInfo={}",
                         concertId, seatId, seatInfo);
             } catch (Exception e) {
+                // 더미 데이터 사용 불필요 - 추후 일반 예외 처리로 수정 권장
                 log.warn("DB 좌석 정보 조회 실패, 더미 데이터 사용: concertId={}, concertSeatId={}, error={}",
                         concertId, seatId, e.getMessage());
                 // 폴백: 더미 데이터 생성 (하위 호환성)
@@ -105,7 +106,7 @@ public class SeatReservationController {
             SeatStatus reservedSeat = seatStatusService.reserveSeat(
                     concertId, seatId, user.getUserId(), seatInfo);
 
-            SeatStatusResponse response = SeatStatusResponse.from(reservedSeat);
+            SeatStatusResponseDTO response = SeatStatusResponseDTO.from(reservedSeat);
 
             log.info("좌석 선점 성공: concertId={}, seatId={}, userId={}, seatInfo={}",
                     concertId, seatId, user.getUserId(), seatInfo);

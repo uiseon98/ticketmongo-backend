@@ -86,6 +86,7 @@ public class SeatInfoHelper {
 
     /**
      * 기존 메서드: Seat ID 기반 좌석 정보 조회 (하위 호환성 유지)
+     * ⚠️ 사용하지 않는 메서드
      *
      * @param concertId 콘서트 ID
      * @param seatId Seat ID
@@ -131,6 +132,7 @@ public class SeatInfoHelper {
 
     /**
      * 좌석 존재 여부만 빠르게 확인 (Seat ID 기반)
+     * ⚠️ 사용하지 않는 메서드
      */
     @Cacheable(value = "seatExists", key = "#concertId + ':' + #seatId")
     public boolean seatExists(Long concertId, Long seatId) {
@@ -144,6 +146,7 @@ public class SeatInfoHelper {
 
     /**
      * ✅ 새로운 메서드: ConcertSeat 존재 여부 확인
+     * ⚠️ 사용하지 않는 메서드
      */
     @Cacheable(value = "concertSeatExists", key = "#concertId + ':' + #concertSeatId")
     public boolean concertSeatExists(Long concertId, Long concertSeatId) {
@@ -157,6 +160,7 @@ public class SeatInfoHelper {
 
     /**
      * 더미 데이터 생성 (하위 호환성 + 폴백용)
+     * ⚠️ 추후 삭제될 메서드에서 사용하는 메서드
      */
     public String generateDummySeatInfo(int seatNumber) {
         log.debug("더미 좌석 정보 생성: seatNumber={}", seatNumber);
@@ -192,6 +196,8 @@ public class SeatInfoHelper {
     /**
      * 정적 메서드: Seat 엔티티로부터 좌석 정보 생성
      * SeatCacheInitService에서 사용
+     * ⚠️ 이미 SeatCacheInitService에 똑같은 기능의 메서드 존재.
+     * ⚠️ 추후 리팩터링 될 동기화 기능에서만 사용하는 메서드 - 추후 삭세 권장
      */
     public static String generateSeatInfoFromEntity(Seat seat) {
         if (seat == null) {
