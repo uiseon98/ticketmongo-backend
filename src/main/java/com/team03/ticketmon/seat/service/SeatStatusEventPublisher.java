@@ -2,9 +2,10 @@ package com.team03.ticketmon.seat.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.seat.domain.SeatStatus;
 import com.team03.ticketmon.seat.domain.SeatStatus.SeatStatusEnum;
-import com.team03.ticketmon.seat.dto.SeatUpdateEvent;
+import com.team03.ticketmon.seat.dto.SeatUpdateEventDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RTopic;
@@ -30,7 +31,7 @@ public class SeatStatusEventPublisher {
     private final ObjectMapper objectMapper;
 
     // Redis 채널 패턴: seat:status:update:{concertId}
-    private static final String CHANNEL_PREFIX = "seat:status:update:";
+    private static final String SEAT_CHANNEL_PREFIX = RedisKeyGenerator.SEAT_CHANNEL_PREFIX;
 
     // 발행 통계
     private final AtomicLong publishedEventCount = new AtomicLong(0);
@@ -57,7 +58,7 @@ public class SeatStatusEventPublisher {
         }
 
         try {
-            SeatUpdateEvent event = SeatUpdateEvent.from(seatStatus);
+            SeatUpdateEventDTO event = SeatUpdateEventDTO.from(seatStatus);
             publishEvent(event);
 
             log.debug("좌석 상태 이벤트 발행 성공 (SeatStatus): concertId={}, seatId={}, status={}",
@@ -74,31 +75,31 @@ public class SeatStatusEventPublisher {
      * 좌석 상태 변경 이벤트 발행 (개별 필드 기반) - 개선된 버전
      *
      * @param concertId 콘서트 ID
-     * @param seatId 좌석 ID
+     * @param concertSeatId 좌석 ID
      * @param status 좌석 상태
      * @param userId 사용자 ID (null 가능)
      * @param seatInfo 좌석 정보
      */
-    public void publishSeatUpdate(Long concertId, Long seatId, SeatStatusEnum status,
+    public void publishSeatUpdate(Long concertId, Long concertSeatId, SeatStatusEnum status,
                                   Long userId, String seatInfo) {
 
         // ✅ 개선: 입력 유효성 검증
-        if (!isValidEventParameters(concertId, seatId, status, seatInfo)) {
+        if (!isValidEventParameters(concertId, concertSeatId, status, seatInfo)) {
             failedEventCount.incrementAndGet();
             return;
         }
 
         try {
-            SeatUpdateEvent event = SeatUpdateEvent.of(concertId, seatId, status, userId, seatInfo);
+            SeatUpdateEventDTO event = SeatUpdateEventDTO.of(concertId, concertSeatId, status, userId, seatInfo);
             publishEvent(event);
 
-            log.debug("좌석 상태 이벤트 발행 성공 (개별 필드): concertId={}, seatId={}, status={}",
-                    concertId, seatId, status);
+            log.debug("좌석 상태 이벤트 발행 성공 (개별 필드): concertId={}, concertSeatId={}, status={}",
+                    concertId, concertSeatId, status);
 
         } catch (Exception e) {
             failedEventCount.incrementAndGet();
-            log.error("좌석 상태 이벤트 발행 실패 (개별 필드): concertId={}, seatId={}, status={}",
-                    concertId, seatId, status, e);
+            log.error("좌석 상태 이벤트 발행 실패 (개별 필드): concertId={}, concertSeatId={}, status={}",
+                    concertId, concertSeatId, status, e);
         }
     }
 
@@ -109,9 +110,9 @@ public class SeatStatusEventPublisher {
      *
      * @param event 발행할 이벤트 객체
      */
-    private void publishEvent(SeatUpdateEvent event) {
+    private void publishEvent(SeatUpdateEventDTO event) {
         try {
-            String channelName = CHANNEL_PREFIX + event.concertId();
+            String channelName = SEAT_CHANNEL_PREFIX + event.concertId();
             RTopic topic = redissonClient.getTopic(channelName);
 
             // ✅ 개선: JSON 직렬화 예외 처리 강화
@@ -217,7 +218,7 @@ public class SeatStatusEventPublisher {
                 "failedEventCount", failedEventCount.get(),
                 "totalEventCount", totalEvents,
                 "successRate", successRate,
-                "channelPrefix", CHANNEL_PREFIX
+                "channelPrefix", SEAT_CHANNEL_PREFIX
         );
     }
 
@@ -228,7 +229,7 @@ public class SeatStatusEventPublisher {
         if (concertId == null || concertId <= 0) {
             return null;
         }
-        return CHANNEL_PREFIX + concertId;
+        return SEAT_CHANNEL_PREFIX + concertId;
     }
 
     /**

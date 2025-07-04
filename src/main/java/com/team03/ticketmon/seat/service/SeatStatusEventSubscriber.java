@@ -1,7 +1,8 @@
 package com.team03.ticketmon.seat.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.team03.ticketmon.seat.dto.SeatUpdateEvent;
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
+import com.team03.ticketmon.seat.dto.SeatUpdateEventDTO;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +32,7 @@ public class SeatStatusEventSubscriber implements PatternMessageListener<CharSeq
     private final SeatPollingSessionManager sessionManager;
 
     // 구독할 채널 패턴: seat:status:update:*
-    private static final String CHANNEL_PATTERN = "seat:status:update:*";
+    private static final String SEAT_CHANNEL_PATTERN = RedisKeyGenerator.SEAT_CHANNEL_PATTERN;
 
     // 상태 관리
     private final AtomicBoolean isSubscribed = new AtomicBoolean(false);
@@ -48,7 +49,7 @@ public class SeatStatusEventSubscriber implements PatternMessageListener<CharSeq
     public void subscribeToSeatUpdateEvents() {
         try {
             // ✅ 개선: RPatternTopic 사용으로 패턴 매칭 최적화
-            patternTopic = redissonClient.getPatternTopic(CHANNEL_PATTERN);
+            patternTopic = redissonClient.getPatternTopic(SEAT_CHANNEL_PATTERN);
 
             // ✅ 개선: this를 PatternMessageListener로 직접 사용
             listenerId = patternTopic.addListener(CharSequence.class, this);
@@ -56,10 +57,10 @@ public class SeatStatusEventSubscriber implements PatternMessageListener<CharSeq
             isSubscribed.set(true);
 
             log.info("좌석 상태 이벤트 구독 시작: pattern={}, listenerId={}",
-                    CHANNEL_PATTERN, listenerId);
+                    SEAT_CHANNEL_PATTERN, listenerId);
 
         } catch (Exception e) {
-            log.error("좌석 상태 이벤트 구독 초기화 실패: pattern={}", CHANNEL_PATTERN, e);
+            log.error("좌석 상태 이벤트 구독 초기화 실패: pattern={}", SEAT_CHANNEL_PATTERN, e);
             isSubscribed.set(false);
         }
     }
@@ -73,7 +74,7 @@ public class SeatStatusEventSubscriber implements PatternMessageListener<CharSeq
             if (patternTopic != null && listenerId != -1) {
                 patternTopic.removeListener(listenerId);
                 log.info("좌석 상태 이벤트 구독 해제: pattern={}, listenerId={}",
-                        CHANNEL_PATTERN, listenerId);
+                        SEAT_CHANNEL_PATTERN, listenerId);
             }
             isSubscribed.set(false);
         } catch (Exception e) {
@@ -114,7 +115,7 @@ public class SeatStatusEventSubscriber implements PatternMessageListener<CharSeq
             }
 
             // JSON 메시지를 SeatUpdateEvent 객체로 역직렬화
-            SeatUpdateEvent event = objectMapper.readValue(messageContent, SeatUpdateEvent.class);
+            SeatUpdateEventDTO event = objectMapper.readValue(messageContent, SeatUpdateEventDTO.class);
 
             // ✅ 개선: 이벤트 데이터 유효성 검증 강화
             if (!isValidEvent(event)) {
@@ -156,7 +157,7 @@ public class SeatStatusEventSubscriber implements PatternMessageListener<CharSeq
      * @param event 검증할 이벤트
      * @return 유효한 경우 true
      */
-    private boolean isValidEvent(SeatUpdateEvent event) {
+    private boolean isValidEvent(SeatUpdateEventDTO event) {
         if (event == null) {
             return false;
         }
@@ -215,7 +216,7 @@ public class SeatStatusEventSubscriber implements PatternMessageListener<CharSeq
     public Map<String, Object> getSubscriberStats() {
         return Map.of(
                 "isSubscribed", isSubscribed.get(),
-                "channelPattern", CHANNEL_PATTERN,
+                "channelPattern", SEAT_CHANNEL_PATTERN,
                 "listenerId", listenerId,
                 "processedEventCount", processedEventCount.get(),
                 "errorEventCount", errorEventCount.get(),
