@@ -2,6 +2,8 @@ package com.team03.ticketmon._global.util;
 
 import org.springframework.stereotype.Component;
 
+import java.util.regex.Pattern;
+
 /**
  * ✅ RedisKeyGenerator: Redis 키 생성을 중앙에서 관리하는 유틸 클래스<br>
  * -----------------------------------------------------------<br>
@@ -80,6 +82,28 @@ public class RedisKeyGenerator {
      */
     public static final String CONSISTENCY_CHECK_LOCK_KEY = "lock:consistencyCheckScheduler";
 
+    // --- 🪑 좌석 관리 관련 키 ---
+
+    public static final String SEAT_STATUS_KEY_PREFIX = "seat:status:";
+
+    public static final String SEAT_LOCK_KEY_PREFIX = "seat:lock:";
+
+    public static final String SEAT_TTL_KEY_PREFIX = "seat:expire:";
+
+    public static final String SEAT_CHANNEL_PATTERN = "seat:status:update:*";
+
+    public static final String SEAT_CHANNEL_PREFIX = "seat:status:update:";
+
+    // --- 🪑 Warm-up ---
+
+    public static final String WARMUP_LOCK_KEY = "lock:seat:cache:warmup";
+
+    public static final String SEAT_PROCESSED_CONCERT_KEY_PREFIX = "processed:warmup:concert:";
+
+    // --- 🪑 keyspace-event ---
+
+    public static final String SEAT_EXPIRE_KEY_PATTERN = "seat:expire:*";
+    public static final Pattern SEAT_KEY_REGEX = Pattern.compile("seat:expire:(\\d+):(\\d+)");
 
     // --- Pub/Sub 토픽 관련 키 ---
 
