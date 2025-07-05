@@ -1,6 +1,6 @@
-// src/main/java/com/team03/ticketmon/seat/listener/SeatExpirationEventListener.java
 package com.team03.ticketmon.seat.listener;
 
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.seat.service.SeatStatusService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -32,8 +32,8 @@ public class SeatExpirationEventListener implements MessageListener {
     private final RedisMessageListenerContainer redisMessageListenerContainer;
 
     // TTL 키 패턴
-    private static final String SEAT_EXPIRE_KEY_PATTERN = "seat:expire:*";
-    private static final Pattern SEAT_KEY_REGEX = Pattern.compile("seat:expire:(\\d+):(\\d+)");
+    private static final String SEAT_EXPIRE_KEY_PATTERN = RedisKeyGenerator.SEAT_EXPIRE_KEY_PATTERN;
+    private static final Pattern SEAT_KEY_REGEX = RedisKeyGenerator.SEAT_KEY_REGEX;
 
     /**
      * ✅ 초기화 시 Redis 만료 이벤트 구독 등록

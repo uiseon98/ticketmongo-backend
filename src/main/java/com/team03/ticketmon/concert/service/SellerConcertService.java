@@ -244,7 +244,8 @@ public class SellerConcertService {
 
 		// 시스템 설정값들
 		concert.setSellerId(sellerId);
-		concert.setStatus(ConcertStatus.SCHEDULED);
+		ConcertStatus requestedStatus = createDTO.getStatus();
+		concert.setStatus(requestedStatus != null ? requestedStatus : ConcertStatus.SCHEDULED);
 
 		return concert;
 	}

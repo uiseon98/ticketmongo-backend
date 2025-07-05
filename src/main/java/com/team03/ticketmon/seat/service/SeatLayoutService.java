@@ -6,9 +6,9 @@ import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.domain.ConcertSeat;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
 import com.team03.ticketmon.concert.repository.ConcertSeatRepository;
-import com.team03.ticketmon.seat.dto.SeatDetailResponse;
-import com.team03.ticketmon.seat.dto.SeatLayoutResponse;
-import com.team03.ticketmon.seat.dto.SectionLayoutResponse;
+import com.team03.ticketmon.seat.dto.SeatDetailResponseDTO;
+import com.team03.ticketmon.seat.dto.SeatLayoutResponseDTO;
+import com.team03.ticketmon.seat.dto.SectionLayoutResponseDTO;
 import com.team03.ticketmon.venue.dto.VenueDTO;
 import com.team03.ticketmon.venue.service.VenueService;
 import lombok.RequiredArgsConstructor;
@@ -24,8 +24,6 @@ import java.util.stream.Collectors;
  * 좌석 배치도 관련 비즈니스 로직 서비스
  * 기존 VenueService, ConcertSeatRepository를 활용하여
  * 실제 DB 데이터 기반의 좌석 배치도 정보를 제공
- *
- * 경로: src/main/java/com/team03/ticketmon/seat/service/SeatLayoutService.java
  */
 @Slf4j
 @Service
@@ -44,7 +42,7 @@ public class SeatLayoutService {
      * @return 좌석 배치도 정보
      * @throws BusinessException 콘서트를 찾을 수 없는 경우
      */
-    public SeatLayoutResponse getSeatLayout(Long concertId) {
+    public SeatLayoutResponseDTO getSeatLayout(Long concertId) {
         log.info("좌석 배치도 조회 시작: concertId={}", concertId);
 
         try {
@@ -74,7 +72,7 @@ public class SeatLayoutService {
                 log.info("대체 공연장 정보 사용: venueName={}", concert.getVenueName());
             }
 
-            SeatLayoutResponse.VenueInfo venueInfo = SeatLayoutResponse.VenueInfo.from(venue);
+            SeatLayoutResponseDTO.VenueInfo venueInfo = SeatLayoutResponseDTO.VenueInfo.from(venue);
 
             // 3. 콘서트의 모든 좌석 정보 조회 (Fetch Join으로 최적화됨)
             List<ConcertSeat> concertSeats = concertSeatRepository.findByConcertIdWithDetails(concertId);
@@ -82,20 +80,20 @@ public class SeatLayoutService {
             if (concertSeats.isEmpty()) {
                 log.warn("콘서트에 좌석 정보가 없습니다: concertId={}", concertId);
                 // 빈 좌석 배치도 반환
-                return SeatLayoutResponse.from(concertId, venueInfo, List.of());
+                return SeatLayoutResponseDTO.from(concertId, venueInfo, List.of());
             }
 
             log.debug("좌석 정보 조회 성공: concertId={}, 총 좌석수={}", concertId, concertSeats.size());
 
             // 4. 좌석 정보를 DTO로 변환
-            List<SeatDetailResponse> seatDetails = concertSeats.stream()
-                    .map(SeatDetailResponse::from)
+            List<SeatDetailResponseDTO> seatDetails = concertSeats.stream()
+                    .map(SeatDetailResponseDTO::from)
                     .collect(Collectors.toList());
 
             // 5. 구역별로 그룹핑
-            Map<String, List<SeatDetailResponse>> seatsBySection = seatDetails.stream()
+            Map<String, List<SeatDetailResponseDTO>> seatsBySection = seatDetails.stream()
                     .collect(Collectors.groupingBy(
-                            SeatDetailResponse::section,
+                            SeatDetailResponseDTO::section,
                             Collectors.toList()
                     ));
 
@@ -103,13 +101,13 @@ public class SeatLayoutService {
                     concertId, seatsBySection.size(), seatsBySection.keySet());
 
             // 6. 구역별 응답 생성 (구역명 기준 정렬)
-            List<SectionLayoutResponse> sections = seatsBySection.entrySet().stream()
+            List<SectionLayoutResponseDTO> sections = seatsBySection.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey()) // 구역명으로 정렬 (A, B, C, VIP 등)
-                    .map(entry -> SectionLayoutResponse.from(entry.getKey(), entry.getValue()))
+                    .map(entry -> SectionLayoutResponseDTO.from(entry.getKey(), entry.getValue()))
                     .collect(Collectors.toList());
 
             // 7. 최종 응답 생성
-            SeatLayoutResponse response = SeatLayoutResponse.from(concertId, venueInfo, sections);
+            SeatLayoutResponseDTO response = SeatLayoutResponseDTO.from(concertId, venueInfo, sections);
 
             log.info("좌석 배치도 조회 완료: concertId={}, 총좌석={}, 구역수={}, 예매가능률={}%",
                     concertId,
@@ -137,7 +135,7 @@ public class SeatLayoutService {
      * @return 해당 구역의 좌석 배치 정보
      * @throws BusinessException 콘서트나 구역을 찾을 수 없는 경우
      */
-    public SectionLayoutResponse getSectionLayout(Long concertId, String sectionName) {
+    public SectionLayoutResponseDTO getSectionLayout(Long concertId, String sectionName) {
         log.info("구역별 좌석 배치도 조회: concertId={}, section={}", concertId, sectionName);
 
         try {
@@ -161,9 +159,9 @@ public class SeatLayoutService {
             log.debug("전체 좌석 조회 완료: concertId={}, 총 좌석수={}", concertId, concertSeats.size());
 
             // 4. 특정 구역 필터링 (대소문자 무시)
-            List<SeatDetailResponse> sectionSeats = concertSeats.stream()
+            List<SeatDetailResponseDTO> sectionSeats = concertSeats.stream()
                     .filter(cs -> trimmedSectionName.equalsIgnoreCase(cs.getSeat().getSection()))
-                    .map(SeatDetailResponse::from)
+                    .map(SeatDetailResponseDTO::from)
                     .collect(Collectors.toList());
 
             if (sectionSeats.isEmpty()) {
@@ -183,7 +181,7 @@ public class SeatLayoutService {
                                 trimmedSectionName, String.join(", ", availableSections)));
             }
 
-            SectionLayoutResponse response = SectionLayoutResponse.from(trimmedSectionName, sectionSeats);
+            SectionLayoutResponseDTO response = SectionLayoutResponseDTO.from(trimmedSectionName, sectionSeats);
 
             log.info("구역별 좌석 배치도 조회 완료: concertId={}, section={}, 좌석수={}, 예매가능={}",
                     concertId, trimmedSectionName, response.totalSeats(), response.availableSeats());
@@ -200,18 +198,6 @@ public class SeatLayoutService {
             throw new BusinessException(ErrorCode.SERVER_ERROR,
                     "구역별 좌석 배치도 조회 중 오류가 발생했습니다.");
         }
-    }
-
-    /**
-     * 좌석 배치도 캐시 무효화 (선택적 기능)
-     * 콘서트 정보나 좌석 정보가 변경되었을 때 호출
-     *
-     * @param concertId 콘서트 ID
-     */
-    public void invalidateSeatLayoutCache(Long concertId) {
-        log.info("좌석 배치도 캐시 무효화: concertId={}", concertId);
-        // TODO: 향후 캐시 도입 시 구현
-        // cacheManager.evict("seat-layout", concertId);
     }
 
     /**

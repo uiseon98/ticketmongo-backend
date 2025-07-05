@@ -85,78 +85,8 @@ public class SeatInfoHelper {
     }
 
     /**
-     * 기존 메서드: Seat ID 기반 좌석 정보 조회 (하위 호환성 유지)
-     *
-     * @param concertId 콘서트 ID
-     * @param seatId Seat ID
-     * @return 좌석 정보 문자열
-     * @throws BusinessException 좌석을 찾을 수 없는 경우
-     */
-    @Cacheable(value = "seatInfo", key = "#concertId + ':' + #seatId", unless = "#result == null")
-    public String getSeatInfoFromDB(Long concertId, Long seatId) {
-        try {
-            log.debug("Seat ID로 좌석 정보 조회: concertId={}, seatId={}", concertId, seatId);
-
-            // Seat ID로 ConcertSeat 조회
-            Optional<ConcertSeat> concertSeatOpt = concertSeatRepository
-                    .findByConcertIdAndSeatId(concertId, seatId);
-
-            if (concertSeatOpt.isEmpty()) {
-                log.warn("좌석 정보를 찾을 수 없음: concertId={}, seatId={}", concertId, seatId);
-                throw new BusinessException(ErrorCode.SEAT_NOT_FOUND,
-                        String.format("좌석을 찾을 수 없습니다. 콘서트ID: %d, 좌석ID: %d", concertId, seatId));
-            }
-
-            ConcertSeat concertSeat = concertSeatOpt.get();
-            Seat seat = concertSeat.getSeat();
-
-            String seatInfo = String.format("%s-%s-%d",
-                    seat.getSection() != null ? seat.getSection() : "?",
-                    seat.getSeatRow() != null ? seat.getSeatRow() : "?",
-                    seat.getSeatNumber() != null ? seat.getSeatNumber() : 0);
-
-            log.debug("Seat ID 기반 좌석 정보 조회 성공: concertId={}, seatId={}, seatInfo={}",
-                    concertId, seatId, seatInfo);
-
-            return seatInfo;
-
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("Seat ID 기반 좌석 정보 조회 중 오류: concertId={}, seatId={}", concertId, seatId, e);
-            throw new BusinessException(ErrorCode.SERVER_ERROR,
-                    "좌석 정보 조회 중 오류가 발생했습니다.");
-        }
-    }
-
-    /**
-     * 좌석 존재 여부만 빠르게 확인 (Seat ID 기반)
-     */
-    @Cacheable(value = "seatExists", key = "#concertId + ':' + #seatId")
-    public boolean seatExists(Long concertId, Long seatId) {
-        try {
-            return concertSeatRepository.existsByConcertIdAndSeatId(concertId, seatId);
-        } catch (Exception e) {
-            log.error("좌석 존재 여부 확인 중 오류: concertId={}, seatId={}", concertId, seatId, e);
-            return false;
-        }
-    }
-
-    /**
-     * ✅ 새로운 메서드: ConcertSeat 존재 여부 확인
-     */
-    @Cacheable(value = "concertSeatExists", key = "#concertId + ':' + #concertSeatId")
-    public boolean concertSeatExists(Long concertId, Long concertSeatId) {
-        try {
-            return concertSeatRepository.existsByConcertIdAndConcertSeatId(concertId, concertSeatId);
-        } catch (Exception e) {
-            log.error("ConcertSeat 존재 여부 확인 중 오류: concertId={}, concertSeatId={}", concertId, concertSeatId, e);
-            return false;
-        }
-    }
-
-    /**
      * 더미 데이터 생성 (하위 호환성 + 폴백용)
+     * ⚠️ 추후 삭제될 메서드에서 사용하는 메서드
      */
     public String generateDummySeatInfo(int seatNumber) {
         log.debug("더미 좌석 정보 생성: seatNumber={}", seatNumber);
@@ -187,22 +117,5 @@ public class SeatInfoHelper {
         log.debug("더미 좌석 정보 생성 완료: seatNumber={} -> seatInfo={}", seatNumber, seatInfo);
 
         return seatInfo;
-    }
-
-    /**
-     * 정적 메서드: Seat 엔티티로부터 좌석 정보 생성
-     * SeatCacheInitService에서 사용
-     */
-    public static String generateSeatInfoFromEntity(Seat seat) {
-        if (seat == null) {
-            log.warn("Seat 엔티티가 null입니다.");
-            return "UNKNOWN";
-        }
-
-        String section = seat.getSection() != null ? seat.getSection() : "?";
-        String seatRow = seat.getSeatRow() != null ? seat.getSeatRow() : "?";
-        Integer seatNumber = seat.getSeatNumber() != null ? seat.getSeatNumber() : 0;
-
-        return String.format("%s-%s-%d", section, seatRow, seatNumber);
     }
 }

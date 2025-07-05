@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 /**
  * 좌석 상태 응답 DTO
  */
-public record SeatStatusResponse(
+public record SeatStatusResponseDTO(
         Long concertId,
         Long seatId,
         String seatInfo,
@@ -22,7 +22,7 @@ public record SeatStatusResponse(
     /**
      * SeatStatus 엔티티로부터 응답 DTO 생성
      */
-    public static SeatStatusResponse from(SeatStatus seatStatus) {
+    public static SeatStatusResponseDTO from(SeatStatus seatStatus) {
         Long remainingSeconds = null;
         if (seatStatus.isReserved() && seatStatus.getExpiresAt() != null) {
             remainingSeconds = java.time.Duration.between(
@@ -32,7 +32,7 @@ public record SeatStatusResponse(
             remainingSeconds = Math.max(0, remainingSeconds); // 음수 방지
         }
 
-        return new SeatStatusResponse(
+        return new SeatStatusResponseDTO(
                 seatStatus.getConcertId(),
                 seatStatus.getSeatId(),
                 seatStatus.getSeatInfo(),
