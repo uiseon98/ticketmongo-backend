@@ -1,5 +1,6 @@
 package com.team03.ticketmon.seat.service;
 
+import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.dto.SeatUpdateEventDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -22,16 +23,17 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class SeatPollingSessionManager {
 
+    private final SeatProperties seatProperties;
+
     // 콘서트별 활성 세션 관리: concertId -> List<PollingSession>
     private final Map<Long, List<PollingSession>> activeSessions = new ConcurrentHashMap<>();
 
     // 세션 ID 생성기
     private final AtomicLong sessionIdGenerator = new AtomicLong(0);
 
-    // 설정값 - 환경별로 조정 가능하도록 개선
-    private static final int MAX_SESSIONS_PER_CONCERT = 1000; // 콘서트당 최대 세션 수
-    private static final long DEFAULT_TIMEOUT_MS = 30000; // 30초 기본 타임아웃
-    private static final long SESSION_CLEANUP_MINUTES = 5; // 5분 이상 된 세션 정리
+    public SeatPollingSessionManager(SeatProperties seatProperties) {
+        this.seatProperties = seatProperties;
+    }
 
     /**
      * 폴링 세션 정보를 담는 내부 클래스 (개선된 버전)
@@ -79,7 +81,8 @@ public class SeatPollingSessionManager {
         }
 
         // 세션 수 제한 확인
-        if (getSessionCount(concertId) >= MAX_SESSIONS_PER_CONCERT) {
+        int maxSessions = seatProperties.getSession().getMaxSessionsPerConcert();
+        if (getSessionCount(concertId) >= maxSessions) {
             log.warn("콘서트 최대 세션 수 초과: concertId={}, currentCount={}",
                     concertId, getSessionCount(concertId));
             return null;
@@ -174,7 +177,7 @@ public class SeatPollingSessionManager {
      * 만료된 세션들 정리 (스케줄러에서 호출) - 개선된 버전
      */
     public void cleanupExpiredSessions() {
-        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(SESSION_CLEANUP_MINUTES);
+        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(seatProperties.getSession().getCleanupMinutes());
         int cleanedCount = 0;
         int totalSessionsBefore = getTotalSessionCount();
 
@@ -191,7 +194,7 @@ public class SeatPollingSessionManager {
             while (sessionIterator.hasNext()) {
                 PollingSession session = sessionIterator.next();
 
-                // 만료 조건: 5분 이상 된 세션 또는 이미 처리된 세션
+                // 만료 조건: 설정 시간 이상 된 세션 또는 이미 처리된 세션
                 if (session.getStartTime().isBefore(cutoffTime) ||
                         session.getDeferredResult().isSetOrExpired()) {
                     sessionIterator.remove();
@@ -284,8 +287,8 @@ public class SeatPollingSessionManager {
         return Map.of(
                 "totalSessions", getTotalSessionCount(),
                 "activeConcerts", getActiveConcertCount(),
-                "maxSessionsPerConcert", MAX_SESSIONS_PER_CONCERT,
-                "sessionCleanupMinutes", SESSION_CLEANUP_MINUTES,
+                "maxSessionsPerConcert", seatProperties.getSession().getMaxSessionsPerConcert(),
+                "sessionCleanupMinutes", seatProperties.getSession().getCleanupMinutes(),
                 "lastCleanupTime", LocalDateTime.now()
         );
     }
