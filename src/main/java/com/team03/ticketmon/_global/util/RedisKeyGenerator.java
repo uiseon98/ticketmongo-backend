@@ -94,6 +94,8 @@ public class RedisKeyGenerator {
 
     public static final String SEAT_CHANNEL_PREFIX = "seat:status:update:";
 
+    public static final String SEAT_LAST_UPDATE_KEY_PREFIX = "seat:last_update:";
+
     // --- 🪑 Warm-up ---
 
     public static final String WARMUP_LOCK_KEY = "lock:seat:cache:warmup";
