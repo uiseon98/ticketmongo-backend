@@ -1,6 +1,7 @@
 package com.team03.ticketmon.seat.service;
 
 import com.team03.ticketmon._global.util.RedisKeyGenerator;
+import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.domain.SeatStatus;
 import com.team03.ticketmon.seat.domain.SeatStatus.SeatStatusEnum;
 import com.team03.ticketmon.seat.exception.SeatReservationException;
@@ -35,21 +36,15 @@ public class SeatStatusService {
     private final RedissonClient redissonClient;
     private final SeatStatusEventPublisher eventPublisher;
     private final SeatCacheInitService seatCacheInitService; // ✅ 추가된 필드
+    private final SeatProperties seatProperties;
 
     // Redis 키 패턴
     private static final String SEAT_STATUS_KEY_PREFIX = RedisKeyGenerator.SEAT_STATUS_KEY_PREFIX;
     private static final String SEAT_LOCK_KEY_PREFIX = RedisKeyGenerator.SEAT_LOCK_KEY_PREFIX;
     private static final String SEAT_TTL_KEY_PREFIX = RedisKeyGenerator.SEAT_TTL_KEY_PREFIX;
 
-    // 분산 락 타임아웃 설정
-    private static final long LOCK_WAIT_TIME = 3; // 락 획득 대기 시간 (초)
-    private static final long LOCK_LEASE_TIME = 10; // 락 보유 시간 (초)
-
-    // TTL 설정
-    private static final long SEAT_RESERVATION_TTL_MINUTES = 5; // 좌석 선점 유지 시간 (분)
-
-    // ✅ 좌석 선점 제한 설정
-    private static final int MAX_SEAT_RESERVATION_COUNT = 2; // 사용자당 최대 선점 가능 좌석 수
+    // 업데이트 시간 추적을 위한 키
+    private static final String LAST_UPDATE_KEY_PREFIX = "seat:last_update:";
 
     /**
      * ✅ 수정된 전체 좌석 상태 조회 - Cache-Aside 패턴 적용
@@ -114,7 +109,10 @@ public class SeatStatusService {
         // 1. Redis에 좌석 상태 저장
         seatMap.put(seatStatus.getSeatId().toString(), seatStatus);
 
-        // 2. 실시간 이벤트 발행 (실패해도 좌석 상태 저장에는 영향 없음)
+        // 2. 마지막 업데이트 시간 갱신
+        updateLastUpdateTime(seatStatus.getConcertId());
+
+        // 3. 실시간 이벤트 발행 (실패해도 좌석 상태 저장에는 영향 없음)
         try {
             eventPublisher.publishSeatUpdate(seatStatus);
         } catch (Exception e) {
@@ -134,8 +132,8 @@ public class SeatStatusService {
             String ttlKey = SEAT_TTL_KEY_PREFIX + concertId + ":" + concertSeatId;
             RBucket<String> bucket = redissonClient.getBucket(ttlKey);
 
-            bucket.set("reserved", SEAT_RESERVATION_TTL_MINUTES, TimeUnit.MINUTES);
-            log.debug("좌석 TTL 키 생성: key={}, ttl={}분", ttlKey, SEAT_RESERVATION_TTL_MINUTES);
+            bucket.set("reserved", seatProperties.getReservation().getTtlMinutes(), TimeUnit.MINUTES);
+            log.debug("좌석 TTL 키 생성: key={}, ttl={}분", ttlKey, seatProperties.getReservation().getTtlMinutes());
 
         } catch (Exception e) {
             log.error("좌석 TTL 키 생성 실패: concertId={}, concertSeatId={}", concertId, concertSeatId, e);
@@ -166,8 +164,8 @@ public class SeatStatusService {
      * ✅ 사용자별 좌석 선점 개수 검증
      * Redis에서 현재 사용자가 선점한 좌석 개수를 확인하여 최대 제한을 초과하는지 검증
      *
-     * @param concertId 콘서트 ID
-     * @param userId 사용자 ID
+     * @param concertId    콘서트 ID
+     * @param userId       사용자 ID
      * @param targetSeatId 새로 선점하려는 좌석 ID (동일 좌석 재선점 시 제외용)
      * @throws SeatReservationException 최대 선점 개수 초과 시
      */
@@ -180,18 +178,19 @@ public class SeatStatusService {
                 .filter(seat -> !seat.getSeatId().equals(targetSeatId))
                 .count();
 
-        if (currentReservationCount >= MAX_SEAT_RESERVATION_COUNT) {
+        int maxSeatCount = seatProperties.getReservation().getMaxSeatCount();
+        if (currentReservationCount >= maxSeatCount) {
             log.warn("사용자 좌석 선점 개수 제한 초과: userId={}, concertId={}, currentCount={}, maxLimit={}",
-                    userId, concertId, currentReservationCount, MAX_SEAT_RESERVATION_COUNT);
+                    userId, concertId, currentReservationCount, maxSeatCount);
 
             throw new SeatReservationException(
                     String.format("좌석 선점은 최대 %d개까지만 가능합니다. 현재 선점 좌석: %d개",
-                            MAX_SEAT_RESERVATION_COUNT, currentReservationCount)
+                            maxSeatCount, currentReservationCount)
             );
         }
 
         log.debug("사용자 좌석 선점 개수 검증 통과: userId={}, concertId={}, currentCount={}, maxLimit={}",
-                userId, concertId, currentReservationCount, MAX_SEAT_RESERVATION_COUNT);
+                userId, concertId, currentReservationCount, maxSeatCount);
     }
 
     /**
@@ -201,10 +200,10 @@ public class SeatStatusService {
      * - TTL 키 생성으로 자동 만료 처리 지원
      * - ✅ 사용자별 최대 6개 좌석 선점 제한 추가
      *
-     * @param concertId 콘서트 ID
+     * @param concertId     콘서트 ID
      * @param concertSeatId 좌석 ID (ConcertSeat ID)
-     * @param userId 사용자 ID
-     * @param seatInfo 좌석 정보
+     * @param userId        사용자 ID
+     * @param seatInfo      좌석 정보
      * @return 선점된 좌석 상태
      * @throws SeatReservationException 좌석 선점 실패 시
      */
@@ -215,7 +214,8 @@ public class SeatStatusService {
 
         try {
             // 분산 락 획득 시도 (3초 대기, 10초 보유)
-            boolean acquired = lock.tryLock(LOCK_WAIT_TIME, LOCK_LEASE_TIME, TimeUnit.SECONDS);
+            boolean acquired = lock.tryLock(seatProperties.getLock().getWaitTimeSeconds(),
+                    seatProperties.getLock().getLeaseTimeSeconds(), TimeUnit.SECONDS);
             if (!acquired) {
                 log.warn("좌석 락 획득 실패: concertId={}, concertSeatId={}, userId={}", concertId, concertSeatId, userId);
                 throw new SeatReservationException("다른 사용자가 처리 중입니다. 잠시 후 다시 시도해주세요.");
@@ -259,7 +259,7 @@ public class SeatStatusService {
 
             // 3. 새로운 선점 처리 (기존 번호 2에서 3으로 변경)
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime expiresAt = now.plusMinutes(SEAT_RESERVATION_TTL_MINUTES);
+            LocalDateTime expiresAt = now.plusMinutes(seatProperties.getReservation().getTtlMinutes());
 
             SeatStatus reserved = SeatStatus.builder()
                     .id(concertId + "-" + concertSeatId)
@@ -439,5 +439,61 @@ public class SeatStatusService {
         return allSeats.values().stream()
                 .filter(seat -> seat.isReserved() && userId.equals(seat.getUserId()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 콘서트 좌석의 마지막 업데이트 시간 조회
+     */
+    public LocalDateTime getLastUpdateTime(Long concertId) {
+        try {
+            String key = LAST_UPDATE_KEY_PREFIX + concertId;
+            RBucket<LocalDateTime> bucket = redissonClient.getBucket(key);
+            return bucket.get();
+        } catch (Exception e) {
+            log.warn("마지막 업데이트 시간 조회 중 오류: concertId={}", concertId, e);
+            return null;
+        }
+    }
+
+    /**
+     * 콘서트 좌석의 마지막 업데이트 시간 설정
+     */
+    private void updateLastUpdateTime(Long concertId) {
+        try {
+            String key = LAST_UPDATE_KEY_PREFIX + concertId;
+            RBucket<LocalDateTime> bucket = redissonClient.getBucket(key);
+            bucket.set(LocalDateTime.now(), seatProperties.getReservation().getLastUpdateTtlHours(), TimeUnit.HOURS);
+        } catch (Exception e) {
+            log.warn("마지막 업데이트 시간 설정 중 오류: concertId={}", concertId, e);
+        }
+    }
+
+    /**
+     * 현재 좌석 상태 요약 조회 (폴링용)
+     */
+    public Map<String, Object> getCurrentSeatStatus(Long concertId) {
+        try {
+            Map<Long, SeatStatus> allSeats = getAllSeatStatus(concertId);
+
+            Map<String, Long> statusCounts = allSeats.values().stream()
+                    .collect(Collectors.groupingBy(
+                            seat -> seat.getStatus().toString(),
+                            Collectors.counting()
+                    ));
+
+            return Map.of(
+                    "concertId", concertId,
+                    "totalSeats", allSeats.size(),
+                    "statusCounts", statusCounts,
+                    "lastChecked", LocalDateTime.now()
+            );
+        } catch (Exception e) {
+            log.warn("현재 좌석 상태 조회 중 오류: concertId={}", concertId, e);
+            return Map.of(
+                    "concertId", concertId,
+                    "error", "상태 조회 실패",
+                    "lastChecked", LocalDateTime.now()
+            );
+        }
     }
 }
