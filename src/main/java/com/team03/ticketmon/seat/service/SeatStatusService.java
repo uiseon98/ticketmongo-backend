@@ -44,7 +44,7 @@ public class SeatStatusService {
     private static final String SEAT_TTL_KEY_PREFIX = RedisKeyGenerator.SEAT_TTL_KEY_PREFIX;
 
     // 업데이트 시간 추적을 위한 키
-    private static final String LAST_UPDATE_KEY_PREFIX = "seat:last_update:";
+    private static final String SEAT_LAST_UPDATE_KEY_PREFIX = RedisKeyGenerator.SEAT_LAST_UPDATE_KEY_PREFIX;
 
     /**
      * ✅ 수정된 전체 좌석 상태 조회 - Cache-Aside 패턴 적용
@@ -446,7 +446,7 @@ public class SeatStatusService {
      */
     public LocalDateTime getLastUpdateTime(Long concertId) {
         try {
-            String key = LAST_UPDATE_KEY_PREFIX + concertId;
+            String key = SEAT_LAST_UPDATE_KEY_PREFIX + concertId;
             RBucket<LocalDateTime> bucket = redissonClient.getBucket(key);
             return bucket.get();
         } catch (Exception e) {
@@ -460,7 +460,7 @@ public class SeatStatusService {
      */
     private void updateLastUpdateTime(Long concertId) {
         try {
-            String key = LAST_UPDATE_KEY_PREFIX + concertId;
+            String key = SEAT_LAST_UPDATE_KEY_PREFIX + concertId;
             RBucket<LocalDateTime> bucket = redissonClient.getBucket(key);
             bucket.set(LocalDateTime.now(), seatProperties.getReservation().getLastUpdateTtlHours(), TimeUnit.HOURS);
         } catch (Exception e) {
