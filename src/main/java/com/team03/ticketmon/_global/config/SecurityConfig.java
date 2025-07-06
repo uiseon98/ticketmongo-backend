@@ -4,10 +4,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.auth.jwt.*;
+import com.team03.ticketmon.queue.adapter.QueueRedisAdapter;
 import jakarta.servlet.DispatcherType;
-import org.redisson.api.RedissonClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -66,9 +65,8 @@ public class SecurityConfig {
 	private final UserEntityService userEntityService;
 	private final SocialUserService socialUserService;
 	private final CookieUtil cookieUtil;
-    private final RedissonClient redissonClient;
-    private final RedisKeyGenerator keyGenerator;
 	private final CorsProperties corsProperties;
+	private final QueueRedisAdapter queueRedisAdapter;
 
 	/**
 	 * <b>AuthenticationManager 빈 설정</b> <br>
@@ -187,7 +185,7 @@ public class SecurityConfig {
 				LogoutFilter.class)
 			.addFilterAt(new LoginFilter(authenticationManager(authenticationConfiguration), cookieUtil),
 				UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(new AccessKeyFilter(redissonClient, keyGenerator), JwtAuthenticationFilter.class)
+            .addFilterAfter(new AccessKeyFilter(queueRedisAdapter), JwtAuthenticationFilter.class)
 
 			// 인증/인가 실패(인증 실패(401), 권한 부족(403)) 시 반환되는 예외 응답 설정
 			.exceptionHandling(exception -> exception

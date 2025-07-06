@@ -1,10 +1,11 @@
 package com.team03.ticketmon.queue.scheduler;
 
-import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
+import com.team03.ticketmon.queue.adapter.QueueRedisAdapter;
 import com.team03.ticketmon.queue.service.AdmissionService;
 import com.team03.ticketmon.queue.service.WaitingQueueService;
+import com.team03.ticketmon.queue.strategy.PersonalizedRankStrategy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.*;
@@ -26,19 +27,13 @@ import java.util.concurrent.TimeUnit;
 public class WaitingQueueScheduler {
 
     private final WaitingQueueService waitingQueueService;
-    private final RedissonClient redissonClient;
     private final ConcertRepository concertRepository;
     private final AdmissionService admissionService;
+    private final QueueRedisAdapter queueRedisAdapter;
+    private final PersonalizedRankStrategy personalizedRankStrategy;
 
     @Value("${app.queue.max-active-users}")
     private long maxActiveUsers; // 시스템이 동시에 수용 가능한 최대 활성 사용자 수
-
-    @Value("${app.queue.top-ranker-count}")
-    private long topRankerCount ; // 최상위 대기자 기준 설정
-
-    // --- Redis 키 정의 ---
-    /** 분산 락을 위한 키. 이 락을 획득한 인스턴스만이 스케줄러 로직을 실행. */
-    private static final String ADMISSION_LOCK_KEY = RedisKeyGenerator.ADMISSION_SCHEDULER_LOCK_KEY;
 
     /**
      * 10초마다 주기적으로 실행되어 대기열을 처리.
@@ -49,7 +44,8 @@ public class WaitingQueueScheduler {
     public void execute() {
 
         // 분산 락 획득 시도
-        RLock lock = redissonClient.getLock(ADMISSION_LOCK_KEY);
+        RLock lock = queueRedisAdapter.getAdmissionSchedulerLock();
+
         try {
             // [분산 락 획득 시도]
             // waitTime(0): waitTime을 0으로 두어, 락 획득에 실패하면 즉시 리턴하는 비대기 모드는 유지
@@ -96,8 +92,8 @@ public class WaitingQueueScheduler {
     private void processQueueForConcert(Long concertId) {
         log.debug("===== [콘서트 ID: {}] 대기열 처리 시작. =====", concertId);
 
-        String activeUserCountKey = "active_users_count:concert:" + concertId;
-        RAtomicLong activeUsersCount = redissonClient.getAtomicLong(activeUserCountKey);
+        // ==================== 1. 입장 처리 로직 ====================
+        RAtomicLong activeUsersCount = queueRedisAdapter.getActiveUserCounter(concertId);
         long currentActiveUsers = activeUsersCount.get();
         // TODO: maxActiveUsers도 콘서트별로 다르게 설정할 수 있도록 DB에서 가져오는 로직 추가 가능 (우선순위: 최하)
         long availableSlots = maxActiveUsers - currentActiveUsers;
@@ -120,29 +116,12 @@ public class WaitingQueueScheduler {
         // 추출된 사용자들에게 입장 허가 처리
         admissionService.grantAccess(concertId, admittedUserIds, true);
 
+        // ==================== 2. 알림 로직 실행 ====================
+        RScoredSortedSet<Long> queue = queueRedisAdapter.getQueue(concertId);
 
-        // ==================== 계층적 업데이트 로직 ====================
-//        RScoredSortedSet<Long> queue = waitingQueueService.getQueue(concertId);
-//
-//        // [STEP 6] Tier 1: 최상위 대기자 1,000명의 ID와 순위를 조회
-//        Collection<ScoredEntry<Long>> topRankers = queue.entryRange(0, TOP_RANKER_COUNT - 1);
-//
-//        int rank = 1;
-//        for (ScoredEntry<Long> entry : topRankers) {
-//            Long userId = entry.getValue();
-//            // 개인화된 순위 정보를 1:1 메시지로 전송
-//            notificationService.sendRankUpdate(userId, rank++);
-//        }
-//
-//        // [STEP 7] Tier 2: 중위권 포함 전체 대기자에게 그룹 정보 브로드캐스팅
-//        long totalWaitingCount = queue.size();
-//        notificationService.broadcastQueueStatus(concertId, totalWaitingCount);
-
-        // [STEP 8] Tier 3: 마일스톤 달성자 알림 (심화)
-        // 이전 스케줄 실행 시점의 1001등 사용자와 현재 1000등 사용자를 비교하여
-        // 새로 1000등 안에 진입한 사용자를 찾아내어 별도 알림을 보낼 수 있습니다.
-        // (구현 복잡도를 고려하여 초기에는 생략 가능)
-        // ===============================================================
-
+        if (queue != null && !queue.isEmpty()) {
+            log.debug("[Notification] 콘서트 ID {}: 알림 전략 실행.", concertId);
+            personalizedRankStrategy.execute(concertId, queue);
+        }
     }
 }

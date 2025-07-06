@@ -25,7 +25,7 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
 
         // 서블릿 기반 요청만 쿠키를 지원
         if (!(request instanceof ServletServerHttpRequest servletRequest)) {
-            log.warn("Non‐servlet request received, rejecting WS handshake");
+            log.warn("비‐ 서블릿 요청이 수신되었고, WS 핸드셰이크를 거부했습니다");
             return false;
         }
         HttpServletRequest httpReq = servletRequest.getServletRequest();
@@ -34,14 +34,27 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
         String accessToken = jwtTokenProvider.getTokenFromCookies(jwtTokenProvider.CATEGORY_ACCESS, httpReq);
 
         if (accessToken == null || jwtTokenProvider.isTokenExpired(accessToken)) {
-            return false; // 핸드셰이크 실패, 연결 거부
+            log.warn("WebSocket handshake 거부: 유효하지 않은 Access Token");
+            return false;
         }
 
-        // 2. 토큰이 유효하면, 사용자 ID 추출
         Long userId = jwtTokenProvider.getUserId(accessToken);
-
-        // 3. WebSocket 세션의 attributes에 사용자 ID를 저장
         attributes.put("userId", userId);
+
+        // 2. 쿼리 파라미터에서 concertId 추출 (신규 로직)
+        String concertIdStr = httpReq.getParameter("concertId");
+        if (concertIdStr == null) {
+            log.warn("WebSocket handshake 거부: concertId 파라미터가 없습니다.");
+            return false;
+        }
+
+        try {
+            Long concertId = Long.parseLong(concertIdStr);
+            attributes.put("concertId", concertId);
+        } catch (NumberFormatException e) {
+            log.warn("WebSocket handshake 거부: 유효하지 않은 concertId 형식 - {}", concertIdStr);
+            return false;
+        }
 
         return true; // 핸드셰이크 성공, 연결 허용
     }
