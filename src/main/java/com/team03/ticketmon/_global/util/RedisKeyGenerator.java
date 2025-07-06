@@ -115,6 +115,12 @@ public class RedisKeyGenerator {
     public static final String ADMISSION_TOPIC = "admission-channel";
 
     /**
+     * 📣 `rank-update-channel`<br>
+     * 순위 업데이트 이벤트를 전달하는 Redis Pub/Sub 채널 이름입니다.<br>
+     */
+    public static final String RANK_UPDATE_TOPIC = "rank-update-channel";
+
+    /**
      * 🎯 콘서트별 대기열 키 생성
      * @param concertId 콘서트 ID
      * @return Redis 키: `waitqueue:concert:{concertId}`
