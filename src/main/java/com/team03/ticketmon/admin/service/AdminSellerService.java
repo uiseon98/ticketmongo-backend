@@ -2,10 +2,7 @@ package com.team03.ticketmon.admin.service;
 
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
-import com.team03.ticketmon.admin.dto.AdminApprovalRequestDTO;
-import com.team03.ticketmon.admin.dto.AdminRevokeRequestDTO;
-import com.team03.ticketmon.admin.dto.AdminSellerApplicationListResponseDTO;
-import com.team03.ticketmon.admin.dto.SellerApprovalHistoryResponseDTO;
+import com.team03.ticketmon.admin.dto.*;
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
 import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
@@ -305,4 +302,29 @@ public class AdminSellerService {
 
         return !activeConcerts.isEmpty(); // 비어있지 않으면 활성 콘서트가 있는 것
     }
+
+    /**
+     * API-04-07: 특정 판매자 신청서 상세 조회 (관리자)
+     * @param applicationId 조회할 판매자 신청서 ID
+     * @param adminId 현재 처리하는 관리자의 ID
+     * @return 판매자 신청서 상세 정보 DTO
+     */
+    @Transactional(readOnly = true)
+    public AdminSellerApplicationListResponseDTO getSellerApplicationDetail(Long applicationId, Long adminId) {
+        // 1. 관리자 유효성 검사 (컨트롤러 @PreAuthorize와 별개로 서비스 내 방어 로직)
+        UserEntity adminUser = userRepository.findById(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "관리자 정보를 찾을 수 없습니다."));
+        if (adminUser.getRole() != Role.ADMIN) {
+            throw new BusinessException(ErrorCode.ADMIN_ACCESS_DENIED, "관리자만 이 작업을 수행할 수 있습니다.");
+        }
+
+        // 2. 신청서 조회 (UserEntity와 함께 Fetch Join하여 N+1 문제 방지)
+        // SellerApplicationRepository에 findByIdWithUser 메서드가 필요
+        SellerApplication application = sellerApplicationRepository.findByIdWithUser(applicationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "판매자 신청서를 찾을 수 없습니다."));
+
+        // 3. 엔티티를 DTO로 변환하여 반환
+        return AdminSellerApplicationListResponseDTO.fromEntity(application);
+    }
+
 }
