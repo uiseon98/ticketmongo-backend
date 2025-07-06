@@ -3,7 +3,10 @@ package com.team03.ticketmon.seller_application.repository;
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
 import com.team03.ticketmon.user.domain.entity.UserEntity;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -45,4 +48,14 @@ public interface SellerApplicationRepository extends JpaRepository<SellerApplica
     // 추가: 특정 사업자등록번호가 특정 상태 목록에 존재하는지 확인하는 메서드
     boolean existsByBusinessNumberAndStatusIn(String businessNumber, List<SellerApplicationStatus> statuses);
 
+    /**
+     * 특정 ID의 판매자 신청서를 UserEntity와 함께 Eager Loading하여 조회합니다.
+     * N+1 문제를 방지하고, 신청서와 사용자 정보를 한 번에 가져올 때 유용합니다.
+     *
+     * @param id 조회할 SellerApplication의 ID
+     * @return 조회된 SellerApplication (UserEntity가 로딩된 상태)
+     */
+    @EntityGraph(attributePaths = "user") // 'user' 필드를 Eager Loading (Fetch Join)
+    @Query("SELECT sa FROM SellerApplication sa WHERE sa.id = :id")
+    Optional<SellerApplication> findByIdWithUser(@Param("id") Long id);
 }
