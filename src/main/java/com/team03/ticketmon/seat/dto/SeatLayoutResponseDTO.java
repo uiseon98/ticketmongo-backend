@@ -12,7 +12,7 @@ import java.util.List;
  * 콘서트의 전체 좌석 배치도 정보를 담는 최상위 응답 DTO
  */
 @Schema(description = "콘서트 좌석 배치도 전체 정보")
-public record SeatLayoutResponse(
+public record SeatLayoutResponseDTO(
 
         @Schema(description = "콘서트 ID", example = "1")
         Long concertId,
@@ -24,7 +24,7 @@ public record SeatLayoutResponse(
         SeatStatistics statistics,
 
         @Schema(description = "구역별 좌석 배치")
-        List<SectionLayoutResponse> sections,
+        List<SectionLayoutResponseDTO> sections,
 
         @Schema(description = "조회 시간")
         LocalDateTime retrievedAt
@@ -87,14 +87,14 @@ public record SeatLayoutResponse(
      * @param sections 구역별 좌석 정보
      * @return SeatLayoutResponse 객체
      */
-    public static SeatLayoutResponse from(Long concertId, VenueInfo venueInfo, List<SectionLayoutResponse> sections) {
+    public static SeatLayoutResponseDTO from(Long concertId, VenueInfo venueInfo, List<SectionLayoutResponseDTO> sections) {
         // 전체 좌석 통계 계산
         int totalSeats = sections.stream()
-                .mapToInt(SectionLayoutResponse::totalSeats)
+                .mapToInt(SectionLayoutResponseDTO::totalSeats)
                 .sum();
 
         int availableSeats = sections.stream()
-                .mapToInt(SectionLayoutResponse::availableSeats)
+                .mapToInt(SectionLayoutResponseDTO::availableSeats)
                 .sum();
 
         int bookedSeats = totalSeats - availableSeats;
@@ -122,7 +122,7 @@ public record SeatLayoutResponse(
                 new PriceRange(minPrice, maxPrice)
         );
 
-        return new SeatLayoutResponse(
+        return new SeatLayoutResponseDTO(
                 concertId,
                 venueInfo,
                 statistics,

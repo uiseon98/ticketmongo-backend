@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
 
+import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
 import com.team03.ticketmon.concert.validation.ValidConcertTimes;
 
 /*
@@ -88,10 +89,13 @@ public class SellerConcertCreateDTO {
 	@Schema(description = "사용자당 최대 구매 가능 티켓 수", example = "4", minimum = "1", maximum = "10")
 	private Integer maxTicketsPerUser;
 
-	@Pattern(regexp = "^https?://.*\\.(jpg|jpeg|png|gif|webp)$",
-		message = "포스터 이미지 URL은 올바른 이미지 URL 형식이어야 합니다")
+	@Size(max = 2000, message = "URL이 너무 깁니다")
 	@Schema(description = "포스터 이미지 URL", example = "https://example.com/posters/iu-2025.jpg")
 	private String posterImageUrl;
+
+	@Schema(description = "콘서트 상태", example = "SCHEDULED",
+		allowableValues = {"SCHEDULED", "ON_SALE", "SOLD_OUT", "CANCELLED"})
+	private ConcertStatus status;
 
 	/**
 	 * 공연 시간 순서 검증

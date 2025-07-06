@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -23,9 +24,6 @@ import java.util.*;
  * - 좌석 캐시 초기화/삭제
  * - 만료된 선점 좌석 정리
  * - 캐시 상태 모니터링
- *
- * 경로: src/main/java/com/team03/ticketmon/seat/controller/SeatAdminController.java
- *
  * 🔒 보안: 모든 API는 ADMIN 권한 필요 (테스트 진행이므로 주석 처리)
  */
 @Tag(name = "좌석 관리자", description = "관리자 전용 좌석 캐시 관리 API")
@@ -47,7 +45,7 @@ public class SeatAdminController {
      */
     @Operation(summary = "DB 기반 좌석 캐시 초기화",
             description = "실제 DB의 콘서트 좌석 데이터를 기반으로 캐시를 초기화합니다. 예매 완료된 좌석은 BOOKED 상태로, 나머지는 AVAILABLE 상태로 설정됩니다.")
-    // @PreAuthorize("hasRole('ADMIN')") // ← 📌 실제 서비스에서는 주석 해제
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/concerts/{concertId}/cache/init-from-db")
     public ResponseEntity<SuccessResponse<String>> initSeatCacheFromDB(
             @Parameter(description = "콘서트 ID", example = "1")
@@ -91,7 +89,7 @@ public class SeatAdminController {
      * 좌석 캐시 삭제 - 기존 API
      */
     @Operation(summary = "좌석 캐시 삭제", description = "특정 콘서트의 좌석 캐시를 삭제합니다")
-    // @PreAuthorize("hasRole('ADMIN')") // ← 📌 실제 서비스에서는 주석 해제
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/concerts/{concertId}/cache")
     public ResponseEntity<SuccessResponse<String>> clearSeatCache(
             @Parameter(description = "콘서트 ID", example = "1")
@@ -112,7 +110,7 @@ public class SeatAdminController {
      * 만료된 선점 좌석 정리 - 기존 API
      */
     @Operation(summary = "만료된 선점 좌석 정리", description = "특정 콘서트의 만료된 선점 좌석들을 일괄 정리합니다")
-    // @PreAuthorize("hasRole('ADMIN')") // ← 📌 실제 서비스에서는 주석 해제
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/concerts/{concertId}/cleanup-expired")
     public ResponseEntity<SuccessResponse<String>> cleanupExpiredReservations(
             @Parameter(description = "콘서트 ID", example = "1")
@@ -137,7 +135,7 @@ public class SeatAdminController {
      */
     @Operation(summary = "수동 캐시 Warm-up 스케줄러 실행",
             description = "예매 시작이 임박한 콘서트들의 좌석 캐시를 수동으로 초기화합니다.")
-    // @PreAuthorize("hasRole('ADMIN')") // ← 📌 실제 서비스에서는 주석 해제
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/cache/warmup/manual")
     public ResponseEntity<SuccessResponse<Map<String, Object>>> manualWarmupCache() {
         try {

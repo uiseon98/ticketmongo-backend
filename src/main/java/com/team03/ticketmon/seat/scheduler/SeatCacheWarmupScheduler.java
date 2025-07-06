@@ -1,7 +1,9 @@
 package com.team03.ticketmon.seat.scheduler;
 
+import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
+import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.service.SeatCacheInitService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,15 +33,11 @@ public class SeatCacheWarmupScheduler {
     private final ConcertRepository concertRepository;
     private final SeatCacheInitService seatCacheInitService;
     private final RedissonClient redissonClient;
+    private final SeatProperties seatProperties;
 
     // Redis 키 정의
-    private static final String WARMUP_LOCK_KEY = "lock:seat:cache:warmup";
-    private static final String PROCESSED_CONCERT_KEY_PREFIX = "processed:warmup:concert:";
-
-    // 설정값
-    private static final int WARMUP_MINUTES_BEFORE = 10; // 예매 시작 10분 전에 캐시 초기화
-    private static final int LOCK_WAIT_TIME_SECONDS = 30; // 락 획득 대기 시간
-    private static final int LOCK_LEASE_TIME_SECONDS = 300; // 락 유지 시간 (5분)
+    private static final String WARMUP_LOCK_KEY = RedisKeyGenerator.WARMUP_LOCK_KEY;
+    private static final String SEAT_PROCESSED_CONCERT_KEY_PREFIX = RedisKeyGenerator.SEAT_PROCESSED_CONCERT_KEY_PREFIX;
 
     /**
      * 5분마다 실행되는 자동 캐시 Warm-up 스케줄러
@@ -50,8 +48,9 @@ public class SeatCacheWarmupScheduler {
         RLock lock = redissonClient.getLock(WARMUP_LOCK_KEY);
 
         try {
-            // 분산 락 획득 시도 (30초 대기, 5분 유지)
-            boolean isLocked = lock.tryLock(LOCK_WAIT_TIME_SECONDS, LOCK_LEASE_TIME_SECONDS, TimeUnit.SECONDS);
+            // 분산 락 획득 시도
+            boolean isLocked = lock.tryLock(seatProperties.getLock().getWaitTimeSeconds(), 
+                                          seatProperties.getLock().getLeaseTimeSeconds(), TimeUnit.SECONDS);
 
             if (!isLocked) {
                 log.debug("다른 인스턴스에서 캐시 Warm-up이 실행 중입니다. 현재 스케줄러는 건너뜁니다.");
@@ -61,7 +60,7 @@ public class SeatCacheWarmupScheduler {
             log.info("===== 좌석 캐시 자동 Warm-up 스케줄러 시작 =====");
 
             // 예매 시작이 임박한 콘서트들 조회
-            LocalDateTime targetTime = LocalDateTime.now().plusMinutes(WARMUP_MINUTES_BEFORE);
+            LocalDateTime targetTime = LocalDateTime.now().plusMinutes(seatProperties.getCache().getWarmupMinutesBefore());
             List<Concert> upcomingConcerts = findUpcomingBookingStarts(targetTime);
 
             log.info("Warm-up 대상 콘서트 개수: {}", upcomingConcerts.size());
@@ -81,6 +80,16 @@ public class SeatCacheWarmupScheduler {
                     if (isAlreadyProcessed(concert.getConcertId())) {
                         log.debug("이미 처리된 콘서트입니다. concertId={}", concert.getConcertId());
                         continue;
+                    }
+
+                    // 기존 캐시가 존재하면 먼저 삭제
+                    if (isSeatCacheExists(concert.getConcertId())) {
+                        log.info("기존 좌석 캐시 발견. 삭제 후 재초기화 진행: concertId={}, title={}", 
+                                concert.getConcertId(), concert.getTitle());
+                        String deleteResult = seatCacheInitService.clearSeatCache(concert.getConcertId());
+                        log.info("기존 캐시 삭제 완료: concertId={}, 결과={}", concert.getConcertId(), deleteResult);
+                    } else {
+                        log.debug("기존 좌석 캐시 없음. 바로 초기화 진행: concertId={}", concert.getConcertId());
                     }
 
                     // 좌석 캐시 초기화 실행
@@ -137,8 +146,19 @@ public class SeatCacheWarmupScheduler {
      * @return 처리 여부
      */
     private boolean isAlreadyProcessed(Long concertId) {
-        String key = PROCESSED_CONCERT_KEY_PREFIX + concertId;
+        String key = SEAT_PROCESSED_CONCERT_KEY_PREFIX + concertId;
         return redissonClient.getBucket(key).isExists();
+    }
+
+    /**
+     * 좌석 캐시가 이미 존재하는지 확인
+     *
+     * @param concertId 콘서트 ID
+     * @return 캐시 존재 여부
+     */
+    private boolean isSeatCacheExists(Long concertId) {
+        String seatCacheKey = RedisKeyGenerator.SEAT_STATUS_KEY_PREFIX + concertId;
+        return redissonClient.getMap(seatCacheKey).isExists() && !redissonClient.getMap(seatCacheKey).isEmpty();
     }
 
     /**
@@ -147,8 +167,9 @@ public class SeatCacheWarmupScheduler {
      * @param concertId 콘서트 ID
      */
     private void markAsProcessed(Long concertId) {
-        String key = PROCESSED_CONCERT_KEY_PREFIX + concertId;
+        String key = RedisKeyGenerator.SEAT_PROCESSED_CONCERT_KEY_PREFIX + concertId;
         // 24시간 후 자동 삭제 (중복 처리 방지용)
         redissonClient.getBucket(key).set("processed", 24, TimeUnit.HOURS);
     }
+
 }

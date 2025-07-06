@@ -1,6 +1,28 @@
 app:
-  max-active-users: 5 # 예매 페이지에 동시 진입 가능한 최대 사용자 수
-  access-key-ttl-minutes: 1 # 예매 페이지 접근 키의 유효시간 (단위: 분)
+  queue:
+    max-active-users: 1 # 예매 페이지에 동시 진입 가능한 최대 사용자 수
+    access-key-ttl-minutes: 1 # 예매 페이지 접근 키의 유효시간 (단위: 분)
+    top-ranker-count: 1 #  최상위 대기자 기준 설정
+
+# ✅ 좌석 관리 시스템 설정
+seat:
+  reservation:
+    ttl-minutes: 5 # 좌석 선점 유지 시간 (분)
+    max-seat-count: 2 # 사용자당 최대 선점 가능 좌석 수
+    last-update-ttl-hours: 1 # 마지막 업데이트 시간 캐시 TTL (시간)
+  polling:
+    default-timeout-ms: 30000 # 기본 폴링 타임아웃 (ms)
+    max-timeout-ms: 60000 # 최대 폴링 타임아웃 (ms)
+    min-timeout-ms: 5000 # 최소 폴링 타임아웃 (ms)
+  session:
+    max-sessions-per-concert: 1000 # 콘서트당 최대 세션 수
+    cleanup-minutes: 5 # 세션 정리 간격 (분)
+  lock:
+    wait-time-seconds: 3 # 락 획득 대기 시간 (초)
+    lease-time-seconds: 10 # 락 보유 시간 (초)
+  cache:
+    warmup-minutes-before: 10 # 캐시 워밍업 시작 시간 (분 전)
+
   # ✅ 새로 추가: 스케줄러 관련 설정 - [좌석 관리 및 예매 모듈]
   scheduler:
     seat-cache-warmup:
@@ -30,6 +52,8 @@ spring:
   jackson:
     time-zone: Asia/Seoul  # [기본 설정] 한국 사용자 대상이므로 KST 기준으로 기본 직렬화 설정함
     # 추후 글로벌 확장 시 UTC 또는 타임존 동적 처리로 대체 가능
+  main:
+    allow-bean-definition-overriding: true
 
   servlet:
     multipart:
@@ -51,10 +75,22 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}  # .env에서 설정한 포트 사용, 기본은 8080
+  ssl:
+    enabled: true # HTTPS 활성화
+    # .pem 파일 직접 사용 시 필요한 설정들
+    certificate: classpath:certs/localhost.pem
+    certificate-private-key: classpath:certs/localhost-key.pem
+    # key-store-type을 명시적으로 지정해주는 것이 좋습니다.
+    # PEM 파일을 사용할 경우, key-store-type을 비워두거나 특정 타입을 지정하지 않습니다.
+    # 하지만 Spring Boot 버전에 따라서는 아래 설정이 필요할 수 있습니다.
+    # key-store-type: PKCS12 # 또는 JKS. PEM을 직접 사용할 때는 보통 이 줄이 필요 없습니다.
 
 logging:
   level:
     root: ${LOG_LEVEL:INFO}  # 로그 레벨 설정 (INFO / WARN / ERROR)
+    com.team03.ticketmon.seat.service.SeatSyncService: DEBUG
+    com.team03.ticketmon.seat.scheduler.SeatSyncScheduler: INFO
+    com.team03.ticketmon.seat.controller.SeatSyncController: INFO
 
 toss:
   api:

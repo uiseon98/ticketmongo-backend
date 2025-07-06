@@ -133,4 +133,45 @@ public class Concert extends BaseTimeEntity {
 
 	@OneToMany(mappedBy = "concert", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
 	private List<Review> reviews;
+
+	public boolean isQueueActive() {
+		// 대기열은 ON_SALE 상태일 때만 활성화된다고 정책을 일단 정의
+		return this.status == ConcertStatus.ON_SALE;
+	}
+
+	/**
+	 * 현재 시간 기준으로 콘서트의 적절한 상태를 결정합니다.
+	 * @param isSoldOut 매진 여부
+	 * @return 적절한 콘서트 상태
+	 */
+	public ConcertStatus determineCurrentStatus(boolean isSoldOut) {
+		// 이미 취소된 콘서트는 그대로 유지
+		if (this.status == ConcertStatus.CANCELLED) {
+			return ConcertStatus.CANCELLED;
+		}
+
+		// 필수 필드 null 체크
+		if (bookingStartDate == null || bookingEndDate == null ||
+			concertDate == null || startTime == null) {
+			return ConcertStatus.SCHEDULED;
+		}
+
+		LocalDateTime now = LocalDateTime.now();
+		LocalDateTime concertStartDateTime = concertDate.atTime(startTime);
+		LocalDateTime ticketCloseDateTime = concertStartDateTime.minusMinutes(30);
+
+		// 1. 공연 30분 전 또는 예매 마감 시간 이후면 COMPLETED
+		if (now.isAfter(ticketCloseDateTime) || now.isEqual(ticketCloseDateTime) ||
+			now.isAfter(bookingEndDate) || now.isEqual(bookingEndDate)) {
+			return ConcertStatus.COMPLETED;
+		}
+
+		// 2. 예매 시작 전이면 SCHEDULED
+		if (now.isBefore(bookingStartDate)) {
+			return ConcertStatus.SCHEDULED;
+		}
+
+		// 3. 예매 기간 중이면서 공연 30분 전까지
+		return isSoldOut ? ConcertStatus.SOLD_OUT : ConcertStatus.ON_SALE;
+	}
 }

@@ -11,9 +11,9 @@ import java.time.LocalDateTime;
  * - JSON 직렬화/역직렬화를 위한 record 타입 사용
  */
 @Builder
-public record SeatUpdateEvent(
+public record SeatUpdateEventDTO(
         Long concertId,        // 콘서트 ID
-        Long seatId,           // 좌석 ID  
+        Long seatId,           // 좌석 ID
         SeatStatusEnum status, // 변경된 좌석 상태 (AVAILABLE, RESERVED, BOOKED)
         Long userId,           // 사용자 ID (AVAILABLE일 때는 null)
         String seatInfo,       // 좌석 정보 (A-1, B-25 등)
@@ -26,8 +26,8 @@ public record SeatUpdateEvent(
      * @param seatStatus 좌석 상태 도메인 객체
      * @return SeatUpdateEvent 객체
      */
-    public static SeatUpdateEvent from(com.team03.ticketmon.seat.domain.SeatStatus seatStatus) {
-        return SeatUpdateEvent.builder()
+    public static SeatUpdateEventDTO from(com.team03.ticketmon.seat.domain.SeatStatus seatStatus) {
+        return SeatUpdateEventDTO.builder()
                 .concertId(seatStatus.getConcertId())
                 .seatId(seatStatus.getSeatId())
                 .status(seatStatus.getStatus())
@@ -47,9 +47,9 @@ public record SeatUpdateEvent(
      * @param seatInfo 좌석 정보
      * @return SeatUpdateEvent 객체
      */
-    public static SeatUpdateEvent of(Long concertId, Long seatId, SeatStatusEnum status,
-                                     Long userId, String seatInfo) {
-        return SeatUpdateEvent.builder()
+    public static SeatUpdateEventDTO of(Long concertId, Long seatId, SeatStatusEnum status,
+                                        Long userId, String seatInfo) {
+        return SeatUpdateEventDTO.builder()
                 .concertId(concertId)
                 .seatId(seatId)
                 .status(status)

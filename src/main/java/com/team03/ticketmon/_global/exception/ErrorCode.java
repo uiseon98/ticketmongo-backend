@@ -30,6 +30,7 @@ public enum ErrorCode {
     INVALID_PAGE_SIZE(400, "C005", "페이지 크기는 1-100 사이여야 합니다."), // 추가: 페이징 검증
     INVALID_PAGE_REQUEST(400, "C006", "페이징 요청 정보가 유효하지 않습니다."), // 추가: Pageable 검증
     REQUEST_PARAM_MISSING(400, "C007", "필수 요청 파라미터가 누락되었습니다."), // <--- 추가됨
+    REDIS_COMMAND_FAILED(500, "C008", "REDIS_COMMAND_FAILED"),
 
     // 추가: File (파일 업로드/처리 관련) - 새로운 카테고리
     FILE_UPLOAD_FAILED(500, "F001", "파일 업로드 중 알 수 없는 오류가 발생했습니다."), // 파일 업로드 오류
@@ -98,6 +99,9 @@ public enum ErrorCode {
     PAYMENT_AMOUNT_MISMATCH(400, "M001", "주문 금액이 일치하지 않습니다."),
     PAYMENT_FAILED(402, "M002", "결제에 실패했습니다."),
     INVALID_BOOKING_STATUS_FOR_PAYMENT(409, "M003", "결제를 진행할 수 없는 예매 상태입니다."),
+	ALREADY_PROCESSED_PAYMENT(409, "M004", "이미 처리된 결제입니다."),
+	TOSS_API_ERROR(502, "M005", "외부 결제 시스템 연동 중 오류가 발생했습니다."),
+	PAYMENT_VALIDATION_FAILED(400, "M006", "결제 정보 검증에 실패했습니다."),
 
     // AI Service (AI 서비스 관련)
     AI_SERVICE_UNAVAILABLE(503, "AI001", "AI 서비스가 일시적으로 사용할 수 없습니다."),

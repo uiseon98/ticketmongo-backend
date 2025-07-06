@@ -5,12 +5,13 @@ import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import com.team03.ticketmon._global.util.UploadPathUtil;
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
-import com.team03.ticketmon._global.config.supabase.SupabaseProperties; // SupabaseProperties 임포트 추가(동적으로 버킷명 적용하기 위해)
+import com.team03.ticketmon._global.config.supabase.SupabaseProperties; // SupabaseProperties 임포트(동적으로 버킷명 적용하기 위해)
 
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
 import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
 
+import com.team03.ticketmon.seller_application.dto.ApplicantInformationResponseDTO;
 import com.team03.ticketmon.seller_application.dto.SellerApplicationRequestDTO;
 import com.team03.ticketmon.seller_application.dto.SellerApplicationStatusResponseDTO;
 
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.Arrays; // Arrays 임포트 추가
 import java.util.List;
 import java.util.Optional;
 
@@ -79,7 +81,16 @@ public class SellerApplicationService {
             throw new BusinessException(ErrorCode.SELLER_APPLY_ONCE, "이미 판매자 권한 신청이 접수되어 처리 대기 중입니다."); // PENDING 상태이면 재신청 불가
         }
         if (user.getRole() == Role.SELLER && user.getApprovalStatus() == ApprovalStatus.APPROVED) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 판매자 권한을 가지고 있습니다."); // 이미 판매자이면 신청 불가
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 판매자 권한을 가지고 있습니다.");   // 이미 판매자이면 신청 불가
+        }
+
+        // 추가: 사업자등록번호 중복 검사 (SUBMITTED 또는 ACCEPTED 상태인 경우)
+        boolean isBusinessNumberAlreadyInUse = sellerApplicationRepository.existsByBusinessNumberAndStatusIn(
+                request.getBusinessNumber(),
+                Arrays.asList(SUBMITTED, ACCEPTED) // SUBMITTED (신청 대기 중) 또는 ACCEPTED (승인됨) 상태
+        );
+        if (isBusinessNumberAlreadyInUse) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 사용 중이거나 처리 대기 중인 사업자등록번호입니다.");
         }
 
         // 3. 제출 서류 파일 유효성 검사 (FileValidator 사용)
@@ -111,7 +122,7 @@ public class SellerApplicationService {
         user.setApprovalStatus(ApprovalStatus.PENDING); // 사용자의 승인 상태를 PENDING으로 변경
         userRepository.save(user); // 변경사항 저장
 
-        // 7. SellerApprovalHistory에 REQUEST 타입의 이력 기록 (추후(3.1 단계 구현 후) 활성화)
+        // 7. SellerApprovalHistory에 REQUEST 타입의 이력 기록
         SellerApprovalHistory history = SellerApprovalHistory.builder()
                 .user(user)     // UserEntity 객체 'user'를 전달
                 .sellerApplication(sellerApplication)     // SellerApplication 객체 'sellerApplication'을 전달
@@ -139,12 +150,10 @@ public class SellerApplicationService {
         // 사용자 역할 및 승인 상태
         Role userRole = user.getRole();
         ApprovalStatus userApprovalStatus = user.getApprovalStatus();
-        String lastReason = null; // UserEntity에 lastReason 필드가 없으므로 null로 초기화
 
         // 최신 판매자 신청서 정보 조회 (신청일 및 마지막 처리일 등)
-        // SellerApplication 및 SellerApprovalHistory에서 추가 정보 조회
         Optional<SellerApplication> latestApplication = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
-                user, List.of(SUBMITTED, ACCEPTED, REJECTED, REVOKED, WITHDRAWN)
+                user, List.of(SellerApplication.SellerApplicationStatus.SUBMITTED, SellerApplication.SellerApplicationStatus.ACCEPTED, SellerApplication.SellerApplicationStatus.REJECTED, SellerApplication.SellerApplicationStatus.REVOKED, SellerApplication.SellerApplicationStatus.WITHDRAWN)
         );
 
         LocalDateTime applicationDate = latestApplication.map(SellerApplication::getCreatedAt).orElse(null);
@@ -167,32 +176,30 @@ public class SellerApplicationService {
                     canReapply = true; // 반려, 자발적 철회, 관리자 회수 상태는 재신청 가능
                     break;
                 case APPROVED:
-                    // canWithdraw = true; // 승인 상태는 철회 가능 (추가 조건 확인 필요)    // 예시: if (hasActiveConcerts(userId)) { canWithdraw = false; }
-
                     // canWithdraw 조건 강화: 진행 중이거나 예정된 콘서트가 없는지 확인 로직 추가 (콘서트 도메인 의존성)
                     canWithdraw = !hasActiveConcertsForSeller(userId); // 활성 콘서트 여부로 철회 가능 여부 결정
                     break;
             }
         }
 
-        // TODO: lastReason 필드 조합 로직 개선 (SellerApprovalHistory에서 가져오기)
-        // SellerApprovalHistoryRepository가 구현되면 이곳에서 lastReason을 가져오도록 변경
-        // ✅ SellerApprovalHistory에서 최신 반려/회수 사유를 가져와 lastReason을 채웁니다.
-        /*
-        Optional<SellerApprovalHistory> latestRejectOrRevokeHistory = sellerApprovalHistoryRepository
-                .findTopByUserIdAndTypeInOrderByActionDateDesc(userId, List.of(SellerApprovalHistory.ActionType.REJECT, SellerApprovalHistory.ActionType.REVOKE));
-        lastReason = latestRejectOrRevokeHistory.map(SellerApprovalHistory::getReason).orElse(null); // 기존 lastReason이 없으면 히스토리에서
-        */
-        Optional<SellerApprovalHistory> latestRejectOrRevokeHistory = sellerApprovalHistoryRepository
-                .findTopByUserAndTypeInOrderByCreatedAtDesc(user,
-                        List.of(SellerApprovalHistory.ActionType.REJECTED, SellerApprovalHistory.ActionType.REVOKED));
-        lastReason = latestRejectOrRevokeHistory.map(SellerApprovalHistory::getReason).orElse(null);
+        String lastReason = null;
+        // lastReason은 REJECTED 또는 REVOKED일 경우에만 가져오고, WITHDRAWN일 경우 null
+        if (userApprovalStatus == ApprovalStatus.REJECTED || userApprovalStatus == ApprovalStatus.REVOKED) {
+            Optional<SellerApprovalHistory> latestRejectOrRevokeHistory = sellerApprovalHistoryRepository
+                    .findTopByUserAndTypeInOrderByCreatedAtDesc(user,
+                            List.of(SellerApprovalHistory.ActionType.REJECTED, SellerApprovalHistory.ActionType.REVOKED));
+            lastReason = latestRejectOrRevokeHistory.map(SellerApprovalHistory::getReason).orElse(null);
+        }
+        // WITHDRAWN 상태일 때는 lastReason을 명시적으로 null로 설정
+        else if (userApprovalStatus == ApprovalStatus.WITHDRAWN) {
+            lastReason = null;
+        }
 
 
         return SellerApplicationStatusResponseDTO.builder()
                 .role(userRole)
                 .approvalStatus(userApprovalStatus)
-                .lastReason(lastReason)
+                .lastReason(lastReason) // 수정된 lastReason 사용
                 .canReapply(canReapply)
                 .canWithdraw(canWithdraw)
                 .applicationDate(applicationDate)
@@ -229,26 +236,35 @@ public class SellerApplicationService {
         userRepository.save(user);
 
         // 4. 해당 유저의 가장 최근 APPROVED 상태의 SellerApplication 상태 업데이트 (WITHDRAWN)
-        // findTopByUserIdAndStatusInOrderByCreatedAtDesc 등으로 APPROVED 상태의 신청서를 찾아 업데이트하는 로직 필요
         Optional<SellerApplication> latestApprovedApplication = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
                 user, List.of(ACCEPTED)); // APPROVED 대신 ACCEPTED 사용
         latestApprovedApplication.ifPresent(app -> {
-                    app.setStatus(WITHDRAWN);
-                    sellerApplicationRepository.save(app);
+            app.setStatus(WITHDRAWN);
+            sellerApplicationRepository.save(app);
 
-                    // 4. SellerApprovalHistory에 WITHDRAW 로그 기록
-                    SellerApprovalHistory history = SellerApprovalHistory.builder()
-                            .user(user) // userId 대신 UserEntity 객체 user를 전달
-                            .sellerApplication(app) // SellerApplication 객체 'app'을 전달
-                            .type(SellerApprovalHistory.ActionType.WITHDRAWN) // WITHDRAWN 타입
-                            .reason(null) // 자발적 철회이므로 reason은 null
-                            .build();
-                    sellerApprovalHistoryRepository.save(history);
-                });
+            // 4. SellerApprovalHistory에 WITHDRAW 로그 기록
+            SellerApprovalHistory history = SellerApprovalHistory.builder()
+                    .user(user) // userId 대신 UserEntity 객체 user를 전달
+                    .sellerApplication(app) // SellerApplication 객체 'app'을 전달
+                    .type(SellerApprovalHistory.ActionType.WITHDRAWN) // WITHDRAWN 타입
+                    .reason(null) // 자발적 철회이므로 reason은 null
+                    .build();
+            sellerApprovalHistoryRepository.save(history);
+        });
+    }
 
-        // 5. 개인정보 처리 (스케줄러에 의해 처리될 예정)
-        // SellerApplication의 representative_name, representative_phone 마스킹 및 uploaded_file_url 파일 삭제/NULL 처리
-
+    /**
+     * 사용자의 신청자 관련 상세 정보를 조회합니다.
+     * 컨트롤러에서 직접 리포지토리를 사용하는 대신 서비스 계층을 통해 조회합니다.
+     * @param userId 조회할 사용자 ID
+     * @return ApplicantInformationResponseDTO
+     * @throws BusinessException 사용자를 찾을 수 없는 경우
+     */
+    @Transactional(readOnly = true)
+    public ApplicantInformationResponseDTO getUserApplicantInfo(Long userId) {
+        UserEntity userEntity = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자 정보를 찾을 수 없습니다."));
+        return ApplicantInformationResponseDTO.fromEntity(userEntity);
     }
 
     /**
