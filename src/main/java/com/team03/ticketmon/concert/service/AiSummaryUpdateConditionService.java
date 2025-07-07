@@ -62,14 +62,15 @@ public class AiSummaryUpdateConditionService {
 			if (countDifference >= condition.getSignificantCountChange() ||
 				changeRatio >= condition.getSignificantCountChangeRatio()) {
 				needsUpdate = true;
-				changeReason = "COUNT_CHANGED";
+				changeReason = String.format("COUNT_CHANGED (현재: %d개, 이전: %d개, 차이: %d개, 비율: %.1f%%)",
+					currentCount, lastSummaryCount, countDifference, changeRatio * 100);
 			}
 
 			// 조건 2: 리뷰 내용 변화 체크
 			else if (condition.getUpdateOnAnyContentChange() &&
 				!currentChecksum.equals(concert.getAiSummaryReviewChecksum())) {
 				needsUpdate = true;
-				changeReason = "CONTENT_CHANGED";
+				changeReason = "CONTENT_CHANGED (리뷰 내용이 변경됨)";
 			}
 
 			// 조건 3: 시간 기반 업데이트
@@ -78,11 +79,26 @@ public class AiSummaryUpdateConditionService {
 					.minusHours(condition.getMaxUpdateIntervalHours());
 				if (concert.getAiSummaryGeneratedAt().isBefore(updateThreshold)) {
 					needsUpdate = true;
-					changeReason = "TIME_BASED_UPDATE";
+					changeReason = String.format("TIME_BASED_UPDATE (%d시간 경과)",
+						condition.getMaxUpdateIntervalHours());
+				} else {
+					// 🔧 핵심 수정: 조건을 만족하지 않는 이유를 명시
+					long hoursElapsed = java.time.Duration.between(
+						concert.getAiSummaryGeneratedAt(), LocalDateTime.now()).toHours();
+					changeReason = String.format("업데이트 불필요 (마지막 생성: %d시간 전, 임계값: %d시간)",
+						hoursElapsed, condition.getMaxUpdateIntervalHours());
 				}
+			} else {
+				// 🔧 추가: AI 요약 생성 시간이 null인 경우
+				changeReason = "AI 요약 생성 시간 정보 없음";
 			}
 
-			// 최소 리뷰 수 체크는 사전 필터링으로 이미 보장됨!
+			// 🔧 추가: 모든 조건을 만족하지 않는 경우 상세 이유 제공
+			if (!needsUpdate && changeReason.isEmpty()) {
+				changeReason = String.format("모든 업데이트 조건 미충족 (리뷰수 변화: %d/%d, 내용변화: %s, 시간조건: 확인필요)",
+					countDifference, condition.getSignificantCountChange(),
+					condition.getUpdateOnAnyContentChange() ? "체크함" : "미체크");
+			}
 		}
 
 		return ReviewChangeDetectionDTO.builder()
