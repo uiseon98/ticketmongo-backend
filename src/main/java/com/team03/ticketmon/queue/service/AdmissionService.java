@@ -35,8 +35,8 @@ public class AdmissionService {
     private final NotificationService notificationService;
     private final QueueRedisAdapter queueRedisAdapter;
 
-    @Value("${app.queue.access-key-ttl-minutes}")
-    private long accessKeyTtlMinutes; // 발급된 입장 허가 키의 유효 시간 (분)
+    @Value("${app.queue.access-key-ttl-seconds}")
+    private long accessKeyTtlSeconds; // 발급된 입장 허가 키의 유효 시간 (분)
     @Value("${app.queue.max-active-users}")
     private long maxActiveUsers;
 
@@ -71,8 +71,8 @@ public class AdmissionService {
         String activeSessionsKey = keyGenerator.getActiveSessionsKey(concertId);
         String activeUserCountKey = keyGenerator.getActiveUsersCountKey(concertId);
 
-        long expiryTimestamp = System.currentTimeMillis() + (accessKeyTtlMinutes * 60 * 1000);
-        Duration ttl = Duration.ofMinutes(accessKeyTtlMinutes);
+        long expiryTimestamp = System.currentTimeMillis() + (accessKeyTtlSeconds * 1000);
+        Duration ttl = Duration.ofSeconds(accessKeyTtlSeconds);
 
         List<String> issuedKeys = new ArrayList<>();
 
