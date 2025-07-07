@@ -1,14 +1,12 @@
 package com.team03.ticketmon.admin.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
-import com.team03.ticketmon.admin.dto.AdminApprovalRequestDTO;
-import com.team03.ticketmon.admin.dto.AdminRevokeRequestDTO;
-import com.team03.ticketmon.admin.dto.AdminSellerApplicationListResponseDTO;
-import com.team03.ticketmon.admin.dto.SellerApprovalHistoryResponseDTO;
+import com.team03.ticketmon.admin.dto.*;
 import com.team03.ticketmon.admin.service.AdminSellerService;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,7 +40,6 @@ import com.team03.ticketmon._global.exception.ErrorResponse;
 import com.team03.ticketmon._global.exception.ErrorCode;
 
 import com.team03.ticketmon.seller_application.domain.SellerApprovalHistory;
-
 
 /**
  * 관리자용 판매자 관리 API 컨트롤러
@@ -258,4 +255,65 @@ public class AdminSellerController {
 
         return ResponseEntity.ok(SuccessResponse.of("전체 판매자 이력 목록 조회 성공", historyPage));
     }
+
+    // API-04-07: 판매자 신청 상세 조회 (관리자)
+    /**
+     * API-04-07: 특정 판매자 신청서 상세 조회 (관리자)
+     * @param applicationId 조회할 판매자 신청서 ID
+     * @param adminUser 현재 로그인된 관리자 정보
+     * @return 판매자 신청서 상세 정보 DTO
+     */
+    @Operation(
+            summary = "특정 판매자 신청서 상세 조회",
+            description = "관리자가 특정 판매자 신청서의 상세 정보를 조회합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "성공 응답 예시",
+                                    value = """
+                                    {
+                                        "success": true,
+                                        "message": "판매자 신청서 상세 조회 성공",
+                                        "data": {
+                                            "applicationId": 1,
+                                            "userId": 10,
+                                            "username": "user10",
+                                            "userNickname": "판매자신청자",
+                                            "companyName": "티켓몬스터엔터테인먼트",
+                                            "businessNumber": "1234567890",
+                                            "representativeName": "홍길동",
+                                            "representativePhone": "01012345678",
+                                            "uploadedFileUrl": "https://example.com/seller_docs/business_license_1.pdf",
+                                            "status": "SUBMITTED",
+                                            "createdAt": "2025-06-01T10:00:00",
+                                            "updatedAt": "2025-06-01T10:00:00"
+                                        }
+                                    }
+                                    """
+                            )
+                    )
+            ),
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "신청서를 찾을 수 없음")
+    })
+    @GetMapping("/seller-requests/{applicationId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SuccessResponse<AdminSellerApplicationListResponseDTO>> getSellerApplicationDetail(
+            @Parameter(description = "조회할 판매자 신청서 ID", example = "1")
+            @PathVariable Long applicationId,
+            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails adminUser) {
+
+        // 서비스 계층에서 신청서 상세 정보를 조회
+        AdminSellerApplicationListResponseDTO applicationDetail = adminSellerService.getSellerApplicationDetail(applicationId, adminUser.getUserId());
+
+        return ResponseEntity.ok(SuccessResponse.of("판매자 신청서 상세 조회 성공", applicationDetail));
+    }
+
+
 }
