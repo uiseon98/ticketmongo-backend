@@ -17,10 +17,8 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class ConcertFilterDTO {
 
-	@Future(message = "시작 날짜는 현재 날짜 이후여야 합니다")
 	private LocalDate startDate;
 
-	@Future(message = "종료 날짜는 현재 날짜 이후여야 합니다")
 	private LocalDate endDate;
 
 	@DecimalMin(value = "0", message = "최소 가격은 0원 이상이어야 합니다")
