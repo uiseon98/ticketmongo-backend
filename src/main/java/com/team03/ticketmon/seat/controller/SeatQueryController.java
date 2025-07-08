@@ -1,6 +1,7 @@
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
+import com.team03.ticketmon.auth.jwt.CustomUserDetails;
 import com.team03.ticketmon.seat.domain.SeatStatus;
 import com.team03.ticketmon.seat.dto.SeatStatusResponseDTO;
 import com.team03.ticketmon.seat.service.SeatStatusService;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -36,13 +38,17 @@ public class SeatQueryController {
     @GetMapping("/concerts/{concertId}/status")
     public ResponseEntity<SuccessResponse<List<SeatStatusResponseDTO>>> getAllSeatStatus(
             @Parameter(description = "콘서트 ID", example = "1")
-            @PathVariable Long concertId) {
+            @PathVariable Long concertId,
+            @AuthenticationPrincipal CustomUserDetails user) {
+
+        Long userId = (user != null) ? user.getUserId() : null;
+
 
         try {
             Map<Long, SeatStatus> seatStatusMap = seatStatusService.getAllSeatStatus(concertId);
 
             List<SeatStatusResponseDTO> responses = seatStatusMap.values().stream()
-                    .map(SeatStatusResponseDTO::from)
+                    .map(seat -> SeatStatusResponseDTO.from(seat, userId))
                     .collect(Collectors.toList());
 
             log.info("전체 좌석 상태 조회 성공: concertId={}, seatCount={}", concertId, responses.size());
@@ -68,13 +74,18 @@ public class SeatQueryController {
             @Parameter(description = "콘서트 ID", example = "1")
             @PathVariable Long concertId,
             @Parameter(description = "좌석 ID", example = "1")
-            @PathVariable Long seatId) {
+            @PathVariable Long seatId,
+            @AuthenticationPrincipal CustomUserDetails user) {
+
+        // 1. 현재 로그인한 사용자의 ID를 가져옵니다. 비로그인 상태일 수 있으므로 null 체크가 필요합니다.
+        Long userId = (user != null) ? user.getUserId() : null;
+
 
         try {
             Optional<SeatStatus> seatStatus = seatStatusService.getSeatStatus(concertId, seatId);
 
             if (seatStatus.isPresent()) {
-                SeatStatusResponseDTO response = SeatStatusResponseDTO.from(seatStatus.get());
+                SeatStatusResponseDTO response = SeatStatusResponseDTO.from(seatStatus.get(), userId);
                 return ResponseEntity.ok(SuccessResponse.of("좌석 상태 조회 성공", response));
             } else {
                 return ResponseEntity.ok(SuccessResponse.of("좌석 정보 없음", null));
@@ -99,7 +110,7 @@ public class SeatQueryController {
             List<SeatStatus> reservedSeats = seatStatusService.getUserReservedSeats(concertId, userId);
 
             List<SeatStatusResponseDTO> responses = reservedSeats.stream()
-                    .map(SeatStatusResponseDTO::from)
+                    .map(seat -> SeatStatusResponseDTO.from(seat, userId))
                     .collect(Collectors.toList());
 
             return ResponseEntity.ok(SuccessResponse.of("사용자 선점 좌석 조회 성공", responses));
