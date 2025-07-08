@@ -1,5 +1,9 @@
 package com.team03.ticketmon.concert.controller;
 
+import com.team03.ticketmon._global.exception.BusinessException;
+import com.team03.ticketmon._global.exception.ErrorCode;
+import com.team03.ticketmon.concert.domain.Concert;
+import com.team03.ticketmon.concert.domain.Review;
 import com.team03.ticketmon.concert.dto.*;
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
 import com.team03.ticketmon.concert.service.SellerConcertService;
@@ -28,11 +32,20 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Set;
+import com.team03.ticketmon._global.config.AiSummaryConditionProperties;
+import com.team03.ticketmon.concert.domain.Concert;
+import com.team03.ticketmon.concert.repository.ConcertRepository;
+import com.team03.ticketmon.concert.repository.ReviewRepository;
+import com.team03.ticketmon.concert.service.AiBatchSummaryService;
+import com.team03.ticketmon.concert.service.ConcertService;
+import lombok.extern.slf4j.Slf4j;
+import java.time.LocalDateTime;
 
 /**
  * Seller Concert Controller
  * 판매자용 콘서트 관련 HTTP 요청 처리
  */
+@Slf4j
 @Tag(name = "판매자용 콘서트 API", description = "판매자용 콘서트 등록, 수정, 관리 관련 API")
 @RestController
 @RequestMapping("/api/seller/concerts")
@@ -44,6 +57,11 @@ public class SellerConcertController {
 		"createdAt", "title", "concertDate", "artist", "status"
 	);
 	private final SellerConcertService sellerConcertService;
+	private final AiBatchSummaryService batchSummaryService;
+	private final ConcertService concertService;
+	private final AiSummaryConditionProperties conditionProperties;
+	private final ReviewRepository reviewRepository;
+	private final ConcertRepository concertRepository;
 
 	@Operation(
 		summary = "판매자 콘서트 목록 조회",
@@ -555,5 +573,149 @@ public class SellerConcertController {
 
 		long count = sellerConcertService.getSellerConcertCount(sellerId);
 		return ResponseEntity.ok(SuccessResponse.of(count));
+	}
+
+	@Operation(
+		summary = "판매자 콘서트 AI 요약 수동 재생성",
+		description = """
+    판매자가 본인의 콘서트 AI 요약을 수동으로 재생성합니다.
+    
+    📋 **동작 조건**:
+    - 본인 소유의 콘서트만 재생성 가능
+    - 최소 리뷰 개수 조건 무시하고 강제 실행
+    
+    ⚠️ **주의사항**:
+    - 판매자 권한 확인 후 실행
+    - 리뷰가 없어도 재생성 시도
+    """
+	)
+	@ApiResponses({
+		@ApiResponse(
+			responseCode = "200",
+			description = "AI 요약 재생성 성공",
+			content = @Content(
+				mediaType = "application/json",
+				examples = @ExampleObject(
+					name = "성공 응답 예시",
+					value = """
+                {
+                    "success": true,
+                    "message": "AI 요약이 생성되었습니다.",
+                    "data": "아이유의 2025년 새 앨범 발매 기념 월드투어 서울 공연으로, 신곡과 대표곡을 함께 들을 수 있는 특별한 무대입니다."
+                }
+                """
+				)
+			)
+		),
+		@ApiResponse(responseCode = "403", description = "판매자 권한 없음"),
+		@ApiResponse(responseCode = "404", description = "콘서트를 찾을 수 없음"),
+		@ApiResponse(responseCode = "500", description = "AI 서비스 오류")
+	})
+	@PostMapping("/{concertId}/ai-summary/regenerate")
+	public ResponseEntity<SuccessResponse<String>> regenerateAiSummary(
+		@RequestParam @Min(1) Long sellerId,
+		@PathVariable @Min(1) Long concertId) {
+
+		log.info("[SELLER] 판매자 AI 요약 수동 재생성 시작 - sellerId: {}, concertId: {}", sellerId, concertId);
+
+		// 콘서트 조회 및 권한 확인
+		Concert concert = concertService.getConcertEntityById(concertId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.CONCERT_NOT_FOUND));
+
+		if (!concert.getSellerId().equals(sellerId)) {
+			throw new BusinessException(ErrorCode.ACCESS_DENIED,
+				"본인의 콘서트만 AI 요약을 재생성할 수 있습니다.");
+		}
+
+		try {
+			List<Review> validReviews = reviewRepository.findValidReviewsForAiSummary(concertId);
+
+			// 🔧 개선: 단계별 검증
+
+			// 1단계: 리뷰가 아예 없는 경우
+			if (validReviews.isEmpty()) {
+				recordAiSummaryFailure(concert, "NO_REVIEWS", "리뷰가 없음");
+				throw new BusinessException(ErrorCode.AI_SUMMARY_CONDITION_NOT_MET,
+					"AI 요약 생성을 위한 리뷰가 없습니다. 먼저 리뷰를 작성해주세요.");
+			}
+
+			// 2단계: 리뷰는 있지만 최소 개수 미만인 경우 (판매자는 경고와 함께 진행)
+			if (validReviews.size() < conditionProperties.getMinReviewCount()) {
+				log.warn("[SELLER] 최소 리뷰 조건 미만이지만 판매자 요청으로 진행 - " +
+						"concertId: {}, 현재리뷰: {}개, 권장최소: {}개",
+					concertId, validReviews.size(), conditionProperties.getMinReviewCount());
+			}
+
+			// 3단계: 리뷰 내용 품질 검증 (10자 이상)
+			long qualityReviews = validReviews.stream()
+				.filter(review -> review.getDescription() != null)
+				.filter(review -> review.getDescription().trim().length() >= 10)
+				.count();
+
+			if (qualityReviews == 0) {
+				recordAiSummaryFailure(concert, "INSUFFICIENT_CONTENT", "유효한 리뷰 내용 부족");
+				throw new BusinessException(ErrorCode.AI_SUMMARY_CONDITION_NOT_MET,
+					"AI 요약 생성을 위해서는 최소 10자 이상의 리뷰 내용이 필요합니다. " +
+						"현재 유효한 리뷰: " + qualityReviews + "개");
+			}
+
+			// 4단계: AI 요약 생성 처리
+			log.info("[SELLER] AI 요약 생성 진행 - concertId: {}, 유효리뷰: {}개",
+				concertId, qualityReviews);
+
+			batchSummaryService.processConcertAiSummary(concert);
+			String regeneratedSummary = concertService.getAiSummary(concertId);
+
+			// 5단계: 성공 메시지 구성
+			String successMessage;
+			if (validReviews.size() < conditionProperties.getMinReviewCount()) {
+				successMessage = String.format(
+					"AI 요약이 생성되었습니다. (리뷰 %d개 기반, 권장 최소 %d개)\n" +
+						"더 많은 리뷰가 쌓이면 품질이 향상됩니다.",
+					validReviews.size(), conditionProperties.getMinReviewCount());
+			} else {
+				successMessage = "AI 요약이 성공적으로 생성되었습니다.";
+			}
+
+			return ResponseEntity.ok(SuccessResponse.of(successMessage, regeneratedSummary));
+
+		} catch (BusinessException e) {
+			if (!e.getErrorCode().equals(ErrorCode.AI_SUMMARY_CONDITION_NOT_MET)) {
+				recordAiSummaryFailure(concert, "BUSINESS_ERROR", e.getMessage());
+			}
+			throw e;
+		} catch (Exception e) {
+			recordAiSummaryFailure(concert, "SYSTEM_ERROR", e.getMessage());
+			log.error("[SELLER] AI 요약 생성 중 예상치 못한 오류 - concertId: {}", concertId, e);
+			throw new BusinessException(ErrorCode.SERVER_ERROR,
+				"AI 요약 생성 중 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+		}
+	}
+
+	/**
+	 * AI 요약 실패 정보를 기록하는 헬퍼 메서드
+	 */
+	private void recordAiSummaryFailure(Concert concert, String failureType, String failureReason) {
+		try {
+			LocalDateTime now = LocalDateTime.now();
+
+			// 실패 카운터 증가
+			Integer currentRetryCount = concert.getAiSummaryRetryCount();
+			int newRetryCount = (currentRetryCount != null ? currentRetryCount : 0) + 1;
+			concert.setAiSummaryRetryCount(newRetryCount);
+
+			// 실패 시간 기록
+			concert.setAiSummaryLastFailedAt(now);
+
+			// 데이터베이스에 실패 정보 저장
+			concertRepository.save(concert);
+
+			log.info("[SELLER] AI 요약 실패 정보 저장 완료: concertId={}, 실패유형={}, 재시도횟수={}, 실패시간={}",
+				concert.getConcertId(), failureType, newRetryCount, now);
+
+		} catch (Exception saveException) {
+			log.error("[SELLER] AI 요약 실패 정보 저장 중 오류 발생: concertId={}",
+				concert.getConcertId(), saveException);
+		}
 	}
 }
