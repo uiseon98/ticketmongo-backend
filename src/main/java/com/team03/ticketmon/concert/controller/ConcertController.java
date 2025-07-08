@@ -2,10 +2,7 @@ package com.team03.ticketmon.concert.controller;
 
 import com.team03.ticketmon.concert.dto.ConcertDTO;
 import com.team03.ticketmon.concert.dto.ConcertFilterDTO;
-import com.team03.ticketmon.concert.dto.ConcertSearchDTO;
-import com.team03.ticketmon.concert.dto.ReviewDTO;
 import com.team03.ticketmon.concert.service.ConcertService;
-import com.team03.ticketmon.concert.service.CacheService;
 import com.team03.ticketmon.concert.service.ReviewService;
 import com.team03.ticketmon._global.exception.SuccessResponse;
 
@@ -22,11 +19,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Max;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -44,10 +39,10 @@ import java.util.Optional;
 @RequestMapping("/api/concerts")
 @RequiredArgsConstructor
 @Validated
+@Slf4j
 public class ConcertController {
 
 	private final ConcertService concertService;
-	private final CacheService cacheService;
 	private final ReviewService reviewService;
 
 	@Operation(
@@ -133,7 +128,7 @@ public class ConcertController {
 	@Operation(
 		summary = "콘서트 키워드 검색",
 		description = """
-		키워드를 통해 콘서트를 검색합니다. (캐시 적용)
+		키워드를 통해 콘서트를 검색합니다. (Spring Cache 적용)
 		"""
 	)
 	@ApiResponses({
@@ -203,20 +198,15 @@ public class ConcertController {
 			schema = @Schema(minLength = 1, maxLength = 100)
 		)
 		@RequestParam String query) {
+		log.info("🔎 [API 호출] 콘서트 검색 시작 - keyword: '{}'", query);
+		long startTime = System.currentTimeMillis();
 
-		// 캐시 조회 시도
-		Optional<List<ConcertDTO>> cachedResult = cacheService.getCachedSearchResults(query, ConcertDTO.class);
-		if (cachedResult.isPresent()) {
-			return ResponseEntity.ok(SuccessResponse.of(cachedResult.get()));
-		}
+		// ✅ Spring Cache가 자동으로 처리
+		List<ConcertDTO> concerts = concertService.searchByKeyword(query);
 
-		// 캐시 미스 시 실제 검색
-		ConcertSearchDTO searchDTO = new ConcertSearchDTO();
-		searchDTO.setKeyword(query);
-		List<ConcertDTO> concerts = concertService.searchConcerts(searchDTO);
-
-		// 검색 결과 캐싱
-		cacheService.cacheSearchResults(query, concerts);
+		long endTime = System.currentTimeMillis();
+		log.info("⚡ [API 응답] 콘서트 검색 완료 - keyword: '{}', 결과수: {}, 처리시간: {}ms",
+			query, concerts.size(), (endTime - startTime));
 
 		return ResponseEntity.ok(SuccessResponse.of(concerts));
 	}
@@ -294,7 +284,7 @@ public class ConcertController {
 	@Operation(
 		summary = "콘서트 상세 조회",
 		description = """
-		콘서트 ID로 상세 정보를 조회합니다. (캐시 적용)
+		콘서트 ID로 상세 정보를 조회합니다. (Spring Cache 적용)
 		"""
 	)
 	@ApiResponses({
@@ -346,20 +336,22 @@ public class ConcertController {
 		)
 		@PathVariable @Min(1) Long id) {
 
-		// 캐시 조회 시도
-		Optional<ConcertDTO> cachedResult = cacheService.getCachedConcertDetail(id, ConcertDTO.class);
-		if (cachedResult.isPresent()) {
-			return ResponseEntity.ok(SuccessResponse.of(cachedResult.get()));
-		}
+		log.info("🔎 [API 호출] 콘서트 상세 조회 시작 - concertId: {}", id);
+		long startTime = System.currentTimeMillis();
 
-		// 캐시 미스 시 실제 조회
 		Optional<ConcertDTO> concertOpt = concertService.getConcertById(id);
+
+		long endTime = System.currentTimeMillis();
 		if (concertOpt.isPresent()) {
-			cacheService.cacheConcertDetail(id, concertOpt.get());
+			log.info("⚡ [API 응답] 콘서트 상세 조회 성공 - concertId: {}, 처리시간: {}ms",
+				id, (endTime - startTime));
 			return ResponseEntity.ok(SuccessResponse.of(concertOpt.get()));
+		} else {
+			log.warn("❌ [API 응답] 콘서트 없음 - concertId: {}, 처리시간: {}ms",
+				id, (endTime - startTime));
+			return ResponseEntity.status(HttpStatus.NOT_FOUND)
+				.body(SuccessResponse.of(null));
 		}
-		return ResponseEntity.status(HttpStatus.NOT_FOUND)
-			.body(SuccessResponse.of(null));
 	}
 
 	@Operation(

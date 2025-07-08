@@ -15,6 +15,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -85,14 +86,19 @@ public class ConcertService {
 	/**
 	 * 키워드로 콘서트 검색
 	 */
-	public List<ConcertDTO> searchByKeyword(String keyword) {
+	@Cacheable(value = "searchResults", key = "#keyword")
+	public List<ConcertDTO> searchByKeyword(@Param("keyword") String keyword) {
+		log.info("🔍 [CACHE MISS] searchByKeyword 실행 - keyword: '{}' (DB 조회)", keyword);
 		validateKeyword(keyword);
 
-		return concertRepository
+		List<ConcertDTO> results = concertRepository
 			.findByKeyword(keyword.trim())
 			.stream()
 			.map(this::convertToDTO)
 			.collect(Collectors.toList());
+
+		log.info("✅ [DB 조회 완료] 검색 결과 수: {}, keyword: '{}'", results.size(), keyword);
+		return results;
 	}
 
 	/**
@@ -205,11 +211,17 @@ public class ConcertService {
 	/**
 	 * ID로 콘서트 조회
 	 */
-	public Optional<ConcertDTO> getConcertById(Long id) {
-		validateConcertId(id);
+	@Cacheable(value = "concertDetail", key = "#concertId")
+	public Optional<ConcertDTO> getConcertById(@Param("concertId") Long concertId) {
+		log.info("🔍 [CACHE MISS] getConcertById 실행 - concertId: {} (DB 조회)", concertId);
 
-		return concertRepository.findById(id)
-			.map(this::convertToDTO);
+		Optional<Concert> concert = concertRepository.findById(concertId);
+		Optional<ConcertDTO> result = concert.map(this::convertToDTO);
+
+		log.info("✅ [DB 조회 완료] concertId: {}, 결과: {}",
+			concertId, result.isPresent() ? "찾음" : "없음");
+
+		return result;
 	}
 
 	/**
