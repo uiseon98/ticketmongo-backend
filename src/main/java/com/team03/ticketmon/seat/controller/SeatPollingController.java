@@ -1,6 +1,7 @@
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
+import com.team03.ticketmon.auth.jwt.CustomUserDetails;
 import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.service.SeatPollingSessionManager;
 import com.team03.ticketmon.seat.service.SeatStatusService;
@@ -11,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
@@ -44,9 +46,9 @@ public class SeatPollingController {
      * @param concertId 콘서트 ID
      * @param lastUpdateTime 클라이언트가 마지막으로 받은 업데이트 시간 (선택적)
      * @param timeout 폴링 타임아웃 (ms, 기본 30초)
-     * @param userId 사용자 ID (선택적)
      * @param request HTTP 요청 (User-Agent 등 추출용)
      * @return DeferredResult로 비동기 응답
+     * user.getUserId() JWT 토큰에서 추출한 사용자 ID
      */
     @Operation(summary = "좌석 상태 실시간 폴링",
             description = "좌석 상태 변경 시 즉시 응답, 변경사항 없으면 최대 30초 대기")
@@ -61,8 +63,7 @@ public class SeatPollingController {
             @Parameter(description = "폴링 타임아웃 (밀리초)", example = "30000")
             @RequestParam(defaultValue = "30000") long timeout,
 
-            @Parameter(description = "사용자 ID", example = "100")
-            @RequestParam(required = false) Long userId,
+            @AuthenticationPrincipal CustomUserDetails user,
 
             HttpServletRequest request) {
 
@@ -113,12 +114,12 @@ public class SeatPollingController {
                 deferredResult.setResult(ResponseEntity.ok(SuccessResponse.of("즉시 응답", immediateResponse)));
 
                 log.debug("즉시 응답 제공: concertId={}, userId={}, lastUpdate={}",
-                        concertId, userId, lastUpdate);
+                        concertId, user.getUserId(), lastUpdate);
                 return deferredResult;
             }
 
             // ✅ 개선: 세션 등록 (User-Agent 포함)
-            String sessionId = sessionManager.registerSession(concertId, deferredResult, userId, userAgent);
+            String sessionId = sessionManager.registerSession(concertId, deferredResult, user.getUserId(), userAgent);
             if (sessionId == null) {
                 // 세션 등록 실패 (서버 과부하)
                 Map<String, Object> failResponse = Map.of(
@@ -143,13 +144,13 @@ public class SeatPollingController {
                 deferredResult.setResult(ResponseEntity.ok(SuccessResponse.of("타임아웃", timeoutResponse)));
 
                 log.debug("폴링 타임아웃: concertId={}, sessionId={}, userId={}, timeout={}ms",
-                        concertId, sessionId, userId, finalTimeout);
+                        concertId, sessionId, user.getUserId(), finalTimeout);
             });
 
             // ✅ 개선: 에러 핸들러 설정
             deferredResult.onError(throwable -> {
                 log.error("폴링 세션 에러: concertId={}, sessionId={}, userId={}, clientIp={}",
-                        concertId, sessionId, userId, clientIp, throwable);
+                        concertId, sessionId, user.getUserId(), clientIp, throwable);
 
                 Map<String, Object> errorResponse = Map.of(
                         "hasUpdate", false,
@@ -163,15 +164,15 @@ public class SeatPollingController {
             // ✅ 개선: 완료 핸들러 설정 (로깅)
             deferredResult.onCompletion(() -> {
                 log.debug("폴링 세션 완료: concertId={}, sessionId={}, userId={}",
-                        concertId, sessionId, userId);
+                        concertId, sessionId, user.getUserId());
             });
 
             log.debug("폴링 세션 시작: concertId={}, sessionId={}, userId={}, timeout={}ms, clientIp={}",
-                    concertId, sessionId, userId, finalTimeout, clientIp);
+                    concertId, sessionId, user.getUserId(), finalTimeout, clientIp);
 
         } catch (Exception e) {
             log.error("폴링 요청 처리 중 오류: concertId={}, userId={}, clientIp={}",
-                    concertId, userId, clientIp, e);
+                    concertId, user.getUserId(), clientIp, e);
 
             Map<String, Object> errorResponse = Map.of(
                     "hasUpdate", false,

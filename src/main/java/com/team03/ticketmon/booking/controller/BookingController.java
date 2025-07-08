@@ -63,7 +63,7 @@ public class BookingController {
             BulkSeatLockResultDTO lockResult = seatLockService.lockAllUserSeatsPermanently(
                     createRequest.getConcertId(), user.getUserId());
             
-            if (!lockResult.isPartialSuccess()) {
+            if (!lockResult.isAllSuccess()) {
                 log.warn("좌석 영구 선점 실패: {}", lockResult.getErrorMessage());
                 return ResponseEntity.badRequest().body(
                         SuccessResponse.of("좌석 영구 선점에 실패했습니다: " + lockResult.getErrorMessage(), null)
@@ -104,7 +104,7 @@ public class BookingController {
      * @param user      현재 인증된 사용자 정보
      * @return 취소 성공 메시지
      */
-    @Operation(summary = "예매 취소 (동기)", description = "특정 예매를 취소 처리하고 좌석을 자동 복원합니다. 성공 시 연동된 결제도 함께 취소됩니다.")
+    @Operation(summary = "예매 취소 (동기)", description = "특정 예매를 취소 처리합니다. 성공 시 연동된 결제도 함께 취소됩니다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "취소 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자 (토큰 없음)"),
@@ -119,37 +119,12 @@ public class BookingController {
 
         log.info("예매 취소 시도 booking ID: {} for user: {}", bookingId, user);
 
-        try {
-            // 1. 예매 정보 조회하여 콘서트 ID 획득
-            Booking booking = bookingService.findByBookingNumberForUser(bookingId.toString(), user.getUserId());
-            Long concertId = booking.getConcert().getConcertId();
+        bookingFacadeService.cancelBookingAndPayment(bookingId, user.getUserId());
 
-            // 2. 예매 및 결제 취소 처리
-            bookingFacadeService.cancelBookingAndPayment(bookingId, user.getUserId());
-
-            // 3. 영구 선점된 좌석들 복원 (TTL 없이 완전 해제)
-            try {
-                BulkSeatLockResultDTO restoreResult = seatLockService.restoreAllUserSeatsWithCompensation(
-                        concertId, user.getUserId(), false);
-
-                if (restoreResult.isPartialSuccess()) {
-                    log.info("예매 취소 후 좌석 복원 완료: {}", restoreResult.getSummary());
-                } else {
-                    log.warn("예매 취소 후 좌석 복원 부분 실패: {}", restoreResult.getErrorMessage());
-                }
-            } catch (Exception restoreException) {
-                log.error("예매 취소 후 좌석 복원 중 예외 발생: bookingId={}, userId={}", 
-                        bookingId, user.getUserId(), restoreException);
-            }
-
-            return ResponseEntity.ok(SuccessResponse.of("예매가 성공적으로 취소되었습니다.", null));
-
-        } catch (Exception e) {
-            log.error("예매 취소 중 예외 발생: bookingId={}, userId={}", bookingId, user.getUserId(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    SuccessResponse.of("예매 취소 처리 중 오류가 발생했습니다.", null)
-            );
-        }
+        // TODO: 향후 비동기 처리 방식으로 전환 고려.
+        // 현재는 동기 처리 후 즉시 성공 응답을 반환하지만,
+        // 미래에는 202 Accepted를 반환하고 백그라운드에서 처리 후 알림을 주는 방식으로 개선할 수 있음.
+        return ResponseEntity.ok(SuccessResponse.of("예매가 성공적으로 취소되었습니다.", null));
     }
 
     @Operation(summary = "예매 정보 조회", description = "bookingNumber로 예매 상세 정보를 반환합니다.")
@@ -166,6 +141,51 @@ public class BookingController {
 
         PaymentResponseDto dto = new PaymentResponseDto(booking);
         return ResponseEntity.ok(SuccessResponse.of("예매 정보 조회가 완료되었습니다.", dto));
+    }
+
+    @Operation(summary = "결제 취소 시 좌석 복원", description = "결제창 닫기 시 영구 선점된 좌석을 일반 선점 상태로 복원합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "좌석 복원 성공"),
+            @ApiResponse(responseCode = "400", description = "복원할 좌석이 없음"),
+            @ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @PostMapping("/concerts/{concertId}/seats/restore")
+    public ResponseEntity<SuccessResponse<BulkSeatLockResultDTO>> restoreSeatsOnPaymentCancel(
+            @Parameter(description = "콘서트 ID", required = true) @PathVariable Long concertId,
+            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails user) {
+
+        log.info("결제 취소 시 좌석 복원 요청: concertId={}, userId={}", concertId, user.getUserId());
+
+        try {
+            // 영구 선점된 좌석들을 일반 선점으로 복원 (TTL 5분 재설정)
+            BulkSeatLockResultDTO restoreResult = seatLockService.restoreAllUserSeats(
+                    concertId, user.getUserId(), true);
+            
+            if (restoreResult.isPartialSuccess()) {
+                log.info("좌석 복원 완료: {}", restoreResult.getSummary());
+                
+                String message = restoreResult.isAllSuccess() ?
+                        String.format("모든 좌석이 복원되었습니다. 5분 내 다시 결제해주세요. (%d석)", restoreResult.getSuccessCount()) :
+                        String.format("일부 좌석이 복원되었습니다. (성공: %d석, 실패: %d석)", 
+                                restoreResult.getSuccessCount(), restoreResult.getFailureCount());
+                
+                return ResponseEntity.ok(SuccessResponse.of(message, restoreResult));
+            } else {
+                log.warn("좌석 복원 실패: {}", restoreResult.getErrorMessage());
+                return ResponseEntity.badRequest().body(
+                        SuccessResponse.of(
+                                restoreResult.getErrorMessage() != null ? 
+                                        restoreResult.getErrorMessage() : "복원할 영구 선점 좌석이 없습니다.", 
+                                restoreResult)
+                );
+            }
+
+        } catch (Exception e) {
+            log.error("좌석 복원 중 예외 발생: concertId={}, userId={}", concertId, user.getUserId(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    SuccessResponse.of("좌석 복원 처리 중 오류가 발생했습니다.", null)
+            );
+        }
     }
 
 }
