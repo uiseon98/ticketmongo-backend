@@ -143,4 +143,49 @@ public class BookingController {
         return ResponseEntity.ok(SuccessResponse.of("예매 정보 조회가 완료되었습니다.", dto));
     }
 
+    @Operation(summary = "결제 취소 시 좌석 복원", description = "결제창 닫기 시 영구 선점된 좌석을 일반 선점 상태로 복원합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "좌석 복원 성공"),
+            @ApiResponse(responseCode = "400", description = "복원할 좌석이 없음"),
+            @ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @PostMapping("/concerts/{concertId}/seats/restore")
+    public ResponseEntity<SuccessResponse<BulkSeatLockResultDTO>> restoreSeatsOnPaymentCancel(
+            @Parameter(description = "콘서트 ID", required = true) @PathVariable Long concertId,
+            @Parameter(hidden = true) @AuthenticationPrincipal CustomUserDetails user) {
+
+        log.info("결제 취소 시 좌석 복원 요청: concertId={}, userId={}", concertId, user.getUserId());
+
+        try {
+            // 영구 선점된 좌석들을 일반 선점으로 복원 (TTL 5분 재설정)
+            BulkSeatLockResultDTO restoreResult = seatLockService.restoreAllUserSeats(
+                    concertId, user.getUserId(), true);
+            
+            if (restoreResult.isPartialSuccess()) {
+                log.info("좌석 복원 완료: {}", restoreResult.getSummary());
+                
+                String message = restoreResult.isAllSuccess() ?
+                        String.format("모든 좌석이 복원되었습니다. 5분 내 다시 결제해주세요. (%d석)", restoreResult.getSuccessCount()) :
+                        String.format("일부 좌석이 복원되었습니다. (성공: %d석, 실패: %d석)", 
+                                restoreResult.getSuccessCount(), restoreResult.getFailureCount());
+                
+                return ResponseEntity.ok(SuccessResponse.of(message, restoreResult));
+            } else {
+                log.warn("좌석 복원 실패: {}", restoreResult.getErrorMessage());
+                return ResponseEntity.badRequest().body(
+                        SuccessResponse.of(
+                                restoreResult.getErrorMessage() != null ? 
+                                        restoreResult.getErrorMessage() : "복원할 영구 선점 좌석이 없습니다.", 
+                                restoreResult)
+                );
+            }
+
+        } catch (Exception e) {
+            log.error("좌석 복원 중 예외 발생: concertId={}, userId={}", concertId, user.getUserId(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    SuccessResponse.of("좌석 복원 처리 중 오류가 발생했습니다.", null)
+            );
+        }
+    }
+
 }
