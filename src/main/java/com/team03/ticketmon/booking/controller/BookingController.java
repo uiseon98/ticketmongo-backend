@@ -104,7 +104,7 @@ public class BookingController {
      * @param user      현재 인증된 사용자 정보
      * @return 취소 성공 메시지
      */
-    @Operation(summary = "예매 취소 (동기)", description = "특정 예매를 취소 처리하고 좌석을 자동 복원합니다. 성공 시 연동된 결제도 함께 취소됩니다.")
+    @Operation(summary = "예매 취소 (동기)", description = "특정 예매를 취소 처리합니다. 성공 시 연동된 결제도 함께 취소됩니다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "취소 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자 (토큰 없음)"),
@@ -119,37 +119,12 @@ public class BookingController {
 
         log.info("예매 취소 시도 booking ID: {} for user: {}", bookingId, user);
 
-        try {
-            // 1. 예매 정보 조회하여 콘서트 ID 획득
-            Booking booking = bookingService.findByBookingNumberForUser(bookingId.toString(), user.getUserId());
-            Long concertId = booking.getConcert().getConcertId();
+        bookingFacadeService.cancelBookingAndPayment(bookingId, user.getUserId());
 
-            // 2. 예매 및 결제 취소 처리
-            bookingFacadeService.cancelBookingAndPayment(bookingId, user.getUserId());
-
-            // 3. 영구 선점된 좌석들 복원 (TTL 없이 완전 해제)
-            try {
-                BulkSeatLockResultDTO restoreResult = seatLockService.restoreAllUserSeatsWithCompensation(
-                        concertId, user.getUserId(), false);
-
-                if (restoreResult.isPartialSuccess()) {
-                    log.info("예매 취소 후 좌석 복원 완료: {}", restoreResult.getSummary());
-                } else {
-                    log.warn("예매 취소 후 좌석 복원 부분 실패: {}", restoreResult.getErrorMessage());
-                }
-            } catch (Exception restoreException) {
-                log.error("예매 취소 후 좌석 복원 중 예외 발생: bookingId={}, userId={}", 
-                        bookingId, user.getUserId(), restoreException);
-            }
-
-            return ResponseEntity.ok(SuccessResponse.of("예매가 성공적으로 취소되었습니다.", null));
-
-        } catch (Exception e) {
-            log.error("예매 취소 중 예외 발생: bookingId={}, userId={}", bookingId, user.getUserId(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    SuccessResponse.of("예매 취소 처리 중 오류가 발생했습니다.", null)
-            );
-        }
+        // TODO: 향후 비동기 처리 방식으로 전환 고려.
+        // 현재는 동기 처리 후 즉시 성공 응답을 반환하지만,
+        // 미래에는 202 Accepted를 반환하고 백그라운드에서 처리 후 알림을 주는 방식으로 개선할 수 있음.
+        return ResponseEntity.ok(SuccessResponse.of("예매가 성공적으로 취소되었습니다.", null));
     }
 
     @Operation(summary = "예매 정보 조회", description = "bookingNumber로 예매 상세 정보를 반환합니다.")
