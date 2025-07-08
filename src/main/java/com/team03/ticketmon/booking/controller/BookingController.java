@@ -8,6 +8,8 @@ import com.team03.ticketmon.booking.facade.BookingFacadeService;
 import com.team03.ticketmon.booking.service.BookingService;
 import com.team03.ticketmon.payment.dto.PaymentExecutionResponse;
 import com.team03.ticketmon.payment.dto.PaymentResponseDto;
+import com.team03.ticketmon.seat.service.SeatLockService;
+import com.team03.ticketmon.seat.dto.BulkSeatLockResultDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -40,8 +42,9 @@ public class BookingController {
 
     private final BookingFacadeService bookingFacadeService; // Facade 주입
     private final BookingService bookingService;
+    private final SeatLockService seatLockService;
 
-    @Operation(summary = "예매 생성 및 결제 준비", description = "좌석 선점 후 예매를 생성하고, 즉시 결제에 필요한 정보를 반환합니다.")
+    @Operation(summary = "예매 생성 및 결제 준비", description = "좌석 영구 선점 후 예매를 생성하고, 즉시 결제에 필요한 정보를 반환합니다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "예매 정보 생성 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "유효하지 않은 입력 (좌석 ID 누락 등)"),
@@ -55,10 +58,43 @@ public class BookingController {
     ) {
         log.info("예매 생성 및 결제 준비 시도. for user: {}", user.getUsername());
 
-        PaymentExecutionResponse responseDto = bookingFacadeService.createBookingAndInitiatePayment(createRequest,
-                user.getUserId());
+        try {
+            // 1. 좌석 영구 선점 처리
+            BulkSeatLockResultDTO lockResult = seatLockService.lockAllUserSeatsPermanently(
+                    createRequest.getConcertId(), user.getUserId());
+            
+            if (!lockResult.isPartialSuccess()) {
+                log.warn("좌석 영구 선점 실패: {}", lockResult.getErrorMessage());
+                return ResponseEntity.badRequest().body(
+                        SuccessResponse.of("좌석 영구 선점에 실패했습니다: " + lockResult.getErrorMessage(), null)
+                );
+            }
 
-        return new ResponseEntity<>(SuccessResponse.of("예매 생성 및 결제 정보 조회가 완료되었습니다.", responseDto), HttpStatus.CREATED);
+            // 2. 예매 생성 및 결제 정보 조회
+            PaymentExecutionResponse responseDto = bookingFacadeService.createBookingAndInitiatePayment(createRequest,
+                    user.getUserId());
+
+            log.info("예매 생성 및 좌석 영구 선점 완료. user: {}, lockResult: {}", 
+                    user.getUsername(), lockResult.getSummary());
+
+            return new ResponseEntity<>(SuccessResponse.of("예매 생성 및 결제 정보 조회가 완료되었습니다.", responseDto), HttpStatus.CREATED);
+
+        } catch (Exception e) {
+            log.error("예매 생성 중 예외 발생: user={}, concertId={}", 
+                    user.getUsername(), createRequest.getConcertId(), e);
+            
+            // 실패 시 좌석 복원 시도
+            try {
+                seatLockService.restoreAllUserSeatsWithCompensation(createRequest.getConcertId(), user.getUserId(), true);
+                log.info("예매 실패 후 좌석 복원 완료");
+            } catch (Exception restoreException) {
+                log.error("좌석 복원 중 예외 발생", restoreException);
+            }
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    SuccessResponse.of("예매 처리 중 오류가 발생했습니다.", null)
+            );
+        }
     }
 
     /**
@@ -68,7 +104,7 @@ public class BookingController {
      * @param user      현재 인증된 사용자 정보
      * @return 취소 성공 메시지
      */
-    @Operation(summary = "예매 취소 (동기)", description = "특정 예매를 취소 처리합니다. 성공 시 연동된 결제도 함께 취소됩니다.")
+    @Operation(summary = "예매 취소 (동기)", description = "특정 예매를 취소 처리하고 좌석을 자동 복원합니다. 성공 시 연동된 결제도 함께 취소됩니다.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "취소 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자 (토큰 없음)"),
@@ -83,13 +119,37 @@ public class BookingController {
 
         log.info("예매 취소 시도 booking ID: {} for user: {}", bookingId, user);
 
-        bookingFacadeService.cancelBookingAndPayment(bookingId, user.getUserId());
+        try {
+            // 1. 예매 정보 조회하여 콘서트 ID 획득
+            Booking booking = bookingService.findByBookingNumberForUser(bookingId.toString(), user.getUserId());
+            Long concertId = booking.getConcert().getConcertId();
 
-        // TODO: 향후 비동기 처리 방식으로 전환 고려.
-        // 현재는 동기 처리 후 즉시 성공 응답을 반환하지만,
-        // 미래에는 202 Accepted를 반환하고 백그라운드에서 처리 후 알림을 주는 방식으로 개선할 수 있음.
+            // 2. 예매 및 결제 취소 처리
+            bookingFacadeService.cancelBookingAndPayment(bookingId, user.getUserId());
 
-        return ResponseEntity.ok(SuccessResponse.of("예매가 성공적으로 취소되었습니다.", null));
+            // 3. 영구 선점된 좌석들 복원 (TTL 없이 완전 해제)
+            try {
+                BulkSeatLockResultDTO restoreResult = seatLockService.restoreAllUserSeatsWithCompensation(
+                        concertId, user.getUserId(), false);
+
+                if (restoreResult.isPartialSuccess()) {
+                    log.info("예매 취소 후 좌석 복원 완료: {}", restoreResult.getSummary());
+                } else {
+                    log.warn("예매 취소 후 좌석 복원 부분 실패: {}", restoreResult.getErrorMessage());
+                }
+            } catch (Exception restoreException) {
+                log.error("예매 취소 후 좌석 복원 중 예외 발생: bookingId={}, userId={}", 
+                        bookingId, user.getUserId(), restoreException);
+            }
+
+            return ResponseEntity.ok(SuccessResponse.of("예매가 성공적으로 취소되었습니다.", null));
+
+        } catch (Exception e) {
+            log.error("예매 취소 중 예외 발생: bookingId={}, userId={}", bookingId, user.getUserId(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    SuccessResponse.of("예매 취소 처리 중 오류가 발생했습니다.", null)
+            );
+        }
     }
 
     @Operation(summary = "예매 정보 조회", description = "bookingNumber로 예매 상세 정보를 반환합니다.")
@@ -107,4 +167,5 @@ public class BookingController {
         PaymentResponseDto dto = new PaymentResponseDto(booking);
         return ResponseEntity.ok(SuccessResponse.of("예매 정보 조회가 완료되었습니다.", dto));
     }
+
 }
