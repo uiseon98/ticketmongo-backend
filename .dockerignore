@@ -1,0 +1,46 @@
+# OS / Editor 관련
+*.log
+*.swp
+.DS_Store
+.idea/
+.vscode/
+
+# Git 관련
+.git
+.gitignore
+
+# 환경변수 및 보안파일
+.env
+.env.*
+application-dev.yml
+application-prod.yml
+
+# 빌드 산출물
+target/
+build/
+out/
+
+# 테스트 리포트 및 캐시
+test-output/
+coverage/
+.gradle/
+.classpath
+.project
+.settings/
+bin/
+node_modules/
+
+# Docker 자체 파일 제외
+docker-compose.yml
+Dockerfile*
+
+# IDE / Tool-specific (IntelliJ, Eclipse 등)
+*.iml
+*.ipr
+*.iws
+
+# Swagger 자동 생성 파일 (있는 경우)
+swagger-ui/
+
+# Supabase Token
+gradle.properties
