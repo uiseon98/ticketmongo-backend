@@ -13,4 +13,11 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 
     List<Subscription> findByUserIdAndTypeAndStatus(Long userId, SubscriptionType type, SubscriptionStatus status);
 
+    /**
+     * PUSH 타입으로 SUBSCRIBED 상태인 모든 Subscription 조회
+     */
+    List<Subscription> findByTypeAndStatus(
+            SubscriptionType type,
+            SubscriptionStatus status
+    );
 }
