@@ -69,7 +69,7 @@ public class SeatPollingSessionManager {
      * @param deferredResult DeferredResult 객체
      * @param userId 사용자 ID (선택적)
      * @param userAgent 사용자 에이전트 (디버깅용, 선택적)
-     * @return 등록된 세션 ID
+     * @return 등록된 세션 ID (null이면 등록 실패)
      */
     public String registerSession(Long concertId, DeferredResult<ResponseEntity<?>> deferredResult,
                                   Long userId, String userAgent) {
@@ -78,6 +78,12 @@ public class SeatPollingSessionManager {
         if (concertId == null || deferredResult == null) {
             log.warn("필수 파라미터가 null입니다: concertId={}, deferredResult={}", concertId, deferredResult);
             return null;
+        }
+
+        // 사용자별 활성 세션 제한 확인 (1개로 제한)
+        if (userId != null && hasActiveUserSession(userId, concertId)) {
+            log.warn("사용자 활성 세션 이미 존재: userId={}, concertId={}", userId, concertId);
+            return "USER_SESSION_EXISTS"; // 특별한 반환값으로 구분
         }
 
         // 세션 수 제한 확인
@@ -251,6 +257,70 @@ public class SeatPollingSessionManager {
                 .flatMap(List::stream)
                 .filter(session -> userId.equals(session.getUserId()))
                 .count();
+    }
+
+    /**
+     * 특정 사용자가 특정 콘서트에서 활성 세션을 가지고 있는지 확인
+     */
+    public boolean hasActiveUserSession(Long userId, Long concertId) {
+        if (userId == null || concertId == null) return false;
+
+        List<PollingSession> sessions = activeSessions.get(concertId);
+        if (sessions == null || sessions.isEmpty()) return false;
+
+        return sessions.stream()
+                .anyMatch(session -> userId.equals(session.getUserId()) && 
+                         !session.getDeferredResult().isSetOrExpired());
+    }
+
+    /**
+     * 특정 사용자의 기존 세션을 종료하고 새 세션을 등록
+     */
+    public String replaceUserSession(Long concertId, DeferredResult<ResponseEntity<?>> deferredResult,
+                                   Long userId, String userAgent) {
+        if (userId == null) {
+            return registerSession(concertId, deferredResult, userId, userAgent);
+        }
+
+        // 기존 세션 종료
+        terminateUserSession(userId, concertId);
+
+        // 새 세션 등록
+        return registerSession(concertId, deferredResult, userId, userAgent);
+    }
+
+    /**
+     * 특정 사용자의 활성 세션 종료
+     */
+    public void terminateUserSession(Long userId, Long concertId) {
+        if (userId == null || concertId == null) return;
+
+        List<PollingSession> sessions = activeSessions.get(concertId);
+        if (sessions == null || sessions.isEmpty()) return;
+
+        sessions.removeIf(session -> {
+            if (userId.equals(session.getUserId())) {
+                DeferredResult<ResponseEntity<?>> deferredResult = session.getDeferredResult();
+                if (!deferredResult.isSetOrExpired()) {
+                    // 세션 종료 응답
+                    Map<String, Object> response = Map.of(
+                            "hasUpdate", false,
+                            "message", "새로운 폴링 세션으로 교체됨",
+                            "sessionTerminated", true
+                    );
+                    deferredResult.setResult(ResponseEntity.ok(response));
+                }
+                log.debug("사용자 세션 종료: userId={}, concertId={}, sessionId={}", 
+                         userId, concertId, session.getSessionId());
+                return true;
+            }
+            return false;
+        });
+
+        // 빈 리스트이면 맵에서 제거
+        if (sessions.isEmpty()) {
+            activeSessions.remove(concertId);
+        }
     }
 
     /**

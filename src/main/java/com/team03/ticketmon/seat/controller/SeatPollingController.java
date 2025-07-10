@@ -1,7 +1,7 @@
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
-import com.team03.ticketmon.auth.jwt.CustomUserDetails;
+import com.team03.ticketmon.auth.jwt.JwtTokenProvider;
 import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.service.SeatPollingSessionManager;
 import com.team03.ticketmon.seat.service.SeatStatusService;
@@ -12,7 +12,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
@@ -37,6 +36,7 @@ public class SeatPollingController {
     private final SeatPollingSessionManager sessionManager;
     private final SeatStatusService seatStatusService;
     private final SeatProperties seatProperties;
+    private final JwtTokenProvider jwtTokenProvider;
 
     /**
      * 좌석 상태 실시간 폴링 API (개선된 버전)
@@ -63,9 +63,45 @@ public class SeatPollingController {
             @Parameter(description = "폴링 타임아웃 (밀리초)", example = "30000")
             @RequestParam(defaultValue = "30000") long timeout,
 
-            @AuthenticationPrincipal CustomUserDetails user,
+            @Parameter(description = "기존 세션 교체 여부", example = "false")
+            @RequestParam(defaultValue = "false") boolean replace,
 
             HttpServletRequest request) {
+
+        // ✅ JWT 토큰 검증 (수동 인증 처리)
+        String accessToken = jwtTokenProvider.getTokenFromCookies(jwtTokenProvider.CATEGORY_ACCESS, request);
+        final Long userId;
+        
+        if (accessToken == null || jwtTokenProvider.isTokenExpired(accessToken)) {
+            Map<String, Object> authErrorResponse = Map.of(
+                    "hasUpdate", false,
+                    "message", "인증이 필요합니다. 로그인해주세요.",
+                    "errorCode", "AUTHENTICATION_REQUIRED"
+            );
+            DeferredResult<ResponseEntity<?>> authErrorResult = new DeferredResult<>();
+            authErrorResult.setResult(ResponseEntity.status(401)
+                    .body(SuccessResponse.of("인증 실패", authErrorResponse)));
+            return authErrorResult;
+        }
+        
+        try {
+            Long extractedUserId = jwtTokenProvider.getUserId(accessToken);
+            if (extractedUserId == null) {
+                throw new RuntimeException("토큰에서 사용자 ID를 추출할 수 없습니다.");
+            }
+            userId = extractedUserId;
+        } catch (Exception e) {
+            log.warn("JWT 토큰 파싱 실패: {}", e.getMessage());
+            Map<String, Object> tokenErrorResponse = Map.of(
+                    "hasUpdate", false,
+                    "message", "유효하지 않은 토큰입니다.",
+                    "errorCode", "INVALID_TOKEN"
+            );
+            DeferredResult<ResponseEntity<?>> tokenErrorResult = new DeferredResult<>();
+            tokenErrorResult.setResult(ResponseEntity.status(401)
+                    .body(SuccessResponse.of("토큰 오류", tokenErrorResponse)));
+            return tokenErrorResult;
+        }
 
         // ✅ 개선: 입력 검증 강화
         if (concertId == null || concertId <= 0) {
@@ -114,12 +150,20 @@ public class SeatPollingController {
                 deferredResult.setResult(ResponseEntity.ok(SuccessResponse.of("즉시 응답", immediateResponse)));
 
                 log.debug("즉시 응답 제공: concertId={}, userId={}, lastUpdate={}",
-                        concertId, user.getUserId(), lastUpdate);
+                        concertId, userId, lastUpdate);
                 return deferredResult;
             }
 
-            // ✅ 개선: 세션 등록 (User-Agent 포함)
-            String sessionId = sessionManager.registerSession(concertId, deferredResult, user.getUserId(), userAgent);
+            // ✅ 개선: 세션 등록 (replace 파라미터 고려)
+            String sessionId;
+            if (replace) {
+                // 기존 세션 교체 모드
+                sessionId = sessionManager.replaceUserSession(concertId, deferredResult, userId, userAgent);
+            } else {
+                // 일반 세션 등록 모드
+                sessionId = sessionManager.registerSession(concertId, deferredResult, userId, userAgent);
+            }
+
             if (sessionId == null) {
                 // 세션 등록 실패 (서버 과부하)
                 Map<String, Object> failResponse = Map.of(
@@ -129,6 +173,19 @@ public class SeatPollingController {
                 );
                 deferredResult.setResult(ResponseEntity.status(503)
                         .body(SuccessResponse.of("서비스 일시 불가", failResponse)));
+                return deferredResult;
+            } else if ("USER_SESSION_EXISTS".equals(sessionId)) {
+                // 사용자 이미 활성 세션 존재 - 409 Conflict 응답
+                Map<String, Object> conflictResponse = Map.of(
+                        "hasUpdate", false,
+                        "message", "이미 활성 폴링 세션이 존재합니다. 기존 세션을 종료하고 새 세션을 시작하려면 replace=true 파라미터를 사용하세요.",
+                        "errorCode", "USER_SESSION_ALREADY_EXISTS",
+                        "userId", userId,
+                        "concertId", concertId,
+                        "suggestedAction", "재시도 시 replace=true 파라미터 추가"
+                );
+                deferredResult.setResult(ResponseEntity.status(409) // Conflict
+                        .body(SuccessResponse.of("세션 충돌", conflictResponse)));
                 return deferredResult;
             }
 
@@ -144,13 +201,13 @@ public class SeatPollingController {
                 deferredResult.setResult(ResponseEntity.ok(SuccessResponse.of("타임아웃", timeoutResponse)));
 
                 log.debug("폴링 타임아웃: concertId={}, sessionId={}, userId={}, timeout={}ms",
-                        concertId, sessionId, user.getUserId(), finalTimeout);
+                        concertId, sessionId, userId, finalTimeout);
             });
 
             // ✅ 개선: 에러 핸들러 설정
             deferredResult.onError(throwable -> {
                 log.error("폴링 세션 에러: concertId={}, sessionId={}, userId={}, clientIp={}",
-                        concertId, sessionId, user.getUserId(), clientIp, throwable);
+                        concertId, sessionId, userId, clientIp, throwable);
 
                 Map<String, Object> errorResponse = Map.of(
                         "hasUpdate", false,
@@ -164,15 +221,15 @@ public class SeatPollingController {
             // ✅ 개선: 완료 핸들러 설정 (로깅)
             deferredResult.onCompletion(() -> {
                 log.debug("폴링 세션 완료: concertId={}, sessionId={}, userId={}",
-                        concertId, sessionId, user.getUserId());
+                        concertId, sessionId, userId);
             });
 
             log.debug("폴링 세션 시작: concertId={}, sessionId={}, userId={}, timeout={}ms, clientIp={}",
-                    concertId, sessionId, user.getUserId(), finalTimeout, clientIp);
+                    concertId, sessionId, userId, finalTimeout, clientIp);
 
         } catch (Exception e) {
             log.error("폴링 요청 처리 중 오류: concertId={}, userId={}, clientIp={}",
-                    concertId, user.getUserId(), clientIp, e);
+                    concertId, userId, clientIp, e);
 
             Map<String, Object> errorResponse = Map.of(
                     "hasUpdate", false,
