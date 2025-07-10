@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
+import com.team03.ticketmon.concert.service.ConcertService; // 🔥 추가
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,13 +24,12 @@ public class ConcertCompletionScheduler {
 	private final ConcertRepository concertRepository;
 
 	/**
-	 * 공연 완료 처리만 담당하는 단순한 스케줄러
 	 * 매시간 실행하여 공연 종료된 콘서트들을 COMPLETED로 변경
 	 */
 	@Scheduled(fixedRate = 3600000) // 1시간마다
 	@Transactional
 	public void completeFinishedConcerts() {
-		log.info("공연 완료 처리 스케줄러 시작");
+		log.info("🕐 공연 완료 처리 스케줄러 시작");
 
 		try {
 			// COMPLETED가 아닌 모든 상태의 콘서트 조회
@@ -44,6 +44,7 @@ public class ConcertCompletionScheduler {
 				.findByStatusInOrderByConcertDateAsc(activeStatuses);
 
 			int completedCount = 0;
+			boolean hasCompletedConcerts = false; // 🔥 캐시 무효화 필요 여부 플래그
 
 			for (Concert concert : activeConcerts) {
 				if (shouldBeCompleted(concert)) {
@@ -52,17 +53,14 @@ public class ConcertCompletionScheduler {
 
 					concertRepository.save(concert);
 					completedCount++;
+					hasCompletedConcerts = true; // 🔥 완료 처리가 발생했음을 표시
 
-					log.info("공연 완료 처리: ID={}, 제목='{}', {} → COMPLETED",
+					log.info("✅ 공연 완료 처리: ID={}, 제목='{}', {} → COMPLETED",
 						concert.getConcertId(), concert.getTitle(), oldStatus);
 				}
 			}
-
-			log.info("공연 완료 처리 완료: 총 {}개 콘서트 중 {}개 완료 처리",
-				activeConcerts.size(), completedCount);
-
 		} catch (Exception e) {
-			log.error("공연 완료 처리 스케줄러 오류", e);
+			log.error("❌ 공연 완료 처리 스케줄러 오류", e);
 		}
 	}
 

@@ -1,5 +1,7 @@
 package com.team03.ticketmon._global.exception;
 
+import org.springframework.http.HttpStatus;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -63,6 +65,8 @@ public enum ErrorCode {
     INVALID_CONCERT_ID(400, "T007", "유효하지 않은 콘서트 ID입니다."), // 추가: 콘서트 ID 검증
     CONCERT_DATE_REQUIRED(400, "T008", "조회할 날짜를 입력해주세요."), // 추가: 날짜 필수 입력
     SEARCH_CONDITION_REQUIRED(400, "T009", "검색 조건을 입력해주세요."), // 추가: 검색 조건 필수
+    INVALID_SORT_FIELD(400, "T010", "유효하지 않은 정렬 기준입니다. 허용된 값: concertDate, title, artist, createdAt"),
+    INVALID_SORT_DIRECTION(400, "T011", "유효하지 않은 정렬 방향입니다. 허용된 값: asc, desc"),
 
     // Queue & Access (대기열 및 입장)
     QUEUE_ALREADY_JOINED(409, "Q001", "이미 대기열에 등록된 사용자입니다."),
