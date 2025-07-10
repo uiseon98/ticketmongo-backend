@@ -11,6 +11,8 @@ import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -250,6 +252,22 @@ public class ConcertService {
 		return concertRepository.findById(id);
 	}
 
+	/**
+	 * 콘서트 상세 캐시 무효화
+	 */
+	@CacheEvict(value = "concertDetail", key = "#concertId")
+	public void evictConcertDetailCache(Long concertId) {
+		log.info("🗑️ [CACHE EVICT] 콘서트 상세 캐시 무효화 - concertId: {}", concertId);
+	}
+
+	/**
+	 * 검색 결과 캐시 전체 무효화
+	 */
+	@CacheEvict(value = "searchResults", allEntries = true)
+	public void evictSearchCache() {
+		log.info("🗑️ [CACHE EVICT] 검색 결과 캐시 전체 무효화");
+	}
+
 	// ========== Private Helper Methods ==========
 
 	/**
@@ -331,7 +349,6 @@ public class ConcertService {
 	 * Entity를 DTO로 변환
 	 */
 	private ConcertDTO convertToDTO(Concert concert) {
-		ConcertStatus currentStatus = concert.determineCurrentStatus(false);
 		return new ConcertDTO(
 			concert.getConcertId(),
 			concert.getTitle(),
