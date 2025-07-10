@@ -117,7 +117,7 @@ public class SecurityConfig {
 					//------------인증 없이 접근 허용할 경로들 (permitAll())------------
 					// 로그인/회원가입/토큰 갱신 등 인증 관련 API 및 페이지
 					.requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll() // 인증(로그인, 회원가입) 관련 API 경로 허용 (인증 불필요)
-					.requestMatchers("/auth/**").permitAll() // login.html, register.html 등
+					.requestMatchers("/auth/**", "/api/auth/me", "/api/auth/register/social").permitAll() // login.html, register.html 등
 					.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // Swagger UI 및 API 문서
 
 					// 콘서트 정보 조회 (목록, 검색, 필터링, 상세, AI 요약, 리뷰/기대평 목록) - 공개 API
@@ -129,6 +129,9 @@ public class SecurityConfig {
 					// 결제 콜백 및 웹훅 API (외부 시스템에서 호출하므로 permitAll)
 					.requestMatchers("/api/v1/payments/success", "/api/v1/payments/fail").permitAll()
 					.requestMatchers(HttpMethod.POST, "/api/v1/webhooks/toss/payment-updates").permitAll()
+
+					// 좌석 폴링 API (Long Polling, DeferredResult 처리를 위해 permitAll)
+					.requestMatchers(HttpMethod.GET, "/api/seats/concerts/*/polling").permitAll()
 
 					// 기본 루트 URL
 					.requestMatchers("/").permitAll()
