@@ -1,7 +1,6 @@
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
-import com.team03.ticketmon.auth.jwt.CustomUserDetails;
 import com.team03.ticketmon.auth.jwt.JwtTokenProvider;
 import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.service.SeatPollingSessionManager;
@@ -13,7 +12,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
