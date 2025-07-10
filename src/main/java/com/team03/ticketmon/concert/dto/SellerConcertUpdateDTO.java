@@ -60,11 +60,9 @@ public class SellerConcertUpdateDTO {
 	@Schema(description = "총 좌석 수", example = "8000", minimum = "1", maximum = "100000")
 	private Integer totalSeats;
 
-	@Future(message = "예매 시작일시는 현재 시간보다 이후여야 합니다")
 	@Schema(description = "예매 시작일시", example = "2025-07-01T10:00:00", type = "string", format = "date-time")
 	private LocalDateTime bookingStartDate;
 
-	@Future(message = "예매 종료일시는 현재 시간보다 이후여야 합니다")
 	@Schema(description = "예매 종료일시", example = "2025-08-14T23:59:59", type = "string", format = "date-time")
 	private LocalDateTime bookingEndDate;
 

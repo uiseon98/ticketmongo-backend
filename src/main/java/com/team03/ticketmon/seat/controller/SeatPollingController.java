@@ -1,6 +1,7 @@
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
+import com.team03.ticketmon.auth.jwt.JwtTokenProvider;
 import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.service.SeatPollingSessionManager;
 import com.team03.ticketmon.seat.service.SeatStatusService;
@@ -35,6 +36,7 @@ public class SeatPollingController {
     private final SeatPollingSessionManager sessionManager;
     private final SeatStatusService seatStatusService;
     private final SeatProperties seatProperties;
+    private final JwtTokenProvider jwtTokenProvider;
 
     /**
      * 좌석 상태 실시간 폴링 API (개선된 버전)
@@ -44,9 +46,9 @@ public class SeatPollingController {
      * @param concertId 콘서트 ID
      * @param lastUpdateTime 클라이언트가 마지막으로 받은 업데이트 시간 (선택적)
      * @param timeout 폴링 타임아웃 (ms, 기본 30초)
-     * @param userId 사용자 ID (선택적)
      * @param request HTTP 요청 (User-Agent 등 추출용)
      * @return DeferredResult로 비동기 응답
+     * user.getUserId() JWT 토큰에서 추출한 사용자 ID
      */
     @Operation(summary = "좌석 상태 실시간 폴링",
             description = "좌석 상태 변경 시 즉시 응답, 변경사항 없으면 최대 30초 대기")
@@ -61,10 +63,45 @@ public class SeatPollingController {
             @Parameter(description = "폴링 타임아웃 (밀리초)", example = "30000")
             @RequestParam(defaultValue = "30000") long timeout,
 
-            @Parameter(description = "사용자 ID", example = "100")
-            @RequestParam(required = false) Long userId,
+            @Parameter(description = "기존 세션 교체 여부", example = "false")
+            @RequestParam(defaultValue = "false") boolean replace,
 
             HttpServletRequest request) {
+
+        // ✅ JWT 토큰 검증 (수동 인증 처리)
+        String accessToken = jwtTokenProvider.getTokenFromCookies(jwtTokenProvider.CATEGORY_ACCESS, request);
+        final Long userId;
+        
+        if (accessToken == null || jwtTokenProvider.isTokenExpired(accessToken)) {
+            Map<String, Object> authErrorResponse = Map.of(
+                    "hasUpdate", false,
+                    "message", "인증이 필요합니다. 로그인해주세요.",
+                    "errorCode", "AUTHENTICATION_REQUIRED"
+            );
+            DeferredResult<ResponseEntity<?>> authErrorResult = new DeferredResult<>();
+            authErrorResult.setResult(ResponseEntity.status(401)
+                    .body(SuccessResponse.of("인증 실패", authErrorResponse)));
+            return authErrorResult;
+        }
+        
+        try {
+            Long extractedUserId = jwtTokenProvider.getUserId(accessToken);
+            if (extractedUserId == null) {
+                throw new RuntimeException("토큰에서 사용자 ID를 추출할 수 없습니다.");
+            }
+            userId = extractedUserId;
+        } catch (Exception e) {
+            log.warn("JWT 토큰 파싱 실패: {}", e.getMessage());
+            Map<String, Object> tokenErrorResponse = Map.of(
+                    "hasUpdate", false,
+                    "message", "유효하지 않은 토큰입니다.",
+                    "errorCode", "INVALID_TOKEN"
+            );
+            DeferredResult<ResponseEntity<?>> tokenErrorResult = new DeferredResult<>();
+            tokenErrorResult.setResult(ResponseEntity.status(401)
+                    .body(SuccessResponse.of("토큰 오류", tokenErrorResponse)));
+            return tokenErrorResult;
+        }
 
         // ✅ 개선: 입력 검증 강화
         if (concertId == null || concertId <= 0) {
@@ -117,8 +154,16 @@ public class SeatPollingController {
                 return deferredResult;
             }
 
-            // ✅ 개선: 세션 등록 (User-Agent 포함)
-            String sessionId = sessionManager.registerSession(concertId, deferredResult, userId, userAgent);
+            // ✅ 개선: 세션 등록 (replace 파라미터 고려)
+            String sessionId;
+            if (replace) {
+                // 기존 세션 교체 모드
+                sessionId = sessionManager.replaceUserSession(concertId, deferredResult, userId, userAgent);
+            } else {
+                // 일반 세션 등록 모드
+                sessionId = sessionManager.registerSession(concertId, deferredResult, userId, userAgent);
+            }
+
             if (sessionId == null) {
                 // 세션 등록 실패 (서버 과부하)
                 Map<String, Object> failResponse = Map.of(
@@ -128,6 +173,19 @@ public class SeatPollingController {
                 );
                 deferredResult.setResult(ResponseEntity.status(503)
                         .body(SuccessResponse.of("서비스 일시 불가", failResponse)));
+                return deferredResult;
+            } else if ("USER_SESSION_EXISTS".equals(sessionId)) {
+                // 사용자 이미 활성 세션 존재 - 409 Conflict 응답
+                Map<String, Object> conflictResponse = Map.of(
+                        "hasUpdate", false,
+                        "message", "이미 활성 폴링 세션이 존재합니다. 기존 세션을 종료하고 새 세션을 시작하려면 replace=true 파라미터를 사용하세요.",
+                        "errorCode", "USER_SESSION_ALREADY_EXISTS",
+                        "userId", userId,
+                        "concertId", concertId,
+                        "suggestedAction", "재시도 시 replace=true 파라미터 추가"
+                );
+                deferredResult.setResult(ResponseEntity.status(409) // Conflict
+                        .body(SuccessResponse.of("세션 충돌", conflictResponse)));
                 return deferredResult;
             }
 

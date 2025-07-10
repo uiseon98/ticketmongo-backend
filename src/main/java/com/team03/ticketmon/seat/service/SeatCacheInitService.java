@@ -121,8 +121,8 @@ public class SeatCacheInitService {
      */
     private String generateSeatInfoFromDB(Seat seat) {
         if (seat == null) {
-            log.warn("Seat 엔티티가 null입니다.");
-            return "UNKNOWN";
+            log.warn("Seat 엔티티가 null입니다. 해당 seatInfo를 null로 설정합니다.");
+            return null;
         }
 
         String section = seat.getSection() != null ? seat.getSection() : "?";
@@ -130,29 +130,6 @@ public class SeatCacheInitService {
         Integer seatNumber = seat.getSeatNumber() != null ? seat.getSeatNumber() : 0;
 
         return String.format("%s-%s-%d", section, seatRow, seatNumber);
-    }
-
-    /**
-     * 더미 좌석 정보 생성 (테스트용)
-     * ⚠️ 사용하지 않는 메서드에서 사용하는 메서드
-     */
-    private String generateDummySeatInfo(int seatNumber) {
-        final int SEATS_PER_SECTION = 50;
-        String section;
-        int seatInSection;
-
-        if (seatNumber <= SEATS_PER_SECTION) {
-            section = "A";
-            seatInSection = seatNumber;
-        } else if (seatNumber <= SEATS_PER_SECTION * 2) {
-            section = "B";
-            seatInSection = seatNumber - SEATS_PER_SECTION;
-        } else {
-            section = "C";
-            seatInSection = seatNumber - (SEATS_PER_SECTION * 2);
-        }
-
-        return String.format("%s-%d", section, seatInSection);
     }
 
     /**

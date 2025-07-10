@@ -13,7 +13,7 @@ public record SeatStatusResponseDTO(
         Long seatId,
         String seatInfo,
         SeatStatusEnum status,
-        Long userId,
+        boolean isReservedByCurrentUser,
         LocalDateTime reservedAt,
         LocalDateTime expiresAt,
         Long remainingSeconds
@@ -22,7 +22,7 @@ public record SeatStatusResponseDTO(
     /**
      * SeatStatus 엔티티로부터 응답 DTO 생성
      */
-    public static SeatStatusResponseDTO from(SeatStatus seatStatus) {
+    public static SeatStatusResponseDTO from(SeatStatus seatStatus, Long currentUserId) {
         Long remainingSeconds = null;
         if (seatStatus.isReserved() && seatStatus.getExpiresAt() != null) {
             remainingSeconds = java.time.Duration.between(
@@ -31,13 +31,15 @@ public record SeatStatusResponseDTO(
             ).getSeconds();
             remainingSeconds = Math.max(0, remainingSeconds); // 음수 방지
         }
+        boolean isMine = seatStatus.isReserved() && currentUserId != null && currentUserId.equals(seatStatus.getUserId());
+
 
         return new SeatStatusResponseDTO(
                 seatStatus.getConcertId(),
                 seatStatus.getSeatId(),
                 seatStatus.getSeatInfo(),
                 seatStatus.getStatus(),
-                seatStatus.getUserId(),
+                isMine,
                 seatStatus.getReservedAt(),
                 seatStatus.getExpiresAt(),
                 remainingSeconds
