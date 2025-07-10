@@ -130,6 +130,9 @@ public class SecurityConfig {
 					.requestMatchers("/api/v1/payments/success", "/api/v1/payments/fail").permitAll()
 					.requestMatchers(HttpMethod.POST, "/api/v1/webhooks/toss/payment-updates").permitAll()
 
+					// 좌석 폴링 API (Long Polling, DeferredResult 처리를 위해 permitAll)
+					.requestMatchers(HttpMethod.GET, "/api/seats/concerts/*/polling").permitAll()
+
 					// 기본 루트 URL
 					.requestMatchers("/").permitAll()
 					// .requestMatchers("/index.html").permitAll() // 필요시 주석 해제
