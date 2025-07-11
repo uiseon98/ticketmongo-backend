@@ -122,8 +122,8 @@ jwt:
 aws:
   sqs:
     endpoint: ${SQS_ENDPOINT}
-    access-key: ${AWS_ACCESS_KEY}
-    secret-key: ${AWS_SECRET_KEY}
+    access-key: ${AWS_ACCESS_KEY_ID}
+    secret-key: ${AWS_SECRET_ACCESS_KEY}
 
 # 로깅 레벨 설정
 # 운영 환경에서는 불필요한 로그 생성을 줄이기 위해 로그 레벨을 높게 설정
