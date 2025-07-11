@@ -1,7 +1,7 @@
 package com.team03.ticketmon.concert.service;
 
-import com.team03.ticketmon._global.config.supabase.SupabaseProperties;
 import com.team03.ticketmon._global.util.uploader.StorageUploader;
+import com.team03.ticketmon._global.util.StoragePathProvider;
 import com.team03.ticketmon.concert.dto.*;
 import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
@@ -32,7 +32,7 @@ public class SellerConcertService {
 	private final SellerConcertRepository sellerConcertRepository;
 	private final ConcertService concertService;
 	private final StorageUploader storageUploader;
-	private final SupabaseProperties supabaseProperties;
+	private final StoragePathProvider storagePathProvider;
 
 	/**
 	 * 판매자 콘서트 목록 조회 (페이징)
@@ -250,7 +250,8 @@ public class SellerConcertService {
 			log.info("🔄 콘서트 수정 실패로 인한 이미지 롤백 시작 - concertId: {}, URL: {}",
 				concertId, newImageUrl);
 
-			storageUploader.deleteFile(supabaseProperties.getPosterBucket(), newImageUrl);
+			String bucket = storagePathProvider.getPosterBucketName();
+			storageUploader.deleteFile(bucket, newImageUrl);
 
 			log.info("✅ 이미지 롤백 완료 - concertId: {}", concertId);
 

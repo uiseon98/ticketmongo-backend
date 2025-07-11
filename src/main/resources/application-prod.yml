@@ -36,6 +36,8 @@ spring:
       port: ${SPRING_DATA_REDIS_PORT}
       username: ${SPRING_DATA_REDIS_USERNAME}
       password: ${SPRING_DATA_REDIS_PASSWORD}
+      ssl:
+        enabled: true
 
   security:
     oauth2:
@@ -122,8 +124,8 @@ jwt:
 aws:
   sqs:
     endpoint: ${SQS_ENDPOINT}
-    access-key: ${AWS_ACCESS_KEY}
-    secret-key: ${AWS_SECRET_KEY}
+    access-key: ${AWS_ACCESS_KEY_ID}
+    secret-key: ${AWS_SECRET_ACCESS_KEY}
 
 # 로깅 레벨 설정
 # 운영 환경에서는 불필요한 로그 생성을 줄이기 위해 로그 레벨을 높게 설정
@@ -158,3 +160,6 @@ app:
 
 cors:
   allowed-origins:
+    - "https://ticket-mon.o-r.kr"          # 프론트 도메인
+    - "https://api.ticket-mon.o-r.kr"      # API 도메인
+    - "http://localhost:3000"              # 로컬 개발용 프론트 도메인
