@@ -68,7 +68,8 @@ jobs:
             -e TOSS_CLIENT_KEY=${{ secrets.TOSS_CLIENT_KEY }} \
             -e TOSS_SECRET_KEY=${{ secrets.TOSS_SECRET_KEY }} \
             -e TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY }} \
-            -e BASE_URL=${{ secrets.BASE_URL }} \-e ONESIGNAL_API_KEY=${{ secrets.ONESIGNAL_API_KEY }} \
+            -e BASE_URL=${{ secrets.BASE_URL }} \
+            -e ONESIGNAL_API_KEY=${{ secrets.ONESIGNAL_API_KEY }} \
             -e ONESIGNAL_APP_ID=${{ secrets.ONESIGNAL_APP_ID }} \
             ghcr.io/${{ secrets.DOCKER_IMAGE_REPO }}:latest
             echo "🎉 배포 완료!"
