@@ -161,5 +161,5 @@ app:
 cors:
   allowed-origins:
     - "https://ticket-mon.o-r.kr"          # 프론트 도메인
-    - "https://api.ticket-mon.o-r.kr"      #
+    - "https://api.ticket-mon.o-r.kr"      # API 도메인
     - "http://localhost:3000"              # 로컬 개발용 프론트 도메인
