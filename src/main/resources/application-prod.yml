@@ -160,3 +160,4 @@ app:
 
 cors:
   allowed-origins:
+    - "https://ticket-mon.o-r.kr"
