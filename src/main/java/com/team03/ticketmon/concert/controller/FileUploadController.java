@@ -77,7 +77,7 @@ public class FileUploadController {
 			log.info("📁 고유 파일명 생성: {}", uniquePath);
 
 			// 🔄 환경별 자동 처리: 현재 Supabase 버킷명 사용
-			String bucket = "ticketmon-dev-poster-imgs";
+			String bucket = "poster";
 			uploadedUrl = storageUploader.uploadFile(file, bucket, uniquePath);
 
 			log.info("✅ 파일 업로드 성공 - URL: {}", uploadedUrl);
@@ -127,7 +127,7 @@ public class FileUploadController {
 	 */
 	private void rollbackUploadedFile(String uploadedUrl) {
 		try {
-			String bucket = "ticketmon-dev-poster-imgs"; // 현재 Supabase 실제 버킷명
+			String bucket = "poster"; // 현재 Supabase 실제 버킷명
 			storageUploader.deleteFile(bucket, uploadedUrl);
 			log.info("🔄 업로드 실패로 인한 파일 롤백 완료 - URL: {}", uploadedUrl);
 		} catch (Exception rollbackException) {
@@ -188,7 +188,7 @@ public class FileUploadController {
 			// 3. 스토리지에서 파일 삭제 (환경별 자동 처리)
 			log.info("🔍 단계 4: 스토리지 파일 삭제 시작");
 			try {
-				String bucket = "ticketmon-dev-poster-imgs"; // 현재 Supabase 실제 버킷명
+				String bucket = "poster"; // 현재 Supabase 실제 버킷명
 				storageUploader.deleteFile(bucket, currentPosterUrl);
 				log.info("✅ 스토리지 파일 삭제 완료 - URL: {}", currentPosterUrl);
 			} catch (Exception storageException) {
@@ -265,7 +265,7 @@ public class FileUploadController {
 
 			// 스토리지에서 특정 파일 삭제 (환경별 자동 처리)
 			try {
-				String bucket = "ticketmon-dev-poster-imgs"; // 현재 Supabase 실제 버킷명
+				String bucket = "poster"; // 현재 Supabase 실제 버킷명
 				storageUploader.deleteFile(bucket, fileUrl);
 				log.info("✅ 스토리지 특정 파일 삭제 완료 - URL: {}", fileUrl);
 			} catch (Exception storageException) {
@@ -316,7 +316,7 @@ public class FileUploadController {
 
 			// 스토리지에서 임시 파일 삭제 (환경별 자동 처리)
 			try {
-				String bucket = "ticketmon-dev-poster-imgs"; // 현재 Supabase 실제 버킷명
+				String bucket = "poster"; // 현재 Supabase 실제 버킷명
 				storageUploader.deleteFile(bucket, fileUrl);
 				log.info("✅ 스토리지 임시 파일 삭제 완료 - URL: {}", fileUrl);
 			} catch (Exception storageException) {
