@@ -213,4 +213,9 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 	 */
 	@Query("SELECT c.concertId FROM Concert c WHERE c.status = :status")
 	List<Long> findConcertIdsByStatus(ConcertStatus status);
+
+    /**
+     * bookingStartDate 가 from 이상, to 미만인 공연들을 조회
+     */
+    List<Concert> findByBookingStartDateBetween(LocalDateTime from, LocalDateTime to);
 }
