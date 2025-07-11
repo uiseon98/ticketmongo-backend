@@ -57,7 +57,7 @@ public class FileUploadController {
 		} else {
 			String timestamp = String.valueOf(System.currentTimeMillis());
 			String uuid = UUID.randomUUID().toString().substring(0, 8);
-			return String.format("temp/poster/%s_%s%s", timestamp, uuid, extension);
+			return String.format("temp/poster/%s_%s.%s", timestamp, uuid, extension);
 		}
 	}
 
