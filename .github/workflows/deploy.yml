@@ -14,11 +14,6 @@ jobs:
     name: Deploy Backend to EC2
     runs-on: ubuntu-latest # AWS EC2 인스턴스에 연결하기 위한 실행 환경
 
-    # 'deploy' job이 'build-only' job (backend-ci.yml의 job ID)의 성공적인 완료를 기다리도록 설정
-    # 이 부분은 workflow_run 트리거와 함께 사용하여, 특정 job의 완료를 기다립니다.
-    # (backend-ci.yml에서 jobs: 아래의 최상위 키가 job ID입니다. 기본적으로 'build-only')
-    # needs: build-only # backend-ci.yml 파일에 정의된 job ID와 일치해야 합니다.
-
     steps:
       - name: Connect to EC2 and Deploy Docker Container
         uses: appleboy/ssh-action@v0.1.6 # SSH 접속을 위한 GitHub Action 사용
@@ -47,27 +42,27 @@ jobs:
             echo "🚀 새 Docker 컨테이너 실행 중..."
             # 모든 -e 옵션의 값을 따옴표로 감싸서 쉘 문법 오류 방지
             docker run -d \
-            --name ticketmon-backend \
-            -p 80:8080 \
-            -e SPRING_PROFILES_ACTIVE=prod \
-            -e DB_URL=${{ secrets.DB_URL }} \
-            -e DB_USERNAME=${{ secrets.DB_USERNAME }} \
-            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-            -e SPRING_DATA_REDIS_HOST=${{ secrets.SPRING_DATA_REDIS_HOST }} \
-            -e SPRING_DATA_REDIS_PORT=${{ secrets.SPRING_DATA_REDIS_PORT }} \
-            -e SPRING_DATA_REDIS_USERNAME=${{ secrets.SPRING_DATA_REDIS_USERNAME }} \
-            -e SPRING_DATA_REDIS_PASSWORD='${{ secrets.SPRING_DATA_REDIS_PASSWORD }}' \
-            -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
-            -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
-            -e JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }} \
-            -e JWT_ACCESS_EXPIRATION_MS=${{ secrets.JWT_ACCESS_EXPIRATION_MS }} \
-            -e JWT_REFRESH_EXPIRATION_MS=${{ secrets.JWT_REFRESH_EXPIRATION_MS }} \
-            -e SQS_ENDPOINT=${{ secrets.SQS_ENDPOINT }} \
-            -e TOSS_CLIENT_KEY=${{ secrets.TOSS_CLIENT_KEY }} \
-            -e TOSS_SECRET_KEY=${{ secrets.TOSS_SECRET_KEY }} \
-            -e TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY }} \
-            -e BASE_URL=${{ secrets.BASE_URL }} \
-            -e ONESIGNAL_API_KEY='${{ secrets.ONESIGNAL_API_KEY }}' \
-            -e ONESIGNAL_APP_ID='${{ secrets.ONESIGNAL_APP_ID }}' \
-            ghcr.io/${{ secrets.DOCKER_IMAGE_REPO }}:latest
+              --name ticketmon-backend \
+              -p 80:8080 \
+              -e SPRING_PROFILES_ACTIVE=prod \
+              -e DB_URL="${{ secrets.DB_URL }}" \
+              -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
+              -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+              -e SPRING_DATA_REDIS_HOST="${{ secrets.SPRING_DATA_REDIS_HOST }}" \
+              -e SPRING_DATA_REDIS_PORT="${{ secrets.SPRING_DATA_REDIS_PORT }}" \
+              -e SPRING_DATA_REDIS_USERNAME="${{ secrets.SPRING_DATA_REDIS_USERNAME }}" \
+              -e SPRING_DATA_REDIS_PASSWORD="${{ secrets.SPRING_DATA_REDIS_PASSWORD }}" \
+              -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+              -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              -e JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
+              -e JWT_ACCESS_EXPIRATION_MS="${{ secrets.JWT_ACCESS_EXPIRATION_MS }}" \
+              -e JWT_REFRESH_EXPIRATION_MS="${{ secrets.JWT_REFRESH_EXPIRATION_MS }}" \
+              -e SQS_ENDPOINT="${{ secrets.SQS_ENDPOINT }}" \
+              -e TOSS_CLIENT_KEY="${{ secrets.TOSS_CLIENT_KEY }}" \
+              -e TOSS_SECRET_KEY="${{ secrets.TOSS_SECRET_KEY }}" \
+              -e TOGETHER_API_KEY="${{ secrets.TOGETHER_API_KEY }}" \
+              -e BASE_URL="${{ secrets.BASE_URL }}" \
+              -e ONESIGNAL_API_KEY="${{ secrets.ONESIGNAL_API_KEY }}" \
+              -e ONESIGNAL_APP_ID="${{ secrets.ONESIGNAL_APP_ID }}" \
+              ghcr.io/${{ secrets.DOCKER_IMAGE_REPO }}:latest
             echo "🎉 배포 완료!"
