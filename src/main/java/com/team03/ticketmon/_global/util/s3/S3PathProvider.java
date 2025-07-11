@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 @Profile("s3")
@@ -28,7 +29,9 @@ public class S3PathProvider implements StoragePathProvider {
 
     @Override
     public String getPosterPath(Long concertId, String fileExtension) {
-        return String.format("%s%d.%s", posterPrefix, concertId, fileExtension);
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        String uuid = UUID.randomUUID().toString().substring(0, 8);
+        return String.format("%s%d_%s_%s.%s", posterPrefix, concertId, timestamp, uuid, fileExtension);
     }
 
     @Override
@@ -42,9 +45,7 @@ public class S3PathProvider implements StoragePathProvider {
     }
 
     @Override
-    public String getPosterBucketName() {
-        return s3BucketName;
-    }
+    public String getPosterBucketName() { return s3BucketName; }
 
     @Override
     public String getDocsBucketName() {
