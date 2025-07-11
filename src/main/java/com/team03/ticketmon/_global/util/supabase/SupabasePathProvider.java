@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
 import java.net.URI;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 @Profile("supabase")
@@ -24,7 +25,9 @@ public class SupabasePathProvider implements StoragePathProvider {
 
     @Override
     public String getPosterPath(Long concertId, String fileExtension) {
-        return String.format("concert/poster/%d.%s", concertId, fileExtension);
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        String uuid = UUID.randomUUID().toString().substring(0, 8);
+        return String.format("concert/poster/%d_%s_%s.%s", concertId, timestamp, uuid, fileExtension);
     }
 
     @Override
