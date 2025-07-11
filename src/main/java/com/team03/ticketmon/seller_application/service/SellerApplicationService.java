@@ -5,7 +5,6 @@ import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import com.team03.ticketmon._global.util.UploadPathUtil;
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
-import com.team03.ticketmon._global.config.supabase.SupabaseProperties; // SupabaseProperties 임포트(동적으로 버킷명 적용하기 위해)
 
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
@@ -26,25 +25,29 @@ import com.team03.ticketmon.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.Arrays; // Arrays 임포트 추가
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 // 콘서트 도메인 의존성 추가 (판매자 권한 철회 조건 강화용)
-import com.team03.ticketmon.concert.repository.SellerConcertRepository; // 판매자의 콘서트 정보를 조회하기 위한 Repository
-import com.team03.ticketmon.concert.domain.enums.ConcertStatus; // 콘서트 상태 Enum (ON_SALE, SCHEDULED 등)
-import com.team03.ticketmon.concert.domain.Concert; // Concert 엔티티 임포트
+import com.team03.ticketmon.concert.repository.SellerConcertRepository;
+import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
+import com.team03.ticketmon.concert.domain.Concert;
 
 // SellerApplicationStatus Enum 값들을 static import로 사용 (내부 ENUM 사용 / 선택 사항)
 import static com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus.*;
 
 /**
  * 판매자 권한 신청 관련 비즈니스 로직을 처리하는 서비스 클래스입니다.
+ *
+ * 환경에 따라 Supabase 또는 S3를 유연하게 사용할 수 있도록 리팩토링되었습니다.
+ * 기존 코드 구조를 최대한 유지하면서 스토리지 의존성만 추상화했습니다.
  */
 @Service
 @RequiredArgsConstructor
@@ -52,10 +55,16 @@ public class SellerApplicationService {
 
     private final UserRepository userRepository;
     private final SellerApplicationRepository sellerApplicationRepository;
-    private final StorageUploader storageUploader;
-    private final SupabaseProperties supabaseProperties;
-    private final SellerConcertRepository sellerConcertRepository; // 콘서트 정보 조회를 위한 레포지토리 주입
-     private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository;
+    private final StorageUploader storageUploader; // 환경별 구현체가 자동 주입됨 (Supabase 또는 S3)
+    private final SellerConcertRepository sellerConcertRepository;
+    private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository;
+
+    // 환경별 버킷 설정 (application.yml에서 주입)
+    @Value("${supabase.docs-bucket:#{null}}")
+    private String supabaseDocsBucket;
+
+    @Value("${cloud.aws.s3.bucket:#{null}}")
+    private String s3Bucket;
 
     /**
      * API-03-06: 판매자 권한 신청 등록/재신청
@@ -75,63 +84,62 @@ public class SellerApplicationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다."));
 
         // 2. 판매자 권한 신청 유효성 검사 (이미 PENDING 상태의 신청이 있는지, 또는 APPROVED 상태인지 등)
-        // sellerApplicationRepository.existsByUserIdAndStatus()를 활용하여 더 견고하게 체크 가능
         if (user.getApprovalStatus() == ApprovalStatus.PENDING ||
                 sellerApplicationRepository.existsByUserAndStatus(user, SUBMITTED)) {
-            throw new BusinessException(ErrorCode.SELLER_APPLY_ONCE, "이미 판매자 권한 신청이 접수되어 처리 대기 중입니다."); // PENDING 상태이면 재신청 불가
+            throw new BusinessException(ErrorCode.SELLER_APPLY_ONCE, "이미 판매자 권한 신청이 접수되어 처리 대기 중입니다.");
         }
         if (user.getRole() == Role.SELLER && user.getApprovalStatus() == ApprovalStatus.APPROVED) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 판매자 권한을 가지고 있습니다.");   // 이미 판매자이면 신청 불가
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 판매자 권한을 가지고 있습니다.");
         }
 
         // 추가: 사업자등록번호 중복 검사 (SUBMITTED 또는 ACCEPTED 상태인 경우)
         boolean isBusinessNumberAlreadyInUse = sellerApplicationRepository.existsByBusinessNumberAndStatusIn(
                 request.getBusinessNumber(),
-                Arrays.asList(SUBMITTED, ACCEPTED) // SUBMITTED (신청 대기 중) 또는 ACCEPTED (승인됨) 상태
+                Arrays.asList(SUBMITTED, ACCEPTED)
         );
         if (isBusinessNumberAlreadyInUse) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "이미 사용 중이거나 처리 대기 중인 사업자등록번호입니다.");
         }
 
         // 3. 제출 서류 파일 유효성 검사 (FileValidator 사용)
-        FileValidator.validate(document); // 정적 호출로 변경
+        FileValidator.validate(document);
 
-        // 4. Supabase에 문서 업로드 (UploadPathUtil, StorageUploader 사용)
-        String fileUuid = java.util.UUID.randomUUID().toString(); // 파일명 중복 방지를 위한 UUID
+        // 4. 스토리지에 문서 업로드 (환경에 따라 Supabase 또는 S3)
+        String fileUuid = java.util.UUID.randomUUID().toString();
         String fileExtension = "";
         if (document.getOriginalFilename() != null && document.getOriginalFilename().contains(".")) {
             fileExtension = document.getOriginalFilename().substring(document.getOriginalFilename().lastIndexOf('.') + 1);
-        }   // 파일명에 확장자가 없거나 null인 경우 방지
-        String filePath = UploadPathUtil.getSellerDocsPath(fileUuid, fileExtension); // 정적 호출로 변경
-        String uploadedFileUrl = storageUploader.uploadFile(document, supabaseProperties.getDocsBucket(), filePath);    // Supabase Storage에 파일 업로드 (동적 버킷명 사용)
+        }
+        String filePath = UploadPathUtil.getSellerDocsPath(fileUuid, fileExtension);
+
+        // 환경에 따른 버킷 결정
+        String bucketName = getBucketNameForDocs();
+        String uploadedFileUrl = storageUploader.uploadFile(document, bucketName, filePath);
 
         // 5. SellerApplication 엔티티 생성 및 저장
         SellerApplication sellerApplication = SellerApplication.builder()
-                .user(user) // userId (Long) 대신, 위에서 조회한 UserEntity 객체 'user'를 전달
+                .user(user)
                 .companyName(request.getCompanyName())
                 .businessNumber(request.getBusinessNumber())
                 .representativeName(request.getRepresentativeName())
                 .representativePhone(request.getRepresentativePhone())
                 .uploadedFileUrl(uploadedFileUrl)
-                .status(SUBMITTED) // 초기 상태는 SUBMITTED
-                // .createdAt(LocalDateTime.now()) // @PrePersist에서 자동 설정(명시적으로 설정도 가능)
+                .status(SUBMITTED)
                 .build();
         sellerApplicationRepository.save(sellerApplication);
 
         // 6. UserEntity의 approvalStatus 업데이트
-        user.setApprovalStatus(ApprovalStatus.PENDING); // 사용자의 승인 상태를 PENDING으로 변경
-        userRepository.save(user); // 변경사항 저장
+        user.setApprovalStatus(ApprovalStatus.PENDING);
+        userRepository.save(user);
 
         // 7. SellerApprovalHistory에 REQUEST 타입의 이력 기록
         SellerApprovalHistory history = SellerApprovalHistory.builder()
-                .user(user)     // UserEntity 객체 'user'를 전달
-                .sellerApplication(sellerApplication)     // SellerApplication 객체 'sellerApplication'을 전달
-                .type(SellerApprovalHistory.ActionType.REQUEST) // 요청 타입
-                .reason(null)                             // 'REQUEST' 타입이므로 reason은 null
+                .user(user)
+                .sellerApplication(sellerApplication)
+                .type(SellerApprovalHistory.ActionType.REQUEST)
+                .reason(null)
                 .build();
         sellerApprovalHistoryRepository.save(history);
-
-        // TODO: (선택) 알림 서비스 연동 (관리자에게 새 신청이 접수되었음을 알림)
     }
 
     /**
@@ -176,8 +184,8 @@ public class SellerApplicationService {
                     canReapply = true; // 반려, 자발적 철회, 관리자 회수 상태는 재신청 가능
                     break;
                 case APPROVED:
-                    // canWithdraw 조건 강화: 진행 중이거나 예정된 콘서트가 없는지 확인 로직 추가 (콘서트 도메인 의존성)
-                    canWithdraw = !hasActiveConcertsForSeller(userId); // 활성 콘서트 여부로 철회 가능 여부 결정
+                    // canWithdraw 조건 강화: 진행 중이거나 예정된 콘서트가 없는지 확인 로직 추가
+                    canWithdraw = !hasActiveConcertsForSeller(userId);
                     break;
             }
         }
@@ -195,11 +203,10 @@ public class SellerApplicationService {
             lastReason = null;
         }
 
-
         return SellerApplicationStatusResponseDTO.builder()
                 .role(userRole)
                 .approvalStatus(userApprovalStatus)
-                .lastReason(lastReason) // 수정된 lastReason 사용
+                .lastReason(lastReason)
                 .canReapply(canReapply)
                 .canWithdraw(canWithdraw)
                 .applicationDate(applicationDate)
@@ -226,28 +233,28 @@ public class SellerApplicationService {
 
         // 2. canWithdraw 조건 강화 (진행 중이거나 예정된 콘서트가 없는지 확인)
         // 만약 콘서트가 있다면 철회 불가 예외 발생
-        if (hasActiveConcertsForSeller(userId)) { // 활성 콘서트 여부 확인
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "진행 중이거나 예정된 콘서트가 있어 판매자 권한을 철회할 수 없습니다."); // 오류 코드 및 메시지 구체화 필요시 수정 예정
+        if (hasActiveConcertsForSeller(userId)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "진행 중이거나 예정된 콘서트가 있어 판매자 권한을 철회할 수 없습니다.");
         }
 
         // 3. UserEntity의 역할(Role) 및 승인 상태(ApprovalStatus) 업데이트
-        user.setRole(Role.USER); // 일반 유저로 변경
-        user.setApprovalStatus(ApprovalStatus.WITHDRAWN); // 상태를 WITHDRAWN으로 변경
+        user.setRole(Role.USER);
+        user.setApprovalStatus(ApprovalStatus.WITHDRAWN);
         userRepository.save(user);
 
         // 4. 해당 유저의 가장 최근 APPROVED 상태의 SellerApplication 상태 업데이트 (WITHDRAWN)
         Optional<SellerApplication> latestApprovedApplication = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
-                user, List.of(ACCEPTED)); // APPROVED 대신 ACCEPTED 사용
+                user, List.of(ACCEPTED));
         latestApprovedApplication.ifPresent(app -> {
             app.setStatus(WITHDRAWN);
             sellerApplicationRepository.save(app);
 
             // 4. SellerApprovalHistory에 WITHDRAW 로그 기록
             SellerApprovalHistory history = SellerApprovalHistory.builder()
-                    .user(user) // userId 대신 UserEntity 객체 user를 전달
-                    .sellerApplication(app) // SellerApplication 객체 'app'을 전달
-                    .type(SellerApprovalHistory.ActionType.WITHDRAWN) // WITHDRAWN 타입
-                    .reason(null) // 자발적 철회이므로 reason은 null
+                    .user(user)
+                    .sellerApplication(app)
+                    .type(SellerApprovalHistory.ActionType.WITHDRAWN)
+                    .reason(null)
                     .build();
             sellerApprovalHistoryRepository.save(history);
         });
@@ -265,6 +272,25 @@ public class SellerApplicationService {
         UserEntity userEntity = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자 정보를 찾을 수 없습니다."));
         return ApplicantInformationResponseDTO.fromEntity(userEntity);
+    }
+
+    /**
+     * 환경에 따른 문서 저장용 버킷명 결정
+     * Supabase 환경에서는 supabase.docs-bucket 값을,
+     * S3 환경에서는 cloud.aws.s3.bucket 값을 사용합니다.
+     *
+     * @return 환경에 맞는 버킷명
+     */
+    private String getBucketNameForDocs() {
+        if (supabaseDocsBucket != null && !supabaseDocsBucket.isEmpty()) {
+            // Supabase 환경
+            return supabaseDocsBucket;
+        } else if (s3Bucket != null && !s3Bucket.isEmpty()) {
+            // S3 환경
+            return s3Bucket;
+        } else {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "스토리지 설정이 올바르지 않습니다.");
+        }
     }
 
     /**
