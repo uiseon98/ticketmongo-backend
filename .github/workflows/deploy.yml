@@ -46,7 +46,6 @@ jobs:
             echo "⬇️ 최신 Docker 이미지 Pull 중..."
             # DOCKER_IMAGE_REPO secret에는 '조직명/레포지토리명' 전체가 들어가야 합니다 (예: 'aibe-3team/aibe1-finalproject-team03_be-aws-migration-test')
             docker pull ghcr.io/${{ secrets.DOCKER_IMAGE_REPO }}:latest # 수정된 이미지 경로 사용
-            
             echo "🚀 새 Docker 컨테이너 실행 중..."
             # 모든 -e 옵션의 값을 따옴표로 감싸서 쉘 문법 오류 방지
             docker run -d \
@@ -71,5 +70,4 @@ jobs:
             -e TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY }} \
             -e BASE_URL=${{ secrets.BASE_URL }} \
             ghcr.io/${{ secrets.DOCKER_IMAGE_REPO }}:latest
-            
             echo "🎉 배포 완료!"
