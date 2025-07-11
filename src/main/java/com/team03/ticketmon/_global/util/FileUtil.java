@@ -7,6 +7,7 @@ import java.util.Map;
 public class FileUtil {
     private static final Map<String, String> MIME_TO_EXT = Map.of(
             "image/jpeg", "jpg",
+            "image/jpg", "jpg",
             "image/png", "png",
             "image/webp", "webp",
             "application/pdf", "pdf"
