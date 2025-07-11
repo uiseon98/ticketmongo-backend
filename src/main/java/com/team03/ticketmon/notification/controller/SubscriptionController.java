@@ -1,6 +1,5 @@
 package com.team03.ticketmon.notification.controller;
 
-import com.team03.ticketmon.notification.domain.enums.SubscriptionStatus;
 import com.team03.ticketmon.notification.domain.enums.SubscriptionType;
 import com.team03.ticketmon.notification.dto.SubscriptionRequest;
 import com.team03.ticketmon.notification.dto.UnsubscribeRequest;
@@ -23,7 +22,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SubscriptionController {
 
-    private final SubscriptionService subscriptionservice;
+    private final SubscriptionService subscriptionService;
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepo;
 
@@ -44,9 +43,7 @@ public class SubscriptionController {
         Long userId = user.getId();
 
         // 실제로 Subscription이 SUBSCRIBED 상태로 존재하는지 검사
-        boolean subscribed = subscriptionRepo
-                .findByUserIdAndTypeAndStatus(userId, SubscriptionType.PUSH, SubscriptionStatus.SUBSCRIBED)
-                .stream().findAny().isPresent();
+        boolean subscribed = subscriptionService.isSubscribed(userId, SubscriptionType.PUSH);
 
         return ResponseEntity.ok(Map.of("subscribed", subscribed));
     }
@@ -66,7 +63,7 @@ public class SubscriptionController {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자: " + username));
         Long userId = user.getId();
         // 3) 구독 처리
-        subscriptionservice.subscribe(userId, req.getPlayerId());
+        subscriptionService.subscribe(userId, req.getPlayerId());
         return ResponseEntity.ok().build();
     }
 
@@ -83,7 +80,7 @@ public class SubscriptionController {
         String username = principal.getName();
         userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자: " + username));
-        subscriptionservice.unsubscribe(req.getPlayerId());
+        subscriptionService.unsubscribe(req.getPlayerId());
         return ResponseEntity.ok().build();
     }
 }

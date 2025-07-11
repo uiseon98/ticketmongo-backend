@@ -19,11 +19,11 @@ public class SubscriptionService {
     private final SubscriptionRepository repo;
 
     public boolean isSubscribed(Long userId, SubscriptionType type) {
-        return repo.findByUserIdAndTypeAndStatus(
-                userId, type, SubscriptionStatus.SUBSCRIBED
-        ).size() > 0;
+        return repo
+                .findByUserIdAndTypeAndStatus(userId, type, SubscriptionStatus.SUBSCRIBED)
+                .stream().findAny().isPresent();
     }
-    
+
     @Transactional
     public void subscribe(Long userId, String playerId) {
         log.info("↳ 서비스 처리 시작: userId={}, playerId={}", userId, playerId);

@@ -43,7 +43,7 @@ public class PushService {
                 .channel(Channel.PUSH)
                 .type(NotificationType.CONCERT_REMINDER)
                 .status(Status.PENDING)
-                .sentAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now())
                 .build();
         logRepo.save(logEntry);
 
