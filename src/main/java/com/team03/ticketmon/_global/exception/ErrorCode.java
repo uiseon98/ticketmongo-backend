@@ -1,5 +1,7 @@
 package com.team03.ticketmon._global.exception;
 
+import org.springframework.http.HttpStatus;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -30,11 +32,13 @@ public enum ErrorCode {
     INVALID_PAGE_SIZE(400, "C005", "페이지 크기는 1-100 사이여야 합니다."), // 추가: 페이징 검증
     INVALID_PAGE_REQUEST(400, "C006", "페이징 요청 정보가 유효하지 않습니다."), // 추가: Pageable 검증
     REQUEST_PARAM_MISSING(400, "C007", "필수 요청 파라미터가 누락되었습니다."), // <--- 추가됨
+    REDIS_COMMAND_FAILED(500, "C008", "REDIS_COMMAND_FAILED"),
 
     // 추가: File (파일 업로드/처리 관련) - 새로운 카테고리
     FILE_UPLOAD_FAILED(500, "F001", "파일 업로드 중 알 수 없는 오류가 발생했습니다."), // 파일 업로드 오류
     FILE_SIZE_LIMIT_EXCEEDED(400, "F002", "요청 파일 크기가 허용된 최대 크기를 초과했습니다."), // FileValidator 관련(파일 크기)
     UNSUPPORTED_FILE_TYPE(400, "F003", "허용되지 않는 파일 형식입니다."), // FileValidator 관련 (파일 형식)
+    FILE_CONTENT_TYPE_NULL(400, "F004", "파일의 Content-Type을 확인할 수 없습니다."),
 
     // Auth & User (인증 및 사용자 관련)
     LOGIN_FAILED(401, "A001", "아이디 또는 비밀번호가 일치하지 않습니다."),
@@ -61,6 +65,8 @@ public enum ErrorCode {
     INVALID_CONCERT_ID(400, "T007", "유효하지 않은 콘서트 ID입니다."), // 추가: 콘서트 ID 검증
     CONCERT_DATE_REQUIRED(400, "T008", "조회할 날짜를 입력해주세요."), // 추가: 날짜 필수 입력
     SEARCH_CONDITION_REQUIRED(400, "T009", "검색 조건을 입력해주세요."), // 추가: 검색 조건 필수
+    INVALID_SORT_FIELD(400, "T010", "유효하지 않은 정렬 기준입니다. 허용된 값: concertDate, title, artist, createdAt"),
+    INVALID_SORT_DIRECTION(400, "T011", "유효하지 않은 정렬 방향입니다. 허용된 값: asc, desc"),
 
     // Queue & Access (대기열 및 입장)
     QUEUE_ALREADY_JOINED(409, "Q001", "이미 대기열에 등록된 사용자입니다."),

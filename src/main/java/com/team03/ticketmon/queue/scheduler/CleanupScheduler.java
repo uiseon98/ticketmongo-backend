@@ -1,12 +1,13 @@
 package com.team03.ticketmon.queue.scheduler;
 
-import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
+import com.team03.ticketmon.queue.adapter.QueueRedisAdapter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.*;
-import org.redisson.client.codec.LongCodec;
+import org.redisson.api.RAtomicLong;
+import org.redisson.api.RLock;
+import org.redisson.api.RScoredSortedSet;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,14 +20,13 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class CleanupScheduler {
 
-    private final RedissonClient redissonClient;
     private final ConcertRepository concertRepository;
-    private final RedisKeyGenerator keyGenerator;
+    private final QueueRedisAdapter queueRedisAdapter;
 
-
-    @Scheduled(fixedDelay = 10000)
+    @Scheduled(fixedDelay = 7100)
     public void cleanupExpiredSessions() {
-        RLock lock = redissonClient.getLock(RedisKeyGenerator.CLEANUP_SCHEDULER_LOCK_KEY);
+        RLock lock = queueRedisAdapter.getCleanupSchedulerLock();
+
         try {
             // 1. 분산 락 획득 시도
             boolean isLocked = lock.tryLock(100, 5, TimeUnit.SECONDS);
@@ -46,8 +46,7 @@ public class CleanupScheduler {
 
             // 3. 각 콘서트별로 세션 정리 작업을 수행
             for (Long concertId : activeConcertIds) {
-                String activeSessionsKey = keyGenerator.getActiveSessionsKey(concertId);
-                RScoredSortedSet<Long> activeSessions = redissonClient.getScoredSortedSet(activeSessionsKey, LongCodec.INSTANCE);
+                RScoredSortedSet<Long> activeSessions = queueRedisAdapter.getActiveSessions(concertId);
 
                 // 락이 걸려 있으므로, '조회'와 '삭제'를 순차적으로 실행해도 안전
                 // 3-1. 만료된 멤버들을 조회
@@ -62,15 +61,14 @@ public class CleanupScheduler {
 
                     // 3-3. 활성 사용자 수 감소
                     long expiredCount = expiredUserIds.size();
-                    String activeUserCountKey = keyGenerator.getActiveUsersCountKey(concertId);
-                    RAtomicLong atomicCount = redissonClient.getAtomicLong(activeUserCountKey);
+                    RAtomicLong activeUserCounter = queueRedisAdapter.getActiveUserCounter(concertId);
 
                     // compareAndSet을 이용한 원자적 업데이트 루프
                     long prevValue, nextValue;
                     do {
-                        prevValue = atomicCount.get();
+                        prevValue = activeUserCounter.get();
                         nextValue = Math.max(0, prevValue - expiredCount);
-                    } while (!atomicCount.compareAndSet(prevValue, nextValue));
+                    } while (!activeUserCounter.compareAndSet(prevValue, nextValue));
 
                     log.info("[콘서트 ID: {}] {}개의 세션 정리 완료. 남은 활성 사용자 수: {}", concertId, expiredCount, nextValue);
                 }

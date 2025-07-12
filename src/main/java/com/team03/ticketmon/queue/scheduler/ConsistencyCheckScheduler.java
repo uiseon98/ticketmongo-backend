@@ -1,13 +1,13 @@
 package com.team03.ticketmon.queue.scheduler;
 
-import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
+import com.team03.ticketmon.queue.adapter.QueueRedisAdapter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RAtomicLong;
 import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
+import org.redisson.api.RScoredSortedSet;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -18,32 +18,31 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class ConsistencyCheckScheduler {
 
-    private final RedissonClient redissonClient;
     private final ConcertRepository concertRepository;
-    private final RedisKeyGenerator keyGenerator;
+    private final QueueRedisAdapter queueRedisAdapter;
 
     /**
-     * 1시간마다 실행되어 활성 사용자 수와 실제 세션 수의 정합성을 체크하고 보정합니다.
+     * 1분마다 실행되어 활성 사용자 수와 실제 세션 수의 정합성을 체크하고 보정합니다.
      * TODO: 설정(cron, lock 타임아웃 등) application.yml 분리
      */
-    @Scheduled(cron = "0 0 * * * *") // 매시 정각에 실행
+    @Scheduled(fixedDelay = 67000)
     public void checkAndSyncCounts() {
-        RLock lock = redissonClient.getLock(RedisKeyGenerator.CONSISTENCY_CHECK_LOCK_KEY);
+        RLock lock = queueRedisAdapter.getConsistencyCheckLock();
 
         try {
             boolean isLocked = lock.tryLock(10, 60, TimeUnit.SECONDS);
             if (!isLocked) {
-                log.info("다른 인스턴스에서 정합성 체크 스케줄러가 실행 중입니다.");
+                log.debug("다른 인스턴스에서 정합성 체크 스케줄러가 실행 중입니다.");
                 return;
             }
 
-            log.info("===== 데이터 정합성 체크 스케줄러 시작 =====");
+            log.debug("===== 데이터 정합성 체크 스케줄러 시작 =====");
 
             // TODO [성능개선]: 활성화된 대기열 ID를 DB가 아니라 Redis에서 직접 조회하는 방법 검토
             concertRepository.findConcertIdsByStatus(ConcertStatus.ON_SALE)
                     .forEach(this::syncConcertCounts);
 
-            log.info("===== 데이터 정합성 체크 스케줄러 종료 =====");
+            log.debug("===== 데이터 정합성 체크 스케줄러 종료 =====");
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -57,12 +56,10 @@ public class ConsistencyCheckScheduler {
 
     // TODO [배치처리]: 네트워크 왕복 최소화를 위해 Redisson Batch API 적용
     private void syncConcertCounts(Long concertId) {
-        String activeSessionsKey = keyGenerator.getActiveSessionsKey(concertId);
-        String countKey = keyGenerator.getActiveUsersCountKey(concertId);
+        RScoredSortedSet<Long> activeSessions = queueRedisAdapter.getActiveSessions(concertId);
+        RAtomicLong counter = queueRedisAdapter.getActiveUserCounter(concertId);
 
-        RAtomicLong counter = redissonClient.getAtomicLong(countKey);
-
-        long actualSessionSize = redissonClient.getScoredSortedSet(activeSessionsKey).size();
+        long actualSessionSize = activeSessions.size();
         long storedCnt  = counter.get();
 
         if (actualSessionSize != storedCnt) {

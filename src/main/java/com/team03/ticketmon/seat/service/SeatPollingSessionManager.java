@@ -1,5 +1,6 @@
 package com.team03.ticketmon.seat.service;
 
+import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.dto.SeatUpdateEventDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -22,16 +23,17 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class SeatPollingSessionManager {
 
+    private final SeatProperties seatProperties;
+
     // 콘서트별 활성 세션 관리: concertId -> List<PollingSession>
     private final Map<Long, List<PollingSession>> activeSessions = new ConcurrentHashMap<>();
 
     // 세션 ID 생성기
     private final AtomicLong sessionIdGenerator = new AtomicLong(0);
 
-    // 설정값 - 환경별로 조정 가능하도록 개선
-    private static final int MAX_SESSIONS_PER_CONCERT = 1000; // 콘서트당 최대 세션 수
-    private static final long DEFAULT_TIMEOUT_MS = 30000; // 30초 기본 타임아웃
-    private static final long SESSION_CLEANUP_MINUTES = 5; // 5분 이상 된 세션 정리
+    public SeatPollingSessionManager(SeatProperties seatProperties) {
+        this.seatProperties = seatProperties;
+    }
 
     /**
      * 폴링 세션 정보를 담는 내부 클래스 (개선된 버전)
@@ -67,7 +69,7 @@ public class SeatPollingSessionManager {
      * @param deferredResult DeferredResult 객체
      * @param userId 사용자 ID (선택적)
      * @param userAgent 사용자 에이전트 (디버깅용, 선택적)
-     * @return 등록된 세션 ID
+     * @return 등록된 세션 ID (null이면 등록 실패)
      */
     public String registerSession(Long concertId, DeferredResult<ResponseEntity<?>> deferredResult,
                                   Long userId, String userAgent) {
@@ -78,8 +80,15 @@ public class SeatPollingSessionManager {
             return null;
         }
 
+        // 사용자별 활성 세션 제한 확인 (1개로 제한)
+        if (userId != null && hasActiveUserSession(userId, concertId)) {
+            log.warn("사용자 활성 세션 이미 존재: userId={}, concertId={}", userId, concertId);
+            return "USER_SESSION_EXISTS"; // 특별한 반환값으로 구분
+        }
+
         // 세션 수 제한 확인
-        if (getSessionCount(concertId) >= MAX_SESSIONS_PER_CONCERT) {
+        int maxSessions = seatProperties.getSession().getMaxSessionsPerConcert();
+        if (getSessionCount(concertId) >= maxSessions) {
             log.warn("콘서트 최대 세션 수 초과: concertId={}, currentCount={}",
                     concertId, getSessionCount(concertId));
             return null;
@@ -174,7 +183,7 @@ public class SeatPollingSessionManager {
      * 만료된 세션들 정리 (스케줄러에서 호출) - 개선된 버전
      */
     public void cleanupExpiredSessions() {
-        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(SESSION_CLEANUP_MINUTES);
+        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(seatProperties.getSession().getCleanupMinutes());
         int cleanedCount = 0;
         int totalSessionsBefore = getTotalSessionCount();
 
@@ -191,7 +200,7 @@ public class SeatPollingSessionManager {
             while (sessionIterator.hasNext()) {
                 PollingSession session = sessionIterator.next();
 
-                // 만료 조건: 5분 이상 된 세션 또는 이미 처리된 세션
+                // 만료 조건: 설정 시간 이상 된 세션 또는 이미 처리된 세션
                 if (session.getStartTime().isBefore(cutoffTime) ||
                         session.getDeferredResult().isSetOrExpired()) {
                     sessionIterator.remove();
@@ -251,6 +260,70 @@ public class SeatPollingSessionManager {
     }
 
     /**
+     * 특정 사용자가 특정 콘서트에서 활성 세션을 가지고 있는지 확인
+     */
+    public boolean hasActiveUserSession(Long userId, Long concertId) {
+        if (userId == null || concertId == null) return false;
+
+        List<PollingSession> sessions = activeSessions.get(concertId);
+        if (sessions == null || sessions.isEmpty()) return false;
+
+        return sessions.stream()
+                .anyMatch(session -> userId.equals(session.getUserId()) && 
+                         !session.getDeferredResult().isSetOrExpired());
+    }
+
+    /**
+     * 특정 사용자의 기존 세션을 종료하고 새 세션을 등록
+     */
+    public String replaceUserSession(Long concertId, DeferredResult<ResponseEntity<?>> deferredResult,
+                                   Long userId, String userAgent) {
+        if (userId == null) {
+            return registerSession(concertId, deferredResult, userId, userAgent);
+        }
+
+        // 기존 세션 종료
+        terminateUserSession(userId, concertId);
+
+        // 새 세션 등록
+        return registerSession(concertId, deferredResult, userId, userAgent);
+    }
+
+    /**
+     * 특정 사용자의 활성 세션 종료
+     */
+    public void terminateUserSession(Long userId, Long concertId) {
+        if (userId == null || concertId == null) return;
+
+        List<PollingSession> sessions = activeSessions.get(concertId);
+        if (sessions == null || sessions.isEmpty()) return;
+
+        sessions.removeIf(session -> {
+            if (userId.equals(session.getUserId())) {
+                DeferredResult<ResponseEntity<?>> deferredResult = session.getDeferredResult();
+                if (!deferredResult.isSetOrExpired()) {
+                    // 세션 종료 응답
+                    Map<String, Object> response = Map.of(
+                            "hasUpdate", false,
+                            "message", "새로운 폴링 세션으로 교체됨",
+                            "sessionTerminated", true
+                    );
+                    deferredResult.setResult(ResponseEntity.ok(response));
+                }
+                log.debug("사용자 세션 종료: userId={}, concertId={}, sessionId={}", 
+                         userId, concertId, session.getSessionId());
+                return true;
+            }
+            return false;
+        });
+
+        // 빈 리스트이면 맵에서 제거
+        if (sessions.isEmpty()) {
+            activeSessions.remove(concertId);
+        }
+    }
+
+    /**
      * 이벤트 응답 데이터 구성 (개선된 버전)
      */
     private Map<String, Object> createEventResponse(SeatUpdateEventDTO event) {
@@ -284,8 +357,8 @@ public class SeatPollingSessionManager {
         return Map.of(
                 "totalSessions", getTotalSessionCount(),
                 "activeConcerts", getActiveConcertCount(),
-                "maxSessionsPerConcert", MAX_SESSIONS_PER_CONCERT,
-                "sessionCleanupMinutes", SESSION_CLEANUP_MINUTES,
+                "maxSessionsPerConcert", seatProperties.getSession().getMaxSessionsPerConcert(),
+                "sessionCleanupMinutes", seatProperties.getSession().getCleanupMinutes(),
                 "lastCleanupTime", LocalDateTime.now()
         );
     }

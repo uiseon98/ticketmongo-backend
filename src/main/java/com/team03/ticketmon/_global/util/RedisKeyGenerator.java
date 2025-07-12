@@ -33,7 +33,7 @@ public class RedisKeyGenerator {
 
     private static final String CONCERT_PREFIX = "concert:";
     private static final String USER_PREFIX = "user:";
-
+    public static final String JWT_RT_PREFIX = "refreshToken:";
     // --- 대기열 관련 키 ---
 
     /** 🔑 `waitqueue:concert:{concertId}`<br>
@@ -70,17 +70,20 @@ public class RedisKeyGenerator {
     /** 🔒 `lock:cleanupScheduler`<br>
      * 만료 세션 정리 작업용 분산 락 키입니다.
      */
-    public static final String CLEANUP_SCHEDULER_LOCK_KEY = "lock:cleanupScheduler";
+//    public static final String CLEANUP_SCHEDULER_LOCK_KEY = "lock:cleanupScheduler";
+    public static final String CLEANUP_SCHEDULER_LOCK_KEY = "lock:queueScheduler";
 
     /** 🔒 `lock:admissionScheduler`<br>
      * 대기열 입장 처리용 스케줄러 락 키입니다.
      */
-    public static final String ADMISSION_SCHEDULER_LOCK_KEY = "lock:admissionScheduler";
+//    public static final String ADMISSION_SCHEDULER_LOCK_KEY = "lock:admissionScheduler";
+    public static final String ADMISSION_SCHEDULER_LOCK_KEY = "lock:queueScheduler";
 
     /** 🔒 `lock:consistencyCheckScheduler`<br>
      * 정합성 체크 스케줄러 락 키입니다.
      */
-    public static final String CONSISTENCY_CHECK_LOCK_KEY = "lock:consistencyCheckScheduler";
+//    public static final String CONSISTENCY_CHECK_LOCK_KEY = "lock:consistencyCheckScheduler";
+    public static final String CONSISTENCY_CHECK_LOCK_KEY = "lock:queueScheduler";
 
     // --- 🪑 좌석 관리 관련 키 ---
 
@@ -93,6 +96,8 @@ public class RedisKeyGenerator {
     public static final String SEAT_CHANNEL_PATTERN = "seat:status:update:*";
 
     public static final String SEAT_CHANNEL_PREFIX = "seat:status:update:";
+
+    public static final String SEAT_LAST_UPDATE_KEY_PREFIX = "seat:last_update:";
 
     // --- 🪑 Warm-up ---
 
@@ -113,6 +118,12 @@ public class RedisKeyGenerator {
      * WebSocket 서버가 이 채널을 구독하여 실시간 알림을 전송합니다.
      */
     public static final String ADMISSION_TOPIC = "admission-channel";
+
+    /**
+     * 📣 `rank-update-channel`<br>
+     * 순위 업데이트 이벤트를 전달하는 Redis Pub/Sub 채널 이름입니다.<br>
+     */
+    public static final String RANK_UPDATE_TOPIC = "rank-update-channel";
 
     /**
      * 🎯 콘서트별 대기열 키 생성

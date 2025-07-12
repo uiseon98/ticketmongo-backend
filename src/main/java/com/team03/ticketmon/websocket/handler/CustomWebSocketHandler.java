@@ -1,6 +1,12 @@
 package com.team03.ticketmon.websocket.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.team03.ticketmon.queue.domain.QueueStatus;
+import com.team03.ticketmon.queue.dto.QueueStatusDto;
+import com.team03.ticketmon.queue.service.WaitingQueueService;
+import com.team03.ticketmon.websocket.MessageType;
+import com.team03.ticketmon.websocket.WebSocketPayloadKeys;
+import com.team03.ticketmon.websocket.WebSocketSessionManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -11,16 +17,19 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 웹소켓 연결 및 메시지 처리를 담당하는 핸들러
+ * 재연결 시 사용자의 상태를 확인하여 무한 대기를 방지하는 로직을 포함
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class CustomWebSocketHandler extends TextWebSocketHandler {
 
-    // 동시성 이슈를 방지 목적, 스레드에 안전한 콜렉션 사용
-    private final Map<Long, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final WebSocketSessionManager sessionManager; // 직접 관리 대신 매니저 주입
     private final ObjectMapper objectMapper;
+    private final WaitingQueueService waitingQueueService; //  <-- 이 줄을 추가합니다.
 
     /**
      * 클라이언트와 WebSocket 연결이 성공적으로 맺어졌을 때 호출
@@ -30,12 +39,28 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         Long userId = extractUserId(session);
-        if (userId != null) {
-            addSession(userId, session);
+        Long concertId = extractConcertId(session);
+
+
+        if (userId != null && concertId != null) {
+            QueueStatusDto userStatus = waitingQueueService.getUserStatus(concertId, userId);
+
+            if (userStatus.status() == QueueStatus.ADMITTED) {
+                log.info("[WebSocket] 이미 입장한 사용자(ID: {})의 재연결 시도. 예매 페이지로 리디렉션 유도.", userId);
+                Map<String, Object> redirectMessage = Map.of(
+                        WebSocketPayloadKeys.TYPE, MessageType.REDIRECT_TO_RESERVE.name(),
+                        WebSocketPayloadKeys.ACCESS_KEY, userStatus.accessKey()
+                );
+                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(redirectMessage)));
+                session.close(CloseStatus.NORMAL.withReason("Already admitted"));
+                return;
+            }
+
+            sessionManager.addSession(userId, session);
             log.debug("WebSocket 연결됨. 사용자: {}, 세션 ID: {}", userId, session.getId());
         } else {
-            // WARN 레벨: 비정상적인 접근 시도일 수 있으므로 경고 로그
-            log.warn("사용자 ID 없이 WebSocket 연결 시도됨. 세션 ID: {}, URI: {}", session.getId(), session.getUri());
+            log.warn("사용자 ID 또는 콘서트 ID 없이 WebSocket 연결 시도됨. 세션 ID: {}, URI: {}", session.getId(), session.getUri());
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("User or Concert ID not found"));
         }
     }
 
@@ -63,7 +88,7 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         Long userId = extractUserId(session);
         if (userId != null) {
-            sessions.remove(userId);
+            sessionManager.removeSession(userId);
             log.debug("WebSocket 연결 종료됨. 사용자: {}, 세션 ID: {}, 상태: {}", userId, session.getId(), status);
         }
     }
@@ -75,7 +100,7 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
      * @param payload 전송할 데이터 (Map 형태, JSON으로 변환됨)
      */
     public void sendMessageToUser(Long userId, Map<String, Object> payload) {
-        WebSocketSession session = sessions.get(userId);
+        WebSocketSession session = sessionManager.getSession(userId);
         if (session != null && session.isOpen()) {
             try {
                 String message = objectMapper.writeValueAsString(payload);
@@ -103,21 +128,14 @@ public class CustomWebSocketHandler extends TextWebSocketHandler {
         return (Long) attributes.get("userId");
     }
 
-    // 테스트와 외부에서 세션을 추가하기 위한 public 메서드
-    public void addSession(Long userId, WebSocketSession newSession) {
-        WebSocketSession oldSession = sessions.put(userId, newSession);
-        if (oldSession != null && oldSession.isOpen()) {
-            try {
-                oldSession.close(CloseStatus.NORMAL);
-                log.debug("기존 WebSocket 세션 강제 종료: 사용자={}, 세션ID={}", userId, oldSession.getId());
-            } catch (IOException e) {
-                log.warn("기존 WebSocket 세션 종료 실패: 사용자={}, 세션ID={}", userId, oldSession.getId(), e);
-            }
-        }
-        log.debug("새 WebSocket 세션 등록: 사용자={}, 세션ID={}", userId, newSession.getId());
-    }
-
-    public void sendMessage(WebSocketSession session, TextMessage message) throws IOException {
-        session.sendMessage(message);
+    /**
+     * 콘서트 ID를 추출
+     *
+     * @param session 클라이언트 세션
+     * @return 추출된 콘서트 ID, 없으면 null
+     */
+    private Long extractConcertId(WebSocketSession session) {
+        Map<String, Object> attributes = session.getAttributes();
+        return (Long) attributes.get("concertId");
     }
 }

@@ -1,6 +1,6 @@
 package com.team03.ticketmon.auth.jwt;
 
-import com.team03.ticketmon._global.util.RedisKeyGenerator;
+import com.team03.ticketmon.queue.adapter.QueueRedisAdapter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,7 +8,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
-import org.redisson.api.RedissonClient;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.AntPathMatcher;
@@ -23,8 +22,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AccessKeyFilter extends OncePerRequestFilter {
 
-    private final RedissonClient redissonClient;
-    private final RedisKeyGenerator keyGenerator;
+    private final QueueRedisAdapter queueRedisAdapter;
 
     private static final String ACCESS_KEY_HEADER = "X-Access-Key";
 
@@ -60,13 +58,11 @@ public class AccessKeyFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 3. Redis에서 AccessKey 조회
-        String accessKeyRedisKey = keyGenerator.getAccessKey(concertId, userId);
-        String serverAccessKey;
+        String accessKey;
 
         try {
-            RBucket<String> accessKeyBucket = redissonClient.getBucket(accessKeyRedisKey);
-            serverAccessKey = accessKeyBucket.get();
+            RBucket<String> accessKeyBucket = queueRedisAdapter.getAccessKeyBucket(concertId, userId);
+            accessKey = accessKeyBucket.get();
         } catch (Exception e) {
             log.error("Redis에서 AccessKey 조회 실패. 사용자 ID: {}", hashUserId(userId), e);
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "시스템 오류가 발생했습니다.");
@@ -74,7 +70,7 @@ public class AccessKeyFilter extends OncePerRequestFilter {
         }
 
         // 4. 키 비교 및 검증
-        if (serverAccessKey == null || !serverAccessKey.equals(clientAccessKey)) {
+        if (accessKey == null || !accessKey.equals(clientAccessKey)) {
             log.warn("AccessKey가 유효하지 않거나 만료되었습니다. 사용자 ID: {}", hashUserId(userId));
             response.sendError(HttpServletResponse.SC_FORBIDDEN, "AccessKey가 유효하지 않거나 만료되었습니다.");
             return;

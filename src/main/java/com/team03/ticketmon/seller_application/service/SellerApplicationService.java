@@ -1,11 +1,12 @@
 package com.team03.ticketmon.seller_application.service;
 
+import com.team03.ticketmon._global.service.UrlConversionService;
 import com.team03.ticketmon._global.util.FileValidator;
 import com.team03.ticketmon._global.util.uploader.StorageUploader;
-import com.team03.ticketmon._global.util.UploadPathUtil;
+import com.team03.ticketmon._global.util.StoragePathProvider; // StoragePathProvider 임포트
+import com.team03.ticketmon._global.util.FileUtil; // FileUtil 임포트
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
-import com.team03.ticketmon._global.config.supabase.SupabaseProperties; // SupabaseProperties 임포트(동적으로 버킷명 적용하기 위해)
 
 import com.team03.ticketmon.seller_application.domain.SellerApplication;
 import com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus;
@@ -31,14 +32,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.Arrays; // Arrays 임포트 추가
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 // 콘서트 도메인 의존성 추가 (판매자 권한 철회 조건 강화용)
-import com.team03.ticketmon.concert.repository.SellerConcertRepository; // 판매자의 콘서트 정보를 조회하기 위한 Repository
-import com.team03.ticketmon.concert.domain.enums.ConcertStatus; // 콘서트 상태 Enum (ON_SALE, SCHEDULED 등)
-import com.team03.ticketmon.concert.domain.Concert; // Concert 엔티티 임포트
+import com.team03.ticketmon.concert.repository.SellerConcertRepository;
+import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
+import com.team03.ticketmon.concert.domain.Concert;
 
 // SellerApplicationStatus Enum 값들을 static import로 사용 (내부 ENUM 사용 / 선택 사항)
 import static com.team03.ticketmon.seller_application.domain.SellerApplication.SellerApplicationStatus.*;
@@ -53,9 +54,11 @@ public class SellerApplicationService {
     private final UserRepository userRepository;
     private final SellerApplicationRepository sellerApplicationRepository;
     private final StorageUploader storageUploader;
-    private final SupabaseProperties supabaseProperties;
-    private final SellerConcertRepository sellerConcertRepository; // 콘서트 정보 조회를 위한 레포지토리 주입
-     private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository;
+    private final SellerConcertRepository sellerConcertRepository;
+    private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository;
+    private final StoragePathProvider storagePathProvider; // StoragePathProvider 주입
+    private final UrlConversionService urlConversionService;
+
 
     /**
      * API-03-06: 판매자 권한 신청 등록/재신청
@@ -96,14 +99,12 @@ public class SellerApplicationService {
         // 3. 제출 서류 파일 유효성 검사 (FileValidator 사용)
         FileValidator.validate(document); // 정적 호출로 변경
 
-        // 4. Supabase에 문서 업로드 (UploadPathUtil, StorageUploader 사용)
-        String fileUuid = java.util.UUID.randomUUID().toString(); // 파일명 중복 방지를 위한 UUID
-        String fileExtension = "";
-        if (document.getOriginalFilename() != null && document.getOriginalFilename().contains(".")) {
-            fileExtension = document.getOriginalFilename().substring(document.getOriginalFilename().lastIndexOf('.') + 1);
-        }   // 파일명에 확장자가 없거나 null인 경우 방지
-        String filePath = UploadPathUtil.getSellerDocsPath(fileUuid, fileExtension); // 정적 호출로 변경
-        String uploadedFileUrl = storageUploader.uploadFile(document, supabaseProperties.getDocsBucket(), filePath);    // Supabase Storage에 파일 업로드 (동적 버킷명 사용)
+        // 4. 스토리지에 문서 업로드
+        String fileUuid = java.util.UUID.randomUUID().toString();
+        String fileExtension = FileUtil.getExtensionFromMimeType(document.getContentType()); // FileUtil 사용
+        String filePath = storagePathProvider.getSellerDocsPath(fileUuid, fileExtension); // StoragePathProvider 사용
+        String bucket = storagePathProvider.getDocsBucketName(); // StoragePathProvider에서 버킷 이름 가져오기
+        String uploadedFileUrl = storageUploader.uploadFile(document, bucket, filePath); // 버킷 이름 전달
 
         // 5. SellerApplication 엔티티 생성 및 저장
         SellerApplication sellerApplication = SellerApplication.builder()
@@ -153,7 +154,7 @@ public class SellerApplicationService {
 
         // 최신 판매자 신청서 정보 조회 (신청일 및 마지막 처리일 등)
         Optional<SellerApplication> latestApplication = sellerApplicationRepository.findTopByUserAndStatusInOrderByCreatedAtDesc(
-                user, List.of(SellerApplication.SellerApplicationStatus.SUBMITTED, SellerApplication.SellerApplicationStatus.ACCEPTED, SellerApplication.SellerApplicationStatus.REJECTED, SellerApplication.SellerApplicationStatus.REVOKED, SellerApplication.SellerApplicationStatus.WITHDRAWN)
+                user, List.of(SUBMITTED, ACCEPTED, REJECTED, REVOKED, WITHDRAWN)
         );
 
         LocalDateTime applicationDate = latestApplication.map(SellerApplication::getCreatedAt).orElse(null);
@@ -264,8 +265,25 @@ public class SellerApplicationService {
     public ApplicantInformationResponseDTO getUserApplicantInfo(Long userId) {
         UserEntity userEntity = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자 정보를 찾을 수 없습니다."));
-        return ApplicantInformationResponseDTO.fromEntity(userEntity);
+
+        ApplicantInformationResponseDTO dto = ApplicantInformationResponseDTO.fromEntity(userEntity);
+
+        // 최신 판매자 신청서에서 업로드된 파일 URL 조회 및 변환
+        Optional<SellerApplication> latestApplication = sellerApplicationRepository
+                .findTopByUserAndStatusInOrderByCreatedAtDesc(
+                        userEntity,
+                        List.of(SUBMITTED, ACCEPTED, REJECTED, REVOKED, WITHDRAWN)
+                );
+
+        if (latestApplication.isPresent() && latestApplication.get().getUploadedFileUrl() != null) {
+            String originalUrl = latestApplication.get().getUploadedFileUrl();
+            String convertedUrl = urlConversionService.convertToCloudFrontUrl(originalUrl);
+            dto.setUploadedFileUrl(convertedUrl);
+        }
+
+        return dto;
     }
+
 
     /**
      * 판매자가 진행 중이거나 예정된 콘서트(ON_SALE, SCHEDULED)를 가지고 있는지 확인합니다.
@@ -278,6 +296,27 @@ public class SellerApplicationService {
         List<ConcertStatus> activeStatuses = List.of(ConcertStatus.ON_SALE, ConcertStatus.SCHEDULED);
         List<Concert> activeConcerts = sellerConcertRepository.findBySellerIdAndStatusIn(sellerId, activeStatuses);
 
-        return !activeConcerts.isEmpty(); // 비어있지 않으면 활성 콘서트가 있는 것
+        return !activeConcerts.isEmpty();
+    }
+
+    /**
+     * 포스터 이미지 업데이트 시 새 이미지 롤백 (스토리지에서 삭제)
+     */
+    private void rollbackNewImage(String newImageUrl, Long concertId) {
+        if (newImageUrl == null || newImageUrl.trim().isEmpty()) {
+            return;
+        }
+
+        try {
+            System.out.println("🔄 콘서트 수정 실패로 인한 이미지 롤백 시작 - concertId: " + concertId + ", URL: " + newImageUrl);
+
+            String bucket = storagePathProvider.getPosterBucketName(); // StoragePathProvider에서 버킷 이름 가져오기
+            storageUploader.deleteFile(bucket, newImageUrl);
+
+            System.out.println("✅ 이미지 롤백 완료 - concertId: " + concertId);
+
+        } catch (Exception rollbackException) {
+            System.err.println("❌ 이미지 롤백 실패 (수동 삭제 필요) - concertId: " + concertId + ", URL: " + newImageUrl + ", 오류: " + rollbackException.getMessage());
+        }
     }
 }

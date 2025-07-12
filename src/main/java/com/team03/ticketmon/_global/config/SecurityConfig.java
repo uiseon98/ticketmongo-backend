@@ -4,10 +4,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-import com.team03.ticketmon._global.util.RedisKeyGenerator;
 import com.team03.ticketmon.auth.jwt.*;
+import com.team03.ticketmon.queue.adapter.QueueRedisAdapter;
 import jakarta.servlet.DispatcherType;
-import org.redisson.api.RedissonClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -66,9 +65,8 @@ public class SecurityConfig {
 	private final UserEntityService userEntityService;
 	private final SocialUserService socialUserService;
 	private final CookieUtil cookieUtil;
-    private final RedissonClient redissonClient;
-    private final RedisKeyGenerator keyGenerator;
 	private final CorsProperties corsProperties;
+	private final QueueRedisAdapter queueRedisAdapter;
 
 	/**
 	 * <b>AuthenticationManager 빈 설정</b> <br>
@@ -119,7 +117,7 @@ public class SecurityConfig {
 					//------------인증 없이 접근 허용할 경로들 (permitAll())------------
 					// 로그인/회원가입/토큰 갱신 등 인증 관련 API 및 페이지
 					.requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll() // 인증(로그인, 회원가입) 관련 API 경로 허용 (인증 불필요)
-					.requestMatchers("/auth/**").permitAll() // login.html, register.html 등
+					.requestMatchers("/auth/**", "/api/auth/me", "/api/auth/register/social").permitAll() // login.html, register.html 등
 					.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // Swagger UI 및 API 문서
 
 					// 콘서트 정보 조회 (목록, 검색, 필터링, 상세, AI 요약, 리뷰/기대평 목록) - 공개 API
@@ -132,8 +130,12 @@ public class SecurityConfig {
 					.requestMatchers("/api/v1/payments/success", "/api/v1/payments/fail").permitAll()
 					.requestMatchers(HttpMethod.POST, "/api/v1/webhooks/toss/payment-updates").permitAll()
 
+					// 좌석 폴링 API (Long Polling, DeferredResult 처리를 위해 permitAll)
+					.requestMatchers(HttpMethod.GET, "/api/seats/concerts/*/polling").permitAll()
+
 					// 기본 루트 URL
 					.requestMatchers("/").permitAll()
+					.requestMatchers("/healthz").permitAll()
 					// .requestMatchers("/index.html").permitAll() // 필요시 주석 해제
 
 					// 기타
@@ -187,7 +189,7 @@ public class SecurityConfig {
 				LogoutFilter.class)
 			.addFilterAt(new LoginFilter(authenticationManager(authenticationConfiguration), cookieUtil),
 				UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(new AccessKeyFilter(redissonClient, keyGenerator), JwtAuthenticationFilter.class)
+            .addFilterAfter(new AccessKeyFilter(queueRedisAdapter), JwtAuthenticationFilter.class)
 
 			// 인증/인가 실패(인증 실패(401), 권한 부족(403)) 시 반환되는 예외 응답 설정
 			.exceptionHandling(exception -> exception

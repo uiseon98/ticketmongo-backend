@@ -1,0 +1,68 @@
+name: Deploy to EC2
+
+on:
+  # 'Backend CI Pipeline' 워크플로우가 성공적으로 완료되었을 때만 이 워크플로우를 트리거
+  workflow_run:
+    workflows: [ "Backend CI Pipeline" ]  # backend-ci.yml 파일의 'name' 속성 값
+    types:
+      - completed # 'Backend CI Pipeline'이 완료되었을 때만 실행 (성공/실패 무관)
+
+jobs:
+  deploy:
+    # 'Backend CI Pipeline' 워크플로우의 결과가 'success'일 때만 'deploy' job 실행
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Deploy Backend to EC2
+    runs-on: ubuntu-latest # AWS EC2 인스턴스에 연결하기 위한 실행 환경
+
+    steps:
+      - name: Connect to EC2 and Deploy Docker Container
+        uses: appleboy/ssh-action@v0.1.6 # SSH 접속을 위한 GitHub Action 사용
+        with:
+          host: ${{ secrets.EC2_HOST }} # EC2 인스턴스의 퍼블릭 IP 또는 DNS (GitHub Secrets에서 가져옴)
+          username: ${{ secrets.EC2_USER }} # EC2 인스턴스 접속 사용자명 (예: ec2-user)
+          key: ${{ secrets.EC2_KEY }} # EC2 접속용 프라이빗 키 (GitHub Secrets에서 가져옴)
+          port: 22 # SSH 기본 포트
+
+          # 이 script 블록 내의 모든 환경 변수 값들은 따옴표로 감싸야 합니다.
+          # 이는 bash 쉘의 특수 문자 해석 문제를 방지하고, 시크릿 값에 공백이나 특수 문자가 포함될 경우에도 안전하게 전달하기 위함입니다.
+          script: |
+            set -xe
+            echo "EC2 접속 완료. 기존 컨테이너 중지 중..."
+            docker stop ticketmon-backend || true
+            docker rm ticketmon-backend || true
+
+            echo "🔐 GHCR 로그인 중..."
+            # GHCR 로그인 (GitHub Actions 기본 토큰 사용)
+            # DOCKER_USERNAME 대신 github.actor를 사용하는 것이 일반적입니다.
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            echo "⬇️ 최신 Docker 이미지 Pull 중..."
+            # DOCKER_IMAGE_REPO secret에는 '조직명/레포지토리명' 전체가 들어가야 합니다 (예:'aibe-3team/aibe1-finalproject-team03_be-aws-migration-test')
+            docker pull ghcr.io/${{ secrets.DOCKER_IMAGE_REPO }}:latest # 수정된 이미지 경로 사용
+            echo "🚀 새 Docker 컨테이너 실행 중..."
+            # 모든 -e 옵션의 값을 따옴표로 감싸서 쉘 문법 오류 방지
+            docker run -d \
+              --name ticketmon-backend \
+              -p 80:8080 \
+              -e SPRING_PROFILES_ACTIVE=prod \
+              -e DB_URL="${{ secrets.DB_URL }}" \
+              -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
+              -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+              -e SPRING_DATA_REDIS_HOST="${{ secrets.SPRING_DATA_REDIS_HOST }}" \
+              -e SPRING_DATA_REDIS_PORT="${{ secrets.SPRING_DATA_REDIS_PORT }}" \
+              -e SPRING_DATA_REDIS_USERNAME="${{ secrets.SPRING_DATA_REDIS_USERNAME }}" \
+              -e SPRING_DATA_REDIS_PASSWORD="${{ secrets.SPRING_DATA_REDIS_PASSWORD }}" \
+              -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+              -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              -e JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
+              -e JWT_ACCESS_EXPIRATION_MS="${{ secrets.JWT_ACCESS_EXPIRATION_MS }}" \
+              -e JWT_REFRESH_EXPIRATION_MS="${{ secrets.JWT_REFRESH_EXPIRATION_MS }}" \
+              -e SQS_ENDPOINT="${{ secrets.SQS_ENDPOINT }}" \
+              -e TOSS_CLIENT_KEY="${{ secrets.TOSS_CLIENT_KEY }}" \
+              -e TOSS_SECRET_KEY="${{ secrets.TOSS_SECRET_KEY }}" \
+              -e TOGETHER_API_KEY="${{ secrets.TOGETHER_API_KEY }}" \
+              -e BASE_URL="${{ secrets.BASE_URL }}" \
+              -e ONESIGNAL_API_KEY="${{ secrets.ONESIGNAL_API_KEY }}" \
+              -e ONESIGNAL_APP_ID="${{ secrets.ONESIGNAL_APP_ID }}" \
+              ghcr.io/${{ secrets.DOCKER_IMAGE_REPO }}:latest
+            echo "🎉 배포 완료!"

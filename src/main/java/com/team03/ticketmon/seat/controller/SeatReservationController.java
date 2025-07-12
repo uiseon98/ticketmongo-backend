@@ -73,7 +73,7 @@ public class SeatReservationController {
                 if (seat.isReserved() && user.getUserId().equals(seat.getUserId())) {
                     log.info("동일 사용자 재선점 요청: concertId={}, seatId={}, userId={}",
                             concertId, seatId, user.getUserId());
-                    SeatStatusResponseDTO response = SeatStatusResponseDTO.from(seat);
+                    SeatStatusResponseDTO response = SeatStatusResponseDTO.from(seat, seat.getUserId());
                     return ResponseEntity.ok(SuccessResponse.of("이미 선점한 좌석입니다", response));
                 }
 
@@ -106,7 +106,7 @@ public class SeatReservationController {
             SeatStatus reservedSeat = seatStatusService.reserveSeat(
                     concertId, seatId, user.getUserId(), seatInfo);
 
-            SeatStatusResponseDTO response = SeatStatusResponseDTO.from(reservedSeat);
+            SeatStatusResponseDTO response = SeatStatusResponseDTO.from(reservedSeat, user.getUserId());
 
             log.info("좌석 선점 성공: concertId={}, seatId={}, userId={}, seatInfo={}",
                     concertId, seatId, user.getUserId(), seatInfo);

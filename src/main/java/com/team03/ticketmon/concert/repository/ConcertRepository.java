@@ -17,16 +17,18 @@ import java.util.List;
 /*
  * Concert Repository
  * 콘서트 데이터 접근 계층
+ *
+ * 🔥 주요 변경사항: 모든 조회 쿼리에서 COMPLETED, CANCELLED 상태 제외
  */
 
 @Repository
 public interface ConcertRepository extends JpaRepository<Concert, Long> {
 
 	/**
-	 * 키워드로 콘서트 검색
+	 * 🔥 키워드로 콘서트 검색 - COMPLETED/CANCELLED 제외
 	 */
 	@Query("SELECT c FROM Concert c WHERE " +
-		"c.status IN ('SCHEDULED', 'ON_SALE') AND " +
+		"c.status IN ('SCHEDULED', 'ON_SALE', 'SOLD_OUT') AND " +  // 🔥 COMPLETED, CANCELLED 제외
 		"(LOWER(c.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
 		"LOWER(c.artist) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
 		"LOWER(c.venueName) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
@@ -34,10 +36,10 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 	List<Concert> findByKeyword(@Param("keyword") String keyword);
 
 	/**
-	 * 날짜 범위로 콘서트 조회
+	 * 🔥 날짜 범위로 콘서트 조회 - COMPLETED/CANCELLED 제외
 	 */
 	@Query("SELECT c FROM Concert c WHERE " +
-		"c.status IN ('SCHEDULED', 'ON_SALE') AND " +
+		"c.status IN ('SCHEDULED', 'ON_SALE', 'SOLD_OUT') AND " +  // 🔥 COMPLETED, CANCELLED 제외
 		"(:startDate IS NULL OR c.concertDate >= :startDate) AND " +
 		"(:endDate IS NULL OR c.concertDate <= :endDate) " +
 		"ORDER BY c.concertDate ASC")
@@ -45,11 +47,11 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		@Param("endDate") LocalDate endDate);
 
 	/**
-	 * 가격 범위로 콘서트 조회
+	 * 🔥 가격 범위로 콘서트 조회 - COMPLETED/CANCELLED 제외
 	 */
 	@Query("SELECT DISTINCT c FROM Concert c " +
 		"JOIN c.concertSeats cs " +
-		"WHERE c.status IN ('SCHEDULED', 'ON_SALE') AND " +
+		"WHERE c.status IN ('SCHEDULED', 'ON_SALE', 'SOLD_OUT') AND " +  // 🔥 COMPLETED, CANCELLED 제외
 		"(:minPrice IS NULL OR cs.price >= :minPrice) AND " +
 		"(:maxPrice IS NULL OR cs.price <= :maxPrice) " +
 		"ORDER BY c.concertDate ASC")
@@ -57,11 +59,11 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 		@Param("maxPrice") BigDecimal maxPrice);
 
 	/**
-	 * 날짜와 가격 범위로 콘서트 조회
+	 * 🔥 날짜와 가격 범위로 콘서트 조회 - COMPLETED/CANCELLED 제외
 	 */
 	@Query("SELECT DISTINCT c FROM Concert c " +
 		"JOIN c.concertSeats cs " +
-		"WHERE c.status IN ('SCHEDULED', 'ON_SALE') AND " +
+		"WHERE c.status IN ('SCHEDULED', 'ON_SALE', 'SOLD_OUT') AND " +  // 🔥 COMPLETED, CANCELLED 제외
 		"(:startDate IS NULL OR c.concertDate >= :startDate) AND " +
 		"(:endDate IS NULL OR c.concertDate <= :endDate) AND " +
 		"(:minPrice IS NULL OR cs.price >= :minPrice) AND " +
@@ -83,7 +85,32 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 
 	List<Concert> findByStatusInOrderByConcertDateAsc(List<ConcertStatus> statuses);
 
-	Page<Concert> findByStatusInOrderByConcertDateAsc(List<ConcertStatus> statuses, Pageable pageable);
+	/**
+	 * 🔥 페이징된 상태별 콘서트 조회 - COMPLETED/CANCELLED 자동 제외
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+		"c.status IN :statuses AND " +
+		"c.status NOT IN ('COMPLETED', 'CANCELLED') " +  // 🔥 명시적으로 제외
+		"ORDER BY c.concertDate ASC")
+	Page<Concert> findByStatusInOrderByConcertDateAscExcludingCompleted(
+		@Param("statuses") List<ConcertStatus> statuses,
+		Pageable pageable);
+
+	/**
+	 * 🔥 기본 콘서트 목록 조회 (페이징 + 정렬) - COMPLETED/CANCELLED 제외
+	 * 정렬은 Pageable의 Sort 정보를 사용하여 동적으로 처리
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+		"c.status IN ('SCHEDULED', 'ON_SALE', 'SOLD_OUT')")
+	Page<Concert> findActiveConcerts(Pageable pageable);
+
+	/**
+	 * 🔥 기본 콘서트 목록 조회 (페이징 없음, 기본 정렬) - COMPLETED/CANCELLED 제외
+	 */
+	@Query("SELECT c FROM Concert c WHERE " +
+		"c.status IN ('SCHEDULED', 'ON_SALE', 'SOLD_OUT') " +
+		"ORDER BY c.concertDate ASC")
+	List<Concert> findActiveConcerts();
 
 	/**
 	 * 예매 가능한 콘서트 조회
@@ -186,4 +213,9 @@ public interface ConcertRepository extends JpaRepository<Concert, Long> {
 	 */
 	@Query("SELECT c.concertId FROM Concert c WHERE c.status = :status")
 	List<Long> findConcertIdsByStatus(ConcertStatus status);
+
+    /**
+     * bookingStartDate 가 from 이상, to 미만인 공연들을 조회
+     */
+    List<Concert> findByBookingStartDateBetween(LocalDateTime from, LocalDateTime to);
 }

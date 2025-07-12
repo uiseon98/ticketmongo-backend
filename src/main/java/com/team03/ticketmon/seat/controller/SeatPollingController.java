@@ -1,6 +1,8 @@
 package com.team03.ticketmon.seat.controller;
 
 import com.team03.ticketmon._global.exception.SuccessResponse;
+import com.team03.ticketmon.auth.jwt.JwtTokenProvider;
+import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.service.SeatPollingSessionManager;
 import com.team03.ticketmon.seat.service.SeatStatusService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,12 +35,8 @@ public class SeatPollingController {
 
     private final SeatPollingSessionManager sessionManager;
     private final SeatStatusService seatStatusService;
-
-    // Long Polling 설정 (환경별 조정 가능하도록 개선)
-    private static final long DEFAULT_TIMEOUT_MS = 30000; // 30초
-    private static final long MAX_TIMEOUT_MS = 60000; // 최대 60초
-    private static final long MIN_TIMEOUT_MS = 5000; // 최소 5초
-    private static final int MAX_SESSIONS_PER_CONCERT = 1000; // 콘서트당 최대 세션
+    private final SeatProperties seatProperties;
+    private final JwtTokenProvider jwtTokenProvider;
 
     /**
      * 좌석 상태 실시간 폴링 API (개선된 버전)
@@ -48,9 +46,9 @@ public class SeatPollingController {
      * @param concertId 콘서트 ID
      * @param lastUpdateTime 클라이언트가 마지막으로 받은 업데이트 시간 (선택적)
      * @param timeout 폴링 타임아웃 (ms, 기본 30초)
-     * @param userId 사용자 ID (선택적)
      * @param request HTTP 요청 (User-Agent 등 추출용)
      * @return DeferredResult로 비동기 응답
+     * user.getUserId() JWT 토큰에서 추출한 사용자 ID
      */
     @Operation(summary = "좌석 상태 실시간 폴링",
             description = "좌석 상태 변경 시 즉시 응답, 변경사항 없으면 최대 30초 대기")
@@ -65,10 +63,45 @@ public class SeatPollingController {
             @Parameter(description = "폴링 타임아웃 (밀리초)", example = "30000")
             @RequestParam(defaultValue = "30000") long timeout,
 
-            @Parameter(description = "사용자 ID", example = "100")
-            @RequestParam(required = false) Long userId,
+            @Parameter(description = "기존 세션 교체 여부", example = "false")
+            @RequestParam(defaultValue = "false") boolean replace,
 
             HttpServletRequest request) {
+
+        // ✅ JWT 토큰 검증 (수동 인증 처리)
+        String accessToken = jwtTokenProvider.getTokenFromCookies(jwtTokenProvider.CATEGORY_ACCESS, request);
+        final Long userId;
+        
+        if (accessToken == null || jwtTokenProvider.isTokenExpired(accessToken)) {
+            Map<String, Object> authErrorResponse = Map.of(
+                    "hasUpdate", false,
+                    "message", "인증이 필요합니다. 로그인해주세요.",
+                    "errorCode", "AUTHENTICATION_REQUIRED"
+            );
+            DeferredResult<ResponseEntity<?>> authErrorResult = new DeferredResult<>();
+            authErrorResult.setResult(ResponseEntity.status(401)
+                    .body(SuccessResponse.of("인증 실패", authErrorResponse)));
+            return authErrorResult;
+        }
+        
+        try {
+            Long extractedUserId = jwtTokenProvider.getUserId(accessToken);
+            if (extractedUserId == null) {
+                throw new RuntimeException("토큰에서 사용자 ID를 추출할 수 없습니다.");
+            }
+            userId = extractedUserId;
+        } catch (Exception e) {
+            log.warn("JWT 토큰 파싱 실패: {}", e.getMessage());
+            Map<String, Object> tokenErrorResponse = Map.of(
+                    "hasUpdate", false,
+                    "message", "유효하지 않은 토큰입니다.",
+                    "errorCode", "INVALID_TOKEN"
+            );
+            DeferredResult<ResponseEntity<?>> tokenErrorResult = new DeferredResult<>();
+            tokenErrorResult.setResult(ResponseEntity.status(401)
+                    .body(SuccessResponse.of("토큰 오류", tokenErrorResponse)));
+            return tokenErrorResult;
+        }
 
         // ✅ 개선: 입력 검증 강화
         if (concertId == null || concertId <= 0) {
@@ -83,7 +116,8 @@ public class SeatPollingController {
         }
 
         // ✅ 수정: 타임아웃 범위 검증 (final 변수로 생성)
-        final long finalTimeout = Math.min(Math.max(timeout, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS);
+        final long finalTimeout = Math.min(Math.max(timeout, seatProperties.getPolling().getMinTimeoutMs()), 
+                                          seatProperties.getPolling().getMaxTimeoutMs());
 
         // ✅ 개선: 클라이언트 정보 수집
         String userAgent = request.getHeader("User-Agent");
@@ -94,13 +128,14 @@ public class SeatPollingController {
 
         try {
             // 세션 수 제한 확인
-            if (sessionManager.getSessionCount(concertId) >= MAX_SESSIONS_PER_CONCERT) {
+            int maxSessions = seatProperties.getSession().getMaxSessionsPerConcert();
+            if (sessionManager.getSessionCount(concertId) >= maxSessions) {
                 Map<String, Object> overloadResponse = Map.of(
                         "hasUpdate", false,
                         "message", "서버 과부하로 인해 즉시 응답합니다. 잠시 후 다시 시도해주세요.",
                         "recommendedRetryAfter", 5000,
                         "currentLoad", sessionManager.getSessionCount(concertId),
-                        "maxCapacity", MAX_SESSIONS_PER_CONCERT
+                        "maxCapacity", maxSessions
                 );
                 deferredResult.setResult(ResponseEntity.status(503) // Service Unavailable
                         .body(SuccessResponse.of("서버 과부하", overloadResponse)));
@@ -119,8 +154,16 @@ public class SeatPollingController {
                 return deferredResult;
             }
 
-            // ✅ 개선: 세션 등록 (User-Agent 포함)
-            String sessionId = sessionManager.registerSession(concertId, deferredResult, userId, userAgent);
+            // ✅ 개선: 세션 등록 (replace 파라미터 고려)
+            String sessionId;
+            if (replace) {
+                // 기존 세션 교체 모드
+                sessionId = sessionManager.replaceUserSession(concertId, deferredResult, userId, userAgent);
+            } else {
+                // 일반 세션 등록 모드
+                sessionId = sessionManager.registerSession(concertId, deferredResult, userId, userAgent);
+            }
+
             if (sessionId == null) {
                 // 세션 등록 실패 (서버 과부하)
                 Map<String, Object> failResponse = Map.of(
@@ -130,6 +173,19 @@ public class SeatPollingController {
                 );
                 deferredResult.setResult(ResponseEntity.status(503)
                         .body(SuccessResponse.of("서비스 일시 불가", failResponse)));
+                return deferredResult;
+            } else if ("USER_SESSION_EXISTS".equals(sessionId)) {
+                // 사용자 이미 활성 세션 존재 - 409 Conflict 응답
+                Map<String, Object> conflictResponse = Map.of(
+                        "hasUpdate", false,
+                        "message", "이미 활성 폴링 세션이 존재합니다. 기존 세션을 종료하고 새 세션을 시작하려면 replace=true 파라미터를 사용하세요.",
+                        "errorCode", "USER_SESSION_ALREADY_EXISTS",
+                        "userId", userId,
+                        "concertId", concertId,
+                        "suggestedAction", "재시도 시 replace=true 파라미터 추가"
+                );
+                deferredResult.setResult(ResponseEntity.status(409) // Conflict
+                        .body(SuccessResponse.of("세션 충돌", conflictResponse)));
                 return deferredResult;
             }
 
@@ -202,11 +258,11 @@ public class SeatPollingController {
                     "activeSessionCount", sessionManager.getSessionCount(concertId),
                     "totalActiveSessionCount", sessionManager.getTotalSessionCount(),
                     "activeConcertCount", sessionManager.getActiveConcertCount(),
-                    "maxSessionsPerConcert", MAX_SESSIONS_PER_CONCERT,
+                    "maxSessionsPerConcert", seatProperties.getSession().getMaxSessionsPerConcert(),
                     "timeoutSettings", Map.of(
-                            "default", DEFAULT_TIMEOUT_MS,
-                            "min", MIN_TIMEOUT_MS,
-                            "max", MAX_TIMEOUT_MS
+                            "default", seatProperties.getPolling().getDefaultTimeoutMs(),
+                            "min", seatProperties.getPolling().getMinTimeoutMs(),
+                            "max", seatProperties.getPolling().getMaxTimeoutMs()
                     ),
                     "serverTime", LocalDateTime.now(),
                     "systemStatus", sessionManager.getSystemStatus()
@@ -234,8 +290,8 @@ public class SeatPollingController {
                     "systemStatus", sessionManager.getSystemStatus(),
                     "serverInfo", Map.of(
                             "serverTime", LocalDateTime.now(),
-                            "maxSessionsPerConcert", MAX_SESSIONS_PER_CONCERT,
-                            "timeoutRange", MIN_TIMEOUT_MS + "ms - " + MAX_TIMEOUT_MS + "ms"
+                            "maxSessionsPerConcert", seatProperties.getSession().getMaxSessionsPerConcert(),
+                            "timeoutRange", seatProperties.getPolling().getMinTimeoutMs() + "ms - " + seatProperties.getPolling().getMaxTimeoutMs() + "ms"
                     )
             );
 
@@ -266,28 +322,51 @@ public class SeatPollingController {
     }
 
     /**
-     * 최근 업데이트 여부 확인 (개선된 구현 필요)
-     * TODO: 실제로는 Redis에서 최근 변경 시간을 확인해야 함
+     * 최근 업데이트 여부 확인 (Redis 기반 구현)
      */
     private boolean hasRecentUpdates(Long concertId, LocalDateTime lastUpdate) {
-        // 현재는 간단히 false 반환 (항상 Long Polling 수행)
-        // 실제 구현에서는 Redis에 마지막 업데이트 시간을 저장하여 비교
-        // 예: Redis에 "seat:last_update:{concertId}" 키로 마지막 업데이트 시간 저장
-        return false;
+        try {
+            // SeatStatusService를 통해 최근 업데이트 시간 조회
+            LocalDateTime lastUpdateTime = seatStatusService.getLastUpdateTime(concertId);
+            
+            // 마지막 업데이트 시간이 없거나 클라이언트 시간보다 최신이면 업데이트 있음
+            if (lastUpdateTime == null) {
+                return false;
+            }
+            
+            return lastUpdateTime.isAfter(lastUpdate);
+        } catch (Exception e) {
+            log.warn("최근 업데이트 확인 중 오류: concertId={}, lastUpdate={}", concertId, lastUpdate, e);
+            return false;
+        }
     }
 
     /**
-     * 현재 좌석 상태 응답 생성 (개선된 버전)
+     * 현재 좌석 상태 응답 생성 (SeatStatusService 연동)
      */
     private Map<String, Object> getCurrentSeatStatusResponse(Long concertId) {
-        // TODO: 실제로는 SeatStatusService에서 현재 상태 조회
-        return Map.of(
-                "hasUpdate", true,
-                "updateTime", LocalDateTime.now(),
-                "seatUpdates", Map.of(), // 실제로는 변경된 좌석 정보
-                "message", "현재 상태 조회",
-                "concertId", concertId
-        );
+        try {
+            // SeatStatusService를 통해 현재 좌석 상태 조회
+            Map<String, Object> seatStatus = seatStatusService.getCurrentSeatStatus(concertId);
+            LocalDateTime lastUpdateTime = seatStatusService.getLastUpdateTime(concertId);
+            
+            return Map.of(
+                    "hasUpdate", true,
+                    "updateTime", lastUpdateTime != null ? lastUpdateTime : LocalDateTime.now(),
+                    "seatUpdates", seatStatus,
+                    "message", "현재 상태 조회",
+                    "concertId", concertId
+            );
+        } catch (Exception e) {
+            log.warn("현재 좌석 상태 조회 중 오류: concertId={}", concertId, e);
+            return Map.of(
+                    "hasUpdate", false,
+                    "updateTime", LocalDateTime.now(),
+                    "seatUpdates", Map.of(),
+                    "message", "상태 조회 실패",
+                    "concertId", concertId
+            );
+        }
     }
 
     /**
