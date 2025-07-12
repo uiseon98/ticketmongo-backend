@@ -267,19 +267,38 @@ public class FileUploadController {
 					));
 			}
 
+			// 2. DB에서 posterImageUrl 필드를 null로 업데이트
+			log.info("🔍 단계 3: DB에서 포스터 URL 제거 시작");
+			int updatedRows = sellerConcertRepository.updatePosterImageUrl(concertId, sellerId, null);
+			log.info("🔍 DB 업데이트 결과: {} rows affected", updatedRows);
+
+			if (updatedRows == 0) {
+				log.warn("⚠️ DB 업데이트 실패 - 권한 없음 또는 존재하지 않는 콘서트: concertId={}, sellerId={}",
+						concertId, sellerId);
+				return ResponseEntity.status(HttpStatus.FORBIDDEN)
+						.body(Map.of(
+								"success", false,
+								"message", "DB 업데이트 권한이 없거나 존재하지 않는 콘서트입니다."
+						));
+			}
+			log.info("✅ 단계 3: DB 업데이트 완료");
+
+			log.info("✅ 특정 파일 삭제 및 DB 업데이트 완료 - concertId: {}", concertId);
+
 			return ResponseEntity.ok(Map.of(
-				"success", true,
-				"message", "파일이 삭제되었습니다.",
-				"deletedUrl", fileUrl
+					"success", true,
+					"message", "파일이 삭제되고 DB가 업데이트되었습니다.",
+					"deletedUrl", fileUrl,
+					"concertId", concertId
 			));
 
 		} catch (Exception e) {
 			log.error("❌ 특정 파일 삭제 실패", e);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-				.body(Map.of(
-					"success", false,
-					"message", "파일 삭제 중 오류가 발생했습니다: " + e.getMessage()
-				));
+					.body(Map.of(
+							"success", false,
+							"message", "파일 삭제 중 오류가 발생했습니다: " + e.getMessage()
+					));
 		}
 	}
 
