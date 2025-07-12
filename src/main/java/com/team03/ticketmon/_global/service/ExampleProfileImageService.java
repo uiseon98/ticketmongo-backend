@@ -14,6 +14,7 @@ import java.util.Objects;
 @Service
 public class ExampleProfileImageService {
 
+    @Qualifier("supabaseUploader") // SupabaseUploader를 명확하게 주입
     private final StorageUploader storageUploader;
     private final StoragePathProvider storagePathProvider; // StoragePathProvider 주입
 
