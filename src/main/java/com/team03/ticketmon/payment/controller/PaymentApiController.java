@@ -1,5 +1,6 @@
 package com.team03.ticketmon.payment.controller;
 
+import com.team03.ticketmon._global.config.AppProperties;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
 import com.team03.ticketmon.payment.dto.PaymentConfirmRequest;
 import com.team03.ticketmon.payment.dto.PaymentHistoryDto;
@@ -33,6 +34,7 @@ import java.util.List;
 public class PaymentApiController {
 
     private final PaymentService paymentService;
+    private final AppProperties appProperties;
 
     // ==========================================================================================
     // 💡 [중요] /request, /pending-bookings, /cancel API는 BookingController로 기능이 이전/통합되었으므로 삭제합니다.
@@ -59,7 +61,7 @@ public class PaymentApiController {
             String bookingNumber = paymentService.getBookingNumberByOrderId(orderId);
 
             // 3) React 성공 페이지로 리다이렉트 (orderId 와 bookingNumber 포함)
-            String reactSuccessUrl = "https://localhost:3000/payment/result/success";
+            String reactSuccessUrl = appProperties.frontBaseUrl() + "/payment/result/success";
             return "redirect:" + reactSuccessUrl
                     + "?orderId=" + orderId
                     + "&bookingNumber=" + bookingNumber;
@@ -67,7 +69,7 @@ public class PaymentApiController {
         } catch (Exception e) {
             log.error("결제 승인 처리 중 오류 발생: orderId={}, error={}", orderId, e.getMessage());
             String encodedMessage = UriUtils.encode(e.getMessage(), StandardCharsets.UTF_8);
-            String reactFailUrl = "https://localhost:3000/payment/result/fail";
+            String reactFailUrl = appProperties.frontBaseUrl() + "/payment/result/fail";
             return "redirect:" + reactFailUrl
                     + "?orderId=" + orderId
                     + "&message=" + encodedMessage;
@@ -81,7 +83,7 @@ public class PaymentApiController {
         log.warn("결제 실패 리다이렉트 수신: orderId={}, code={}, message={}", orderId, code, message);
         paymentService.handlePaymentFailure(orderId, code, message);
         String encodedMessage = UriUtils.encode(message, StandardCharsets.UTF_8);
-        String reactFailUrl = "https://localhost:3000/payment/result/fail";
+        String reactFailUrl = appProperties.frontBaseUrl() + "/payment/result/fail";
         return "redirect:" + reactFailUrl + "?orderId=" + orderId + "&code=" + code + "&message=" + encodedMessage;
     }
 
