@@ -85,7 +85,7 @@ spring:
 # 🌐 운영환경 도메인 설정 (CloudFront CDN)
 app:
   base-url: ${BASE_URL:https://d123456789.cloudfront.net}  # 환경변수 우선, 기본값은 예시 도메인
-
+  front-base-url: ${FRONT_BASE_URL}
 # ☁️ AWS S3 관련 설정
 # 's3' 프로필이 활성화될 때 이 설정이 로드
 # 실제 AWS Access Key, Secret Key는 환경 변수 또는 보안 저장소에서 주입받아야 함
@@ -152,3 +152,7 @@ cors:
   allowed-origins:
     - "https://ticket-mon.o-r.kr"          # 프론트엔드 도메인
     - "https://api.ticket-mon.o-r.kr"      # API 도메인
+
+onesignal:
+  app-id: ${ONESIGNAL_APP_ID}        # 운영 환경에서 환경 변수로 관리
+  api-key: ${ONESIGNAL_API_KEY}
