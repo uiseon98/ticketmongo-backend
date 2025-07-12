@@ -9,6 +9,7 @@ import com.team03.ticketmon.concert.repository.ConcertRepository;
 import com.team03.ticketmon.concert.repository.ConcertSeatRepository;
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
+import com.team03.ticketmon._global.service.UrlConversionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,8 +32,6 @@ import java.util.stream.Collectors;
 /**
  * Concert Service
  * 콘서트 비즈니스 로직 처리
- *
- * 🔥 주요 변경사항: COMPLETED/CANCELLED 콘서트를 백엔드에서 필터링
  */
 @Slf4j
 @Service
@@ -42,12 +41,13 @@ public class ConcertService {
 
 	private final ConcertRepository concertRepository;
 	private final ConcertSeatRepository concertSeatRepository;
+	private final UrlConversionService urlConversionService;
 
-	// 🔥 상수 업데이트: COMPLETED, CANCELLED 제외한 활성 상태만
+	// COMPLETED, CANCELLED 제외한 활성 상태만
 	private static final List<ConcertStatus> ACTIVE_STATUSES = Arrays.asList(
 		ConcertStatus.SCHEDULED,
 		ConcertStatus.ON_SALE,
-		ConcertStatus.SOLD_OUT  // 🔥 SOLD_OUT은 포함 (매진이지만 여전히 정보 확인 가능)
+		ConcertStatus.SOLD_OUT  // SOLD_OUT은 포함 (매진이지만 여전히 정보 확인 가능)
 	);
 
 	// 페이징 관련 상수
@@ -57,7 +57,7 @@ public class ConcertService {
 	private static final int DEFAULT_SIZE = 20;
 
 	/**
-	 * 🔥 전체 콘서트 조회 (페이징 + 정렬) - COMPLETED/CANCELLED 제외
+	 * 전체 콘서트 조회 (페이징 + 정렬) - COMPLETED/CANCELLED 제외
 	 */
 	public Page<ConcertDTO> getAllConcerts(int page, int size, String sortBy, String sortDir) {
 		// 페이징 파라미터 검증
@@ -77,7 +77,7 @@ public class ConcertService {
 		log.info("🔍 콘서트 목록 조회 - page: {}, size: {}, sortBy: {}, sortDir: {}",
 			page, size, sortBy, sortDir);
 
-		// 🔥 정렬이 적용된 페이징으로 활성 콘서트 조회
+		// 정렬이 적용된 페이징으로 활성 콘서트 조회
 		return concertRepository.findActiveConcerts(pageable)
 			.map(this::convertToDTO);
 	}
@@ -123,10 +123,10 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 전체 콘서트 조회 (페이징 없음) - COMPLETED/CANCELLED 제외
+	 * 전체 콘서트 조회 (페이징 없음) - COMPLETED/CANCELLED 제외
 	 */
 	public List<ConcertDTO> getAllConcertsWithoutPaging() {
-		// 🔥 새로운 메서드 사용: 활성 콘서트만 조회
+		// 활성 콘서트만 조회
 		return concertRepository.findActiveConcerts()
 			.stream()
 			.map(this::convertToDTO)
@@ -149,18 +149,13 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 키워드로 콘서트 검색 - COMPLETED/CANCELLED 제외
-	 *
-	 * 🚨 캐시 주의사항:
-	 * - 캐시 키에 'active' 접두사 추가 고려
-	 * - 또는 기존 캐시 무효화 후 새로운 로직 적용
+	 * 키워드로 콘서트 검색 - COMPLETED/CANCELLED 제외
 	 */
 	@Cacheable(value = "searchResults", key = "#keyword")
 	public List<ConcertDTO> searchByKeyword(@Param("keyword") String keyword) {
 		log.info("🔍 [CACHE MISS] searchByKeyword 실행 - keyword: '{}' (DB 조회, COMPLETED/CANCELLED 제외)", keyword);
 		validateKeyword(keyword);
 
-		// 🔥 Repository에서 이미 COMPLETED/CANCELLED 제외하므로 추가 필터링 불필요
 		List<ConcertDTO> results = concertRepository
 			.findByKeyword(keyword.trim())
 			.stream()
@@ -172,12 +167,12 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 날짜 범위로 콘서트 필터링 - COMPLETED/CANCELLED 제외
+	 * 날짜 범위로 콘서트 필터링 - COMPLETED/CANCELLED 제외
 	 */
 	public List<ConcertDTO> filterByDateRange(LocalDate startDate, LocalDate endDate) {
 		validateDateRange(startDate, endDate);
 
-		// 🔥 Repository에서 이미 COMPLETED/CANCELLED 제외
+		// Repository에서 이미 COMPLETED/CANCELLED 제외
 		return concertRepository
 			.findByDateRange(startDate, endDate)
 			.stream()
@@ -186,12 +181,12 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 가격 범위로 콘서트 필터링 - COMPLETED/CANCELLED 제외
+	 * 가격 범위로 콘서트 필터링 - COMPLETED/CANCELLED 제외
 	 */
 	public List<ConcertDTO> filterByPriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
 		validatePriceRange(minPrice, maxPrice);
 
-		// 🔥 Repository에서 이미 COMPLETED/CANCELLED 제외
+		// Repository에서 이미 COMPLETED/CANCELLED 제외
 		return concertRepository
 			.findByPriceRange(minPrice, maxPrice)
 			.stream()
@@ -200,7 +195,7 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 날짜와 가격 범위로 콘서트 필터링 - COMPLETED/CANCELLED 제외
+	 * 날짜와 가격 범위로 콘서트 필터링 - COMPLETED/CANCELLED 제외
 	 */
 	public List<ConcertDTO> filterByDateAndPriceRange(
 		LocalDate startDate, LocalDate endDate,
@@ -209,7 +204,7 @@ public class ConcertService {
 		validateDateRange(startDate, endDate);
 		validatePriceRange(minPrice, maxPrice);
 
-		// 🔥 Repository에서 이미 COMPLETED/CANCELLED 제외
+		// Repository에서 이미 COMPLETED/CANCELLED 제외
 		return concertRepository
 			.findByDateAndPriceRange(startDate, endDate, minPrice, maxPrice)
 			.stream()
@@ -218,11 +213,11 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 필터 조건 적용 - COMPLETED/CANCELLED 제외
+	 * 필터 조건 적용 - COMPLETED/CANCELLED 제외
 	 */
 	public List<ConcertDTO> applyFilters(ConcertFilterDTO filterDTO) {
 		if (filterDTO == null) {
-			// 🔥 활성 콘서트만 반환
+			// 활성 콘서트만 반환
 			return getAllConcertsWithoutPaging();
 		}
 
@@ -241,7 +236,7 @@ public class ConcertService {
 		} else if (hasPriceFilter) {
 			return filterByPriceRange(priceMin, priceMax);
 		} else {
-			// 🔥 활성 콘서트만 반환
+			// 활성 콘서트만 반환
 			return getAllConcertsWithoutPaging();
 		}
 	}
@@ -273,20 +268,19 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 콘서트 검색 (DTO 기반) - COMPLETED/CANCELLED 제외
+	 * 콘서트 검색 (DTO 기반) - COMPLETED/CANCELLED 제외
 	 */
 	public List<ConcertDTO> searchConcerts(ConcertSearchDTO searchDTO) {
 		if (searchDTO == null || searchDTO.getKeyword() == null) {
 			throw new BusinessException(ErrorCode.SEARCH_CONDITION_REQUIRED);
 		}
 
-		// 🔥 자동으로 COMPLETED/CANCELLED 제외됨
+		// 자동으로 COMPLETED/CANCELLED 제외됨
 		return searchByKeyword(searchDTO.getKeyword());
 	}
 
 	/**
 	 * ID로 콘서트 조회 - 특정 ID 조회는 상태 무관하게 조회 (상세 페이지용)
-	 * 🚨 주의: 여기서는 COMPLETED/CANCELLED도 조회 가능 (직접 링크 접근 등)
 	 */
 	@Cacheable(value = "concertDetail", key = "#concertId")
 	public Optional<ConcertDTO> getConcertById(@Param("concertId") Long concertId) {
@@ -328,8 +322,7 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 콘서트 상세 캐시 무효화 + 검색 캐시 무효화
-	 *
+	 * 콘서트 상세 캐시 무효화 + 검색 캐시 무효화
 	 * 콘서트 상태가 변경될 때 (예: ON_SALE → COMPLETED) 호출하여
 	 * 목록에서 해당 콘서트가 사라지도록 캐시 갱신
 	 */
@@ -339,8 +332,7 @@ public class ConcertService {
 	}
 
 	/**
-	 * 🔥 검색 결과 캐시 전체 무효화
-	 *
+	 * 검색 결과 캐시 전체 무효화
 	 * 콘서트 상태 대량 변경 시 (스케줄러 등) 호출
 	 */
 	@CacheEvict(value = "searchResults", allEntries = true)
@@ -406,6 +398,7 @@ public class ConcertService {
 	 * Entity를 DTO로 변환
 	 */
 	private ConcertDTO convertToDTO(Concert concert) {
+		String convertedPosterUrl = urlConversionService.convertToCloudFrontUrl(concert.getPosterImageUrl());
 		return new ConcertDTO(
 			concert.getConcertId(),
 			concert.getTitle(),
@@ -423,7 +416,7 @@ public class ConcertService {
 			concert.getMinAge(),
 			concert.getMaxTicketsPerUser(),
 			concert.getStatus(),
-			concert.getPosterImageUrl(),
+			convertedPosterUrl,
 			concert.getAiSummary(),
 			concert.getCreatedAt(),
 			concert.getUpdatedAt()

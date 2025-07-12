@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.team03.ticketmon._global.service.UrlConversionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +43,8 @@ public class FileUploadController {
 	private final SellerConcertRepository sellerConcertRepository;
 	private final ConcertRepository concertRepository;
 	private final StoragePathProvider storagePathProvider;
+	private final UrlConversionService urlConversionService;
+
 	/**
 	 * ✅ 고유 파일명 생성 (환경별 폴더 구조 고려)
 	 * @param concertId 콘서트 ID
@@ -77,7 +80,8 @@ public class FileUploadController {
 
 			uploadedUrl = storageUploader.uploadFile(file, bucket, uniquePath); // 버킷 이름 전달
 
-			log.info("✅ 파일 업로드 성공 - URL: {}", uploadedUrl);
+			String cloudFrontUrl = urlConversionService.convertToCloudFrontUrl(uploadedUrl);
+			log.info("✅ 파일 업로드 성공 - 원본 URL: {}, CloudFront URL: {}", uploadedUrl, cloudFrontUrl);
 
 			// concertId가 있으면 DB에 URL 저장
 			if (concertId != null) {
@@ -97,13 +101,13 @@ public class FileUploadController {
 				}
 
 				Concert concert = concertOpt.get();
-				concert.setPosterImageUrl(uploadedUrl);
+				concert.setPosterImageUrl(cloudFrontUrl);
 				concertRepository.save(concert);
 
-				log.info("✅ DB에 포스터 URL 저장 완료 - concertId: {}, URL: {}", concertId, uploadedUrl);
+				log.info("✅ DB에 포스터 URL 저장 완료 - concertId: {}, URL: {}", concertId, cloudFrontUrl);
 			}
 
-			return ResponseEntity.ok(SuccessResponse.of("파일 업로드 성공", uploadedUrl));
+			return ResponseEntity.ok(SuccessResponse.of("파일 업로드 성공", cloudFrontUrl));
 
 		} catch (BusinessException e) {
 			if (uploadedUrl != null) {
@@ -356,8 +360,11 @@ public class FileUploadController {
 					));
 			}
 
+			String cloudFrontUrl = urlConversionService.convertToCloudFrontUrl(originalUrl);
+			log.info("🔄 URL 변환: {} -> {}", originalUrl, cloudFrontUrl);
+
 			// DB에서 원본 URL로 복구 (스토리지는 건드리지 않음)
-			int updatedRows = sellerConcertRepository.updatePosterImageUrl(concertId, sellerId, originalUrl);
+			int updatedRows = sellerConcertRepository.updatePosterImageUrl(concertId, sellerId, cloudFrontUrl);
 
 			if (updatedRows == 0) {
 				log.warn("⚠️ DB 업데이트 실패 - concertId: {}, sellerId: {}", concertId, sellerId);
@@ -368,12 +375,12 @@ public class FileUploadController {
 					));
 			}
 
-			log.info("✅ 원본 포스터 복구 완료 - concertId: {}, originalUrl: {}", concertId, originalUrl);
+			log.info("✅ 원본 포스터 복구 완료 - concertId: {}, cloudFrontUrl: {}", concertId, cloudFrontUrl);
 
 			return ResponseEntity.ok(Map.of(
 				"success", true,
 				"message", "원본 포스터로 복구되었습니다.",
-				"restoredUrl", originalUrl,
+				"restoredUrl", cloudFrontUrl,
 				"concertId", concertId
 			));
 
