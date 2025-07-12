@@ -64,4 +64,25 @@ public class SupabasePathProvider implements StoragePathProvider {
             return Optional.empty();
         }
     }
+
+    @Override
+    public String getCloudFrontImageUrl(String publicUrlFromSupabase) {
+        // Supabase 환경에서는 publicUrlFromSupabase 자체가 이미 최종적으로 접근 가능한 URL입니다.
+        // 따라서 이 URL을 그대로 반환하면 됩니다.
+        // 만약 null이거나 비어있는 경우, AppProperties의 baseUrl을 활용한 기본 이미지 경로를 반환합니다.
+
+        if (publicUrlFromSupabase == null || publicUrlFromSupabase.trim().isEmpty()) {
+            // 여러분의 AppProperties (baseUrl)에 Supabase의 기본 도메인(예: https://your-supabase-url.supabase.co)이
+            // 설정되어 있다면 그것을 사용하여 기본 이미지를 구성할 수 있습니다.
+            // 여기서는 임시로 Supabase Properties를 사용합니다.
+            // (주의: AppProperties는 S3PathProvider에서만 주입되므로, 여기서는 직접 사용하지 않습니다.
+            //  대신 SupabaseProperties의 url을 사용하여 구성하거나, 더미 URL을 반환합니다.)
+            String baseUrl = supabaseProperties.getUrl();
+            if (!baseUrl.endsWith("/")) {
+                baseUrl += "/";
+            }
+            return baseUrl + "storage/v1/object/public/" + supabaseProperties.getPosterBucket() + "/images/basic-poster-image.png"; // Supabase의 기본 이미지 경로
+        }
+        return publicUrlFromSupabase; // Supabase의 공개 URL을 그대로 반환
+    }
 }

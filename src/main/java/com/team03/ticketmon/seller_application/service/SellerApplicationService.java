@@ -1,5 +1,6 @@
 package com.team03.ticketmon.seller_application.service;
 
+import com.team03.ticketmon._global.service.UrlConversionService;
 import com.team03.ticketmon._global.util.FileValidator;
 import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import com.team03.ticketmon._global.util.StoragePathProvider; // StoragePathProvider 임포트
@@ -56,6 +57,7 @@ public class SellerApplicationService {
     private final SellerConcertRepository sellerConcertRepository;
     private final SellerApprovalHistoryRepository sellerApprovalHistoryRepository;
     private final StoragePathProvider storagePathProvider; // StoragePathProvider 주입
+    private final UrlConversionService urlConversionService;
 
 
     /**
@@ -263,8 +265,25 @@ public class SellerApplicationService {
     public ApplicantInformationResponseDTO getUserApplicantInfo(Long userId) {
         UserEntity userEntity = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자 정보를 찾을 수 없습니다."));
-        return ApplicantInformationResponseDTO.fromEntity(userEntity);
+
+        ApplicantInformationResponseDTO dto = ApplicantInformationResponseDTO.fromEntity(userEntity);
+
+        // 최신 판매자 신청서에서 업로드된 파일 URL 조회 및 변환
+        Optional<SellerApplication> latestApplication = sellerApplicationRepository
+                .findTopByUserAndStatusInOrderByCreatedAtDesc(
+                        userEntity,
+                        List.of(SUBMITTED, ACCEPTED, REJECTED, REVOKED, WITHDRAWN)
+                );
+
+        if (latestApplication.isPresent() && latestApplication.get().getUploadedFileUrl() != null) {
+            String originalUrl = latestApplication.get().getUploadedFileUrl();
+            String convertedUrl = urlConversionService.convertToCloudFrontUrl(originalUrl);
+            dto.setUploadedFileUrl(convertedUrl);
+        }
+
+        return dto;
     }
+
 
     /**
      * 판매자가 진행 중이거나 예정된 콘서트(ON_SALE, SCHEDULED)를 가지고 있는지 확인합니다.

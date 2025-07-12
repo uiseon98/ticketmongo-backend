@@ -25,15 +25,13 @@ public class S3Uploader implements StorageUploader {
     private final S3Client s3Client;
     private final StoragePathProvider storagePathProvider; // StoragePathProvider 주입
 
-    // StorageUploader 인터페이스의 `bucket` 파라미터를 직접 사용
-
     @Override
     public String uploadFile(MultipartFile file, String bucket, String path) {
         if (file.isEmpty()) {
             throw new StorageUploadException("업로드할 파일이 비어 있습니다.");
         }
 
-        String s3Key = path; // `path`는 이미 S3 키 형식으로 제공됩니다.
+        String s3Key = path; // `path`는 이미 S3 키 형식으로 제공
 
         try {
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
@@ -45,13 +43,17 @@ public class S3Uploader implements StorageUploader {
 
             s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
 
-            String publicUrl = String.format("https://%s.s3.%s.amazonaws.com/%s",
+            // 먼저 S3 직접 URL 생성
+            String s3DirectUrl = String.format("https://%s.s3.%s.amazonaws.com/%s",
                     bucket,
                     s3Client.serviceClientConfiguration().region().id(),
                     s3Key);
 
-            log.info("S3 파일 업로드 성공: url={}", publicUrl);
-            return publicUrl;
+            // CloudFront URL로 변환하여 반환
+            String cloudFrontUrl = storagePathProvider.getCloudFrontImageUrl(s3DirectUrl);
+
+            log.info("S3 파일 업로드 성공: s3DirectUrl={}, cloudFrontUrl={}", s3DirectUrl, cloudFrontUrl);
+            return cloudFrontUrl; // CloudFront URL 반환
 
         } catch (IOException e) {
             log.error("S3 파일 스트림 처리 중 오류 발생", e);
