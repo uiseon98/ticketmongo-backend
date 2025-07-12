@@ -124,6 +124,11 @@ public class S3PathProvider implements StoragePathProvider {
         String s3Key = s3DirectUrl.substring(s3DirectUrlPrefix.length());
 
         // AppProperties에서 가져온 baseUrl과 객체 키를 조합하여 CloudFront URL 생성
-        return appProperties.baseUrl() + "/" + s3Key;
+        String baseUrl = appProperties.baseUrl();
+        if (baseUrl.endsWith("/")) {
+            return baseUrl + s3Key;
+        } else {
+            return baseUrl + "/" + s3Key;
+        }
     }
 }
