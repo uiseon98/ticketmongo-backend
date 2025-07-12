@@ -40,7 +40,7 @@ public class WaitingQueueScheduler {
      * fixedDelay는 이전 작업이 성공적으로 끝난 후 10초를 기다리는 것을 의미.
      * 분산 락을 사용하여 여러 인스턴스 중 하나만 이 메서드를 실행하도록 보장.
      */
-    @Scheduled(fixedDelay = 10000)
+    @Scheduled(fixedDelay = 5100)
     public void execute() {
 
         // 분산 락 획득 시도
@@ -114,7 +114,7 @@ public class WaitingQueueScheduler {
         }
 
         // 추출된 사용자들에게 입장 허가 처리
-        admissionService.grantAccess(concertId, admittedUserIds, true);
+        admissionService.grantAccess(concertId, admittedUserIds, true, true);
 
         // ==================== 2. 알림 로직 실행 ====================
         RScoredSortedSet<Long> queue = queueRedisAdapter.getQueue(concertId);
