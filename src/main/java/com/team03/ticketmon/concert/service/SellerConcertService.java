@@ -2,6 +2,7 @@ package com.team03.ticketmon.concert.service;
 
 import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import com.team03.ticketmon._global.util.StoragePathProvider;
+import com.team03.ticketmon._global.service.UrlConversionService;
 import com.team03.ticketmon.concert.dto.*;
 import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
@@ -33,6 +34,7 @@ public class SellerConcertService {
 	private final ConcertService concertService;
 	private final StorageUploader storageUploader;
 	private final StoragePathProvider storagePathProvider;
+	private final UrlConversionService urlConversionService;
 
 	/**
 	 * 판매자 콘서트 목록 조회 (페이징)
@@ -86,14 +88,14 @@ public class SellerConcertService {
 			return convertToSellerDTO(savedConcert);
 
 		} catch (BusinessException e) {
-			// ✅ 콘서트 생성 실패 시 업로드된 이미지 롤백
+			// 콘서트 생성 실패 시 업로드된 이미지 롤백
 			if (posterImageUrl != null && !posterImageUrl.trim().isEmpty()) {
 				rollbackNewImage(posterImageUrl, null); // concertId는 아직 없음
 			}
 			throw e;
 
 		} catch (Exception e) {
-			// ✅ 예상치 못한 오류 시에도 롤백
+			// 예상치 못한 오류 시에도 롤백
 			if (posterImageUrl != null && !posterImageUrl.trim().isEmpty()) {
 				rollbackNewImage(posterImageUrl, null);
 			}
@@ -179,12 +181,12 @@ public class SellerConcertService {
 			return convertToSellerDTO(updatedConcert);
 
 		} catch (BusinessException e) {
-			// ✅ 수정 실패 시 새로 업로드된 이미지가 있다면 롤백
+			// 수정 실패 시 새로 업로드된 이미지가 있다면 롤백
 			handleImageRollback(updateDTO.getPosterImageUrl(), previousPosterUrl, concertId);
 			throw e; // 원본 예외 다시 던지기
 
 		} catch (Exception e) {
-			// ✅ 예상치 못한 오류 시에도 롤백
+			// 예상치 못한 오류 시에도 롤백
 			handleImageRollback(updateDTO.getPosterImageUrl(), previousPosterUrl, concertId);
 			log.error("❌ 콘서트 수정 중 예상치 못한 오류 - concertId: {}", concertId, e);
 			throw new BusinessException(ErrorCode.SERVER_ERROR, "콘서트 수정 중 오류가 발생했습니다");
@@ -222,7 +224,7 @@ public class SellerConcertService {
 			}
 
 		} catch (BusinessException e) {
-			// ✅ DB 업데이트 실패 시 새 이미지 롤백
+			// DB 업데이트 실패 시 새 이미지 롤백
 			rollbackNewImage(posterUrl, concertId);
 			throw e;
 		}
@@ -411,6 +413,8 @@ public class SellerConcertService {
 	 * Entity를 판매자 DTO로 변환
 	 */
 	private SellerConcertDTO convertToSellerDTO(Concert concert) {
+		String convertedPosterUrl = urlConversionService.convertToCloudFrontUrl(concert.getPosterImageUrl());
+
 		return SellerConcertDTO.builder()
 			.concertId(concert.getConcertId())
 			.title(concert.getTitle())
@@ -428,7 +432,7 @@ public class SellerConcertService {
 			.minAge(concert.getMinAge())
 			.maxTicketsPerUser(concert.getMaxTicketsPerUser())
 			.status(concert.getStatus())
-			.posterImageUrl(concert.getPosterImageUrl())
+			.posterImageUrl(convertedPosterUrl)
 			.aiSummary(concert.getAiSummary())
 			.createdAt(concert.getCreatedAt())
 			.updatedAt(concert.getUpdatedAt())
