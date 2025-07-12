@@ -107,7 +107,13 @@ public class S3PathProvider implements StoragePathProvider {
             // 이미 CloudFront URL이거나 다른 URL인 경우
             if (s3DirectUrl == null || s3DirectUrl.trim().isEmpty()) {
                 // null이거나 빈 URL인 경우 기본 이미지 반환
-                return appProperties.baseUrl() + "/images/basic-poster-image.png";
+                String baseUrl = appProperties.baseUrl();
+                String imagePath = "images/basic-poster-image.png";
+                if (baseUrl.endsWith("/")) {
+                    return baseUrl + imagePath;
+                } else {
+                    return baseUrl + "/" + imagePath;
+                }
             }
             // 이미 CloudFront URL이거나 다른 형태의 URL인 경우 그대로 반환
             return s3DirectUrl;
