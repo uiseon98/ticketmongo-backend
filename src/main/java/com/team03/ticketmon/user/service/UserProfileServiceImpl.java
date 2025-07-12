@@ -1,13 +1,14 @@
 package com.team03.ticketmon.user.service;
 
-import com.team03.ticketmon._global.config.supabase.SupabaseProperties;
+import com.team03.ticketmon._global.util.FileUtil;
 import com.team03.ticketmon._global.util.FileValidator;
-import com.team03.ticketmon._global.util.UploadPathUtil;
+import com.team03.ticketmon._global.util.StoragePathProvider;
 import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -15,27 +16,18 @@ import java.util.UUID;
 public class UserProfileServiceImpl implements UserProfileService {
 
     private final StorageUploader storageUploader;
-    private final SupabaseProperties supabaseProperties;
+    private final StoragePathProvider storagePathProvider;
 
     @Override
-    public String uploadProfileAndReturnUrl(MultipartFile profileImage) {
-        if (profileImage == null || profileImage.isEmpty()) {
-            return "";
-        }
+    public Optional<String> uploadProfileAndReturnUrl(MultipartFile profileImage) {
+        if (profileImage == null || profileImage.isEmpty())
+            return Optional.empty();
 
         FileValidator.validate(profileImage);
 
-        String fileUUID = UUID.randomUUID().toString();
-        String contentType = profileImage.getContentType();
-        if (contentType == null) {
-            throw new IllegalArgumentException("파일의 Content-Type을 확인할 수 없습니다.");
-        }
-
-        String fileExtension = UploadPathUtil.getExtensionFromMimeType(contentType);
-
-        String filePath = UploadPathUtil.getProfilePath(fileUUID, fileExtension);
-
-        return storageUploader.uploadFile(profileImage, supabaseProperties.getProfileBucket(), filePath);
+        String filePath = buildFilePath(profileImage);
+        String fileUrl = storageUploader.uploadFile(profileImage, storagePathProvider.getProfileBucketName(), filePath);
+        return Optional.of(fileUrl);
     }
 
     @Override
@@ -43,6 +35,13 @@ public class UserProfileServiceImpl implements UserProfileService {
         if (profileImageUrl == null || profileImageUrl.isEmpty())
             return;
 
-        storageUploader.deleteFile(supabaseProperties.getProfileBucket(), profileImageUrl);
+        storageUploader.deleteFile(storagePathProvider.getProfileBucketName(), profileImageUrl);
+    }
+
+    private String buildFilePath(MultipartFile file) {
+        String fileUUID = UUID.randomUUID().toString();
+        String contentType = file.getContentType();
+        String fileExtension = FileUtil.getExtensionFromMimeType(contentType);
+        return storagePathProvider.getProfilePath(fileUUID, fileExtension);
     }
 }

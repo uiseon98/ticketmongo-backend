@@ -27,9 +27,10 @@ public class ApplicantInformationResponseDTO {
     private String phone;    // 사용자 전화번호
     private UserEntity.Role role; // 사용자 역할 (USER, SELLER, ADMIN)
     private UserEntity.ApprovalStatus approvalStatus; // 판매자 승인 상태 (null, PENDING, APPROVED 등)
+    private String uploadedFileUrl; // 업로드된 파일 URL 필드 추가
 
     // UserEntity로부터 ApplicantInformationResponseDTO를 생성하는 팩토리 메서드
-    public static ApplicantInformationResponseDTO fromEntity(UserEntity user) { //
+    public static ApplicantInformationResponseDTO fromEntity(UserEntity user) {
         return ApplicantInformationResponseDTO.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -39,6 +40,7 @@ public class ApplicantInformationResponseDTO {
                 .phone(user.getPhone())
                 .role(user.getRole())
                 .approvalStatus(user.getApprovalStatus())
+                .uploadedFileUrl(null) // 기본값은 null, 서비스에서 별도로 설정
                 .build();
     }
 }

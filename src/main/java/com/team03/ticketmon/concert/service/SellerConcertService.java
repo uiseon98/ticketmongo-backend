@@ -1,5 +1,8 @@
 package com.team03.ticketmon.concert.service;
 
+import com.team03.ticketmon._global.util.uploader.StorageUploader;
+import com.team03.ticketmon._global.util.StoragePathProvider;
+import com.team03.ticketmon._global.service.UrlConversionService;
 import com.team03.ticketmon.concert.dto.*;
 import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.domain.enums.ConcertStatus;
@@ -7,6 +10,8 @@ import com.team03.ticketmon.concert.repository.SellerConcertRepository;
 import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -19,12 +24,17 @@ import java.util.stream.Collectors;
  * 판매자용 콘서트 비즈니스 로직 처리
  */
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class SellerConcertService {
 
 	private final SellerConcertRepository sellerConcertRepository;
+	private final ConcertService concertService;
+	private final StorageUploader storageUploader;
+	private final StoragePathProvider storagePathProvider;
+	private final UrlConversionService urlConversionService;
 
 	/**
 	 * 판매자 콘서트 목록 조회 (페이징)
@@ -64,14 +74,34 @@ public class SellerConcertService {
 	@Transactional
 	public SellerConcertDTO createConcert(Long sellerId, SellerConcertCreateDTO createDTO) {
 		validateSellerId(sellerId);
-
-		// DTO 유효성 추가 검증 (Controller 검증 보완)
 		validateCreateDTO(createDTO);
 
-		Concert concert = convertToEntity(createDTO, sellerId);
-		Concert savedConcert = sellerConcertRepository.save(concert);
+		String posterImageUrl = createDTO.getPosterImageUrl(); // 롤백용 백업
 
-		return convertToSellerDTO(savedConcert);
+		try {
+			Concert concert = convertToEntity(createDTO, sellerId);
+			Concert savedConcert = sellerConcertRepository.save(concert);
+
+			concertService.evictSearchCache();
+			log.info("✅ 콘서트 생성 완료 및 검색 캐시 무효화 - concertId: {}", savedConcert.getConcertId());
+
+			return convertToSellerDTO(savedConcert);
+
+		} catch (BusinessException e) {
+			// 콘서트 생성 실패 시 업로드된 이미지 롤백
+			if (posterImageUrl != null && !posterImageUrl.trim().isEmpty()) {
+				rollbackNewImage(posterImageUrl, null); // concertId는 아직 없음
+			}
+			throw e;
+
+		} catch (Exception e) {
+			// 예상치 못한 오류 시에도 롤백
+			if (posterImageUrl != null && !posterImageUrl.trim().isEmpty()) {
+				rollbackNewImage(posterImageUrl, null);
+			}
+			log.error("❌ 콘서트 생성 중 예상치 못한 오류", e);
+			throw new BusinessException(ErrorCode.SERVER_ERROR, "콘서트 생성 중 오류가 발생했습니다");
+		}
 	}
 
 	private void validateCreateDTO(SellerConcertCreateDTO createDTO) {
@@ -131,10 +161,36 @@ public class SellerConcertService {
 		Concert concert = sellerConcertRepository.findById(concertId)
 			.orElseThrow(() -> new BusinessException(ErrorCode.CONCERT_NOT_FOUND));
 
-		updateConcertEntity(concert, updateDTO);
+		String previousPosterUrl = concert.getPosterImageUrl();
 
-		Concert updatedConcert = sellerConcertRepository.save(concert);
-		return convertToSellerDTO(updatedConcert);
+		try {
+			// 콘서트 정보 업데이트
+			updateConcertEntity(concert, updateDTO);
+			Concert updatedConcert = sellerConcertRepository.save(concert);
+
+			// 캐시 무효화
+			concertService.evictConcertDetailCache(concertId);
+
+			if (updateDTO.getTitle() != null || updateDTO.getArtist() != null) {
+				concertService.evictSearchCache();
+				log.info("✅ 콘서트 수정 완료 및 검색 캐시 무효화 포함 - concertId: {}", concertId);
+			} else {
+				log.info("✅ 콘서트 수정 완료 및 상세 캐시 무효화 - concertId: {}", concertId);
+			}
+
+			return convertToSellerDTO(updatedConcert);
+
+		} catch (BusinessException e) {
+			// 수정 실패 시 새로 업로드된 이미지가 있다면 롤백
+			handleImageRollback(updateDTO.getPosterImageUrl(), previousPosterUrl, concertId);
+			throw e; // 원본 예외 다시 던지기
+
+		} catch (Exception e) {
+			// 예상치 못한 오류 시에도 롤백
+			handleImageRollback(updateDTO.getPosterImageUrl(), previousPosterUrl, concertId);
+			log.error("❌ 콘서트 수정 중 예상치 못한 오류 - concertId: {}", concertId, e);
+			throw new BusinessException(ErrorCode.SERVER_ERROR, "콘서트 수정 중 오류가 발생했습니다");
+		}
 	}
 
 	/**
@@ -155,16 +211,55 @@ public class SellerConcertService {
 			throw new BusinessException(ErrorCode.INVALID_POSTER_URL, "포스터 URL이 없습니다");
 		}
 
-		String trimmedUrl = posterUrl.trim();
-		if (trimmedUrl.isEmpty()) {
-			throw new BusinessException(ErrorCode.INVALID_POSTER_URL, "포스터 URL이 비어있습니다");
+		Concert concert = sellerConcertRepository.findById(concertId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.CONCERT_NOT_FOUND));
+		String previousPosterUrl = concert.getPosterImageUrl();
+
+		try {
+			int updatedRows = sellerConcertRepository
+				.updatePosterImageUrl(concertId, sellerId, posterUrl.trim());
+
+			if (updatedRows == 0) {
+				throw new BusinessException(ErrorCode.SELLER_PERMISSION_DENIED);
+			}
+
+		} catch (BusinessException e) {
+			// DB 업데이트 실패 시 새 이미지 롤백
+			rollbackNewImage(posterUrl, concertId);
+			throw e;
+		}
+	}
+
+	/**
+	 * 이미지 롤백 처리 (수정 실패 시)
+	 */
+	private void handleImageRollback(String newPosterUrl, String previousPosterUrl, Long concertId) {
+		// 새로운 이미지가 설정되었고, 이전 이미지와 다른 경우에만 롤백
+		if (newPosterUrl != null && !newPosterUrl.equals(previousPosterUrl)) {
+			rollbackNewImage(newPosterUrl, concertId);
+		}
+	}
+
+	/**
+	 * 새로 업로드된 이미지 롤백 (Supabase에서 삭제)
+	 */
+	private void rollbackNewImage(String newImageUrl, Long concertId) {
+		if (newImageUrl == null || newImageUrl.trim().isEmpty()) {
+			return;
 		}
 
-		int updatedRows = sellerConcertRepository
-			.updatePosterImageUrl(concertId, sellerId, trimmedUrl);
+		try {
+			log.info("🔄 콘서트 수정 실패로 인한 이미지 롤백 시작 - concertId: {}, URL: {}",
+				concertId, newImageUrl);
 
-		if (updatedRows == 0) {
-			throw new BusinessException(ErrorCode.SELLER_PERMISSION_DENIED);
+			String bucket = storagePathProvider.getPosterBucketName();
+			storageUploader.deleteFile(bucket, newImageUrl);
+
+			log.info("✅ 이미지 롤백 완료 - concertId: {}", concertId);
+
+		} catch (Exception rollbackException) {
+			log.error("❌ 이미지 롤백 실패 (수동 삭제 필요) - concertId: {}, URL: {}",
+				concertId, newImageUrl, rollbackException);
 		}
 	}
 
@@ -186,6 +281,10 @@ public class SellerConcertService {
 		concert.setStatus(ConcertStatus.CANCELLED);
 
 		sellerConcertRepository.save(concert);
+
+		concertService.evictConcertDetailCache(concertId);
+		concertService.evictSearchCache();
+		log.info("✅ 콘서트 취소 완료 및 모든 캐시 무효화 - concertId: {}", concertId);
 	}
 
 	/**
@@ -314,6 +413,8 @@ public class SellerConcertService {
 	 * Entity를 판매자 DTO로 변환
 	 */
 	private SellerConcertDTO convertToSellerDTO(Concert concert) {
+		String convertedPosterUrl = urlConversionService.convertToCloudFrontUrl(concert.getPosterImageUrl());
+
 		return SellerConcertDTO.builder()
 			.concertId(concert.getConcertId())
 			.title(concert.getTitle())
@@ -331,7 +432,7 @@ public class SellerConcertService {
 			.minAge(concert.getMinAge())
 			.maxTicketsPerUser(concert.getMaxTicketsPerUser())
 			.status(concert.getStatus())
-			.posterImageUrl(concert.getPosterImageUrl())
+			.posterImageUrl(convertedPosterUrl)
 			.aiSummary(concert.getAiSummary())
 			.createdAt(concert.getCreatedAt())
 			.updatedAt(concert.getUpdatedAt())
