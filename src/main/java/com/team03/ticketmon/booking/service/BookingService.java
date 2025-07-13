@@ -102,16 +102,17 @@ public class BookingService {
     }
 
     /**
-     * 예매와 관련된 내부 상태를 '취소'로 최종 처리
-     * 이 메서드는 외부 시스템(결제)과의 연동이 성공한 후 호출되어야 한다.
-     *
-     * @param booking 취소할 Booking 엔티티
+     * 기존 finalizeCancellation(Booking) 대신에,
+     * 내부에서 bookingId로 다시 로드하도록 변경합니다.
      */
     @Transactional
-    public void finalizeCancellation(Booking booking) {
-        // 1. 예매 상태를 CANCELED로 변경
-        booking.cancel();
+    public void finalizeCancellation(Long bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.BOOKING_NOT_FOUND,
+                        "존재하지 않는 예매 ID: " + bookingId));
 
+        // 이제 tickets 컬렉션이 session 안에서 안전하게 초기화됩니다.
         // [좌석 반환] 예매된 좌석들을 다시 'AVAILABLE' 상태로 변경하는 로직 추가
         booking.getTickets().forEach(ticket ->
                 seatStatusService.releaseSeat(
@@ -121,12 +122,15 @@ public class BookingService {
                 )
         );
 
+        booking.cancel();  // 또는 booking.setStatus(CANCELED);
+
         // 히스토리 테이블로 이관하는 로직 호출
         archiveBookingAndTickets(booking);
 
         bookingRepository.save(booking);
-        log.info("예매가 성공적으로 취소(삭제)되었습니다. Booking ID: {}", booking.getBookingId());
+        log.info("finalizeCancellationById 완료: bookingId={}", bookingId);
     }
+
 
     /**
      * 예매 취소 요청의 유효성을 검사
@@ -248,3 +252,28 @@ public class BookingService {
     }
 }
 
+// * 예매와 관련된 내부 상태를 '취소'로 최종 처리
+// * 이 메서드는 외부 시스템(결제)과의 연동이 성공한 후 호출되어야 한다.
+// *
+// * @param booking 취소할 Booking 엔티티
+// */
+//@Transactional
+//public void finalizeCancellation(Booking booking) {
+//    // 1. 예매 상태를 CANCELED로 변경
+//    booking.cancel();
+//
+//    // [좌석 반환] 예매된 좌석들을 다시 'AVAILABLE' 상태로 변경하는 로직 추가
+//    booking.getTickets().forEach(ticket ->
+//            seatStatusService.releaseSeat(
+//                    booking.getConcert().getConcertId(),
+//                    ticket.getConcertSeat().getConcertSeatId(),
+//                    booking.getUserId()
+//            )
+//    );
+//
+//    // 히스토리 테이블로 이관하는 로직 호출
+//    archiveBookingAndTickets(booking);
+//
+//    bookingRepository.save(booking);
+//    log.info("예매가 성공적으로 취소(삭제)되었습니다. Booking ID: {}", booking.getBookingId());
+//}
