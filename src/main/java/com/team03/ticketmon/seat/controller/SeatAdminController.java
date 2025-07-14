@@ -253,4 +253,62 @@ public class SeatAdminController {
                     .body(SuccessResponse.of("Warm-up 처리 이력 조회 중 오류가 발생했습니다.", null));
         }
     }
+
+    /**
+     * 캐시 → DB 백업 기능
+     * 예매 종료 시나 새벽 백업용으로 Redis 캐시 데이터를 DB에 영구 저장
+     */
+    @Operation(summary = "캐시 데이터 DB 백업",
+            description = "Redis 캐시에 있는 모든 좌석 상태를 DB에 백업합니다. 예매 종료 시나 새벽 백업용입니다.")
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/concerts/{concertId}/backup-to-db")
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> backupCacheToDb(
+            @Parameter(description = "콘서트 ID", example = "1")
+            @PathVariable Long concertId) {
+        
+        try {
+            log.info("캐시 → DB 백업 시작: concertId={}", concertId);
+            
+            Map<String, Object> result = seatStatusService.backupCacheToDatabase(concertId);
+            
+            log.info("캐시 → DB 백업 완료: concertId={}, processedSeats={}", 
+                concertId, result.get("processedSeats"));
+            
+            return ResponseEntity.ok(SuccessResponse.of("캐시 백업 완료", result));
+            
+        } catch (Exception e) {
+            log.error("캐시 → DB 백업 중 오류: concertId={}", concertId, e);
+            return ResponseEntity.status(500)
+                    .body(SuccessResponse.of("캐시 백업 실패: " + e.getMessage(), null));
+        }
+    }
+
+    /**
+     * DB 좌석 초기화 기능
+     * 예매 시작 전 모든 좌석을 AVAILABLE 상태로 초기화
+     */
+    @Operation(summary = "좌석 상태 초기화",
+            description = "DB의 모든 좌석을 AVAILABLE 상태로 초기화합니다. 예매 시작 전에 사용합니다.")
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/concerts/{concertId}/reset-to-available")
+    public ResponseEntity<SuccessResponse<Map<String, Object>>> resetSeatsToAvailable(
+            @Parameter(description = "콘서트 ID", example = "1")
+            @PathVariable Long concertId) {
+        
+        try {
+            log.info("좌석 상태 초기화 시작: concertId={}", concertId);
+            
+            Map<String, Object> result = seatStatusService.resetAllSeatsToAvailable(concertId);
+            
+            log.info("좌석 상태 초기화 완료: concertId={}, processedSeats={}", 
+                concertId, result.get("processedSeats"));
+            
+            return ResponseEntity.ok(SuccessResponse.of("좌석 초기화 완료", result));
+            
+        } catch (Exception e) {
+            log.error("좌석 상태 초기화 중 오류: concertId={}", concertId, e);
+            return ResponseEntity.status(500)
+                    .body(SuccessResponse.of("좌석 초기화 실패: " + e.getMessage(), null));
+        }
+    }
 }

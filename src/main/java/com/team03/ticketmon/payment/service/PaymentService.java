@@ -310,6 +310,24 @@ public class PaymentService {
                 if (payment.getStatus() == PaymentStatus.PENDING) {
                     payment.complete(payment.getPaymentKey(), LocalDateTime.now());
                     payment.getBooking().confirm();
+
+                    // 웹훅으로 결제 완료 후 예매의 모든 좌석을 BOOKED 상태로 변경
+                    payment.getBooking().getTickets().forEach(ticket -> {
+                        try {
+                            seatStatusService.bookSeat(
+                                payment.getBooking().getConcert().getConcertId(),
+                                ticket.getConcertSeat().getConcertSeatId()
+                            );
+                            log.debug("웹훅: 좌석 상태 BOOKED로 변경 완료: concertId={}, seatId={}",
+                                payment.getBooking().getConcert().getConcertId(),
+                                ticket.getConcertSeat().getConcertSeatId());
+                        } catch (Exception e) {
+                            log.error("웹훅: 좌석 상태 BOOKED 변경 실패: concertId={}, seatId={}, error={}",
+                                payment.getBooking().getConcert().getConcertId(),
+                                ticket.getConcertSeat().getConcertSeatId(), e.getMessage());
+                        }
+                    });
+
                     log.info("웹훅: 결제 {} 상태 PENDING -> DONE 업데이트 완료", orderId);
                 } else {
                     log.warn("웹훅: 잘못된 상태 전이 시도(DONE). orderId={}, 현재상태={}", orderId, payment.getStatus());
