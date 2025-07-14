@@ -5,6 +5,7 @@ import com.team03.ticketmon.seat.config.SeatProperties;
 import com.team03.ticketmon.seat.domain.SeatStatus;
 import com.team03.ticketmon.seat.domain.SeatStatus.SeatStatusEnum;
 import com.team03.ticketmon.seat.exception.SeatReservationException;
+import com.team03.ticketmon.concert.repository.ConcertSeatRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
@@ -37,6 +38,7 @@ public class SeatStatusService {
     private final SeatStatusEventPublisher eventPublisher;
     private final SeatCacheInitService seatCacheInitService; // ✅ 추가된 필드
     private final SeatProperties seatProperties;
+    private final ConcertSeatRepository concertSeatRepository;
 
     // Redis 키 패턴
     private static final String SEAT_STATUS_KEY_PREFIX = RedisKeyGenerator.SEAT_STATUS_KEY_PREFIX;
@@ -494,6 +496,84 @@ public class SeatStatusService {
                     "error", "상태 조회 실패",
                     "lastChecked", LocalDateTime.now()
             );
+        }
+    }
+
+    /**
+     * 캐시 → DB 백업 기능
+     * Redis 캐시에 있는 좌석 상태를 간단히 로깅만 수행
+     * (DB 구조상 캐시 상태를 직접 반영할 수 없음)
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> backupCacheToDatabase(Long concertId) {
+        try {
+            log.info("캐시 상태 확인 시작: concertId={}", concertId);
+            
+            // Redis에서 모든 좌석 상태 조회
+            RMap<String, SeatStatus> seatMap = redissonClient.getMap(SEAT_STATUS_KEY_PREFIX + concertId);
+            Collection<SeatStatus> allSeats = seatMap.readAllValues();
+            
+            if (allSeats.isEmpty()) {
+                log.warn("확인할 캐시 데이터가 없습니다: concertId={}", concertId);
+                return Map.of(
+                    "message", "캐시 데이터 없음",
+                    "processedSeats", 0,
+                    "timestamp", LocalDateTime.now()
+                );
+            }
+            
+            // 상태별 통계 생성
+            Map<SeatStatusEnum, Long> statusCounts = allSeats.stream()
+                .collect(Collectors.groupingBy(
+                    SeatStatus::getStatus,
+                    Collectors.counting()
+                ));
+            
+            log.info("캐시 상태 확인 완료: concertId={}, totalSeats={}, breakdown={}", 
+                concertId, allSeats.size(), statusCounts);
+            
+            return Map.of(
+                "message", "캐시 상태 확인 완료",
+                "processedSeats", allSeats.size(),
+                "statusBreakdown", statusCounts.entrySet().stream()
+                    .collect(Collectors.toMap(
+                        entry -> entry.getKey().toString(),
+                        entry -> entry.getValue().intValue()
+                    )),
+                "note", "DB 구조상 캐시 상태를 직접 백업할 수 없습니다. 상태 확인만 수행됩니다.",
+                "timestamp", LocalDateTime.now()
+            );
+            
+        } catch (Exception e) {
+            log.error("캐시 상태 확인 중 오류: concertId={}", concertId, e);
+            throw new RuntimeException("상태 확인 실패: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * DB 좌석 초기화 기능
+     * 모든 좌석을 AVAILABLE 상태로 초기화
+     */
+    @Transactional
+    public Map<String, Object> resetAllSeatsToAvailable(Long concertId) {
+        try {
+            log.info("좌석 상태 초기화 시작: concertId={}", concertId);
+            
+            // DB에서 모든 좌석을 AVAILABLE로 업데이트
+            int updatedCount = concertSeatRepository.bulkUpdateAllSeatsToAvailable(concertId);
+            
+            log.info("좌석 상태 초기화 완료: concertId={}, updatedSeats={}", concertId, updatedCount);
+            
+            return Map.of(
+                "message", "초기화 완료",
+                "processedSeats", updatedCount,
+                "newStatus", "AVAILABLE",
+                "timestamp", LocalDateTime.now()
+            );
+            
+        } catch (Exception e) {
+            log.error("좌석 상태 초기화 중 오류: concertId={}", concertId, e);
+            throw new RuntimeException("초기화 실패: " + e.getMessage(), e);
         }
     }
 }
