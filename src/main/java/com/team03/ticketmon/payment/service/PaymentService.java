@@ -16,6 +16,7 @@ import com.team03.ticketmon.payment.dto.PaymentExecutionResponse;
 import com.team03.ticketmon.payment.dto.PaymentHistoryDto;
 import com.team03.ticketmon.payment.repository.PaymentCancelHistoryRepository;
 import com.team03.ticketmon.payment.repository.PaymentRepository;
+import com.team03.ticketmon.seat.service.SeatStatusService;
 import com.team03.ticketmon.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.function.Tuples;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -55,6 +57,7 @@ public class PaymentService {
     private final AppProperties appProperties;
     private final WebClient webClient;
     private final UserRepository userRepository;
+    private final SeatStatusService seatStatusService;
 
     @Transactional
     public PaymentExecutionResponse initiatePayment(Booking booking, Long currentUserId) {
@@ -111,60 +114,85 @@ public class PaymentService {
     }
 
 
-    // 신규 async 버전
     public Mono<Void> confirmPayment(PaymentConfirmRequest req) {
+        // 1) DB에서 Payment 로드 & 검증
         return Mono.fromCallable(() ->
                         paymentRepository.findByOrderId(req.getOrderId())
                                 .orElseThrow(() -> new BusinessException(
-                                        ErrorCode.RESOURCE_NOT_FOUND, "존재하지 않는 주문 ID: " + req.getOrderId()))
+                                        ErrorCode.RESOURCE_NOT_FOUND,
+                                        "존재하지 않는 주문 ID: " + req.getOrderId()))
                 )
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(payment -> {
-                    // 1) 상태 검증
+                    // 상태 검증
                     if (payment.getStatus() != PaymentStatus.PENDING) {
                         return Mono.error(new BusinessException(
-                                ErrorCode.ALREADY_PROCESSED_PAYMENT, "이미 처리된 결제입니다."));
+                                ErrorCode.ALREADY_PROCESSED_PAYMENT,
+                                "이미 처리된 결제입니다."));
                     }
+                    // 금액 검증
                     if (payment.getAmount().compareTo(req.getAmount()) != 0) {
+                        payment.fail();
                         return Mono.error(new BusinessException(
-                                ErrorCode.PAYMENT_AMOUNT_MISMATCH, "주문 금액이 일치하지 않습니다."));
+                                ErrorCode.PAYMENT_AMOUNT_MISMATCH,
+                                "결제 금액이 일치하지 않습니다."));
                     }
                     return Mono.just(payment);
                 })
-                // 2) Toss Payments 승인 API 호출 (기존 private helper 사용)
+                // 2) Toss 승인 API 호출
                 .flatMap(payment -> {
-                    String raw = tossPaymentsProperties.secretKey() + ":";
+                    String rawKey = tossPaymentsProperties.secretKey() + ":";
                     String encodedKey = Base64.getEncoder()
-                            .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
-                    // 기존 callTossConfirmApi(helper) 메서드 활용 (idempotencyKey는 orderId)
-                    return callTossConfirmApi(req, encodedKey, req.getOrderId());
+                            .encodeToString(rawKey.getBytes(StandardCharsets.UTF_8));
+                    return callTossConfirmApi(req, encodedKey, req.getOrderId())
+                            .map(resp -> Tuples.of(payment, resp));
                 })
-                // 3) 승인 응답 처리 후 저장
-                .flatMap(respMap -> {
-                    LocalDateTime approvedAt = parseDateTime(respMap.get("approvedAt"));
+                // 3) 응답 검사 & 저장
+                .flatMap(tuple -> {
+                    Payment payment = tuple.getT1();
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> resp = (Map<String, Object>) tuple.getT2();
 
+                    // Toss 응답 검증
+                    String status = (String) resp.get("status");
+                    if (!"DONE".equals(status)) {
+                        payment.fail();
+                        return Mono.error(new BusinessException(
+                                ErrorCode.PAYMENT_VALIDATION_FAILED,
+                                "Toss 승인 상태가 DONE이 아닙니다: " + status));
+                    }
+
+                    // 파싱
+                    LocalDateTime approvedAt = parseDateTime(resp.get("approvedAt"));
+
+                    // 4) 영속성 작업
                     return Mono.fromRunnable(() -> {
-                        // 1) Payment 상태 업데이트
-                        Payment payment = paymentRepository
-                                .findByOrderId(req.getOrderId())
-                                .orElseThrow(() -> new BusinessException(
-                                        ErrorCode.RESOURCE_NOT_FOUND, "존재하지 않는 주문 ID: " + req.getOrderId()));
-                        payment.complete(req.getPaymentKey(), approvedAt);
-                        paymentRepository.save(payment);
+                                // 결제 상태 갱신
+                                payment.complete(req.getPaymentKey(), approvedAt);
+                                paymentRepository.save(payment);
 
-                        // 2) Booking을 다시 로드해서 상태 변경
-                        Long bookingId = payment.getBooking().getBookingId();
-                        Booking booking = bookingRepository.findById(bookingId)
-                                .orElseThrow(() -> new BusinessException(
-                                        ErrorCode.RESOURCE_NOT_FOUND, "존재하지 않는 예매 ID: " + bookingId));
-                        booking.confirm();
-                        bookingRepository.save(booking);
+                                // 예매 상태 갱신
+                                Booking booking = payment.getBooking();
+                                booking.confirm();
+                                bookingRepository.save(booking);
 
-                    }).subscribeOn(Schedulers.boundedElastic());
-
+                                // 좌석 상태 BOOKED로 전환
+                                Long concertId = booking.getConcert().getConcertId();
+                                booking.getTickets().forEach(ticket -> {
+                                    try {
+                                        seatStatusService.bookSeat(
+                                                concertId,
+                                                ticket.getConcertSeat().getConcertSeatId()
+                                        );
+                                    } catch (Exception e) {
+                                        log.error("좌석 BOOKED 처리 실패: ticketId={}, error={}",
+                                                ticket.getTicketId(), e.getMessage(), e);
+                                    }
+                                });
+                            })
+                            .subscribeOn(Schedulers.boundedElastic());
                 })
-                .then();
-
+                .then();  // Mono<Void> 반환
     }
 
     @Transactional
