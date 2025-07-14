@@ -114,6 +114,7 @@ public class PaymentService {
     }
 
 
+    @Transactional
     public Mono<Void> confirmPayment(PaymentConfirmRequest req) {
         // 1) DB에서 Payment 로드 & 검증
         return Mono.fromCallable(() ->
@@ -171,8 +172,14 @@ public class PaymentService {
                                 payment.complete(req.getPaymentKey(), approvedAt);
                                 paymentRepository.save(payment);
 
-                                // 예매 상태 갱신
-                                Booking booking = payment.getBooking();
+                                // 예매 상태 갱신 (concert + tickets 함께 로딩)
+                                Long bookingId = payment.getBooking().getBookingId();
+                                Booking booking = bookingRepository
+                                        .findWithConcertAndTicketsById(bookingId)
+                                        .orElseThrow(() -> new BusinessException(
+                                                ErrorCode.RESOURCE_NOT_FOUND,
+                                                "예매를 찾을 수 없습니다: " + bookingId
+                                        ));
                                 booking.confirm();
                                 bookingRepository.save(booking);
 
@@ -206,6 +213,7 @@ public class PaymentService {
         });
     }
 
+    @Transactional
     public Mono<Void> cancelPayment(Booking booking,
                                     PaymentCancelRequest cancelRequest,
                                     Long currentUserId) {
@@ -315,16 +323,16 @@ public class PaymentService {
                     payment.getBooking().getTickets().forEach(ticket -> {
                         try {
                             seatStatusService.bookSeat(
-                                payment.getBooking().getConcert().getConcertId(),
-                                ticket.getConcertSeat().getConcertSeatId()
+                                    payment.getBooking().getConcert().getConcertId(),
+                                    ticket.getConcertSeat().getConcertSeatId()
                             );
                             log.debug("웹훅: 좌석 상태 BOOKED로 변경 완료: concertId={}, seatId={}",
-                                payment.getBooking().getConcert().getConcertId(),
-                                ticket.getConcertSeat().getConcertSeatId());
+                                    payment.getBooking().getConcert().getConcertId(),
+                                    ticket.getConcertSeat().getConcertSeatId());
                         } catch (Exception e) {
                             log.error("웹훅: 좌석 상태 BOOKED 변경 실패: concertId={}, seatId={}, error={}",
-                                payment.getBooking().getConcert().getConcertId(),
-                                ticket.getConcertSeat().getConcertSeatId(), e.getMessage());
+                                    payment.getBooking().getConcert().getConcertId(),
+                                    ticket.getConcertSeat().getConcertSeatId(), e.getMessage());
                         }
                     });
 
