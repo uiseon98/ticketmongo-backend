@@ -27,13 +27,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String accessToken = jwtTokenProvider.getTokenFromCookies(jwtTokenProvider.CATEGORY_ACCESS, request);
         String refreshToken = jwtTokenProvider.getTokenFromCookies(jwtTokenProvider.CATEGORY_REFRESH, request);
 
-        if (isEmpty(refreshToken)) {
-            if (!isEmpty(accessToken)) {
-                // Refresh Token이 없고 Access Token만 남아 있으면 삭제
-                ResponseCookie accessCookie = cookieUtil.deleteCookie(jwtTokenProvider.CATEGORY_ACCESS);
-                response.addHeader("Set-Cookie", accessCookie.toString());
-            }
+        boolean noOrExpiredRefresh =
+                (refreshToken == null || jwtTokenProvider.isTokenExpired(refreshToken));
 
+        log.debug("[JWT Filter] accessToken={} expired? {}",
+                accessToken, accessToken == null ? "n/a" : jwtTokenProvider.isTokenExpired(accessToken));
+        log.debug("[JWT Filter] refreshToken={} expired? {}",
+                refreshToken, refreshToken == null ? "n/a" : jwtTokenProvider.isTokenExpired(refreshToken));
+        log.debug("[JWT Filter] noOrExpiredRefresh={}", noOrExpiredRefresh);
+
+
+        // Access만 유효하면 인증 컨텍스트 설정
+        if (!isEmpty(accessToken) && !jwtTokenProvider.isTokenExpired(accessToken)) {
+            setAuthenticationContext(accessToken);
+        }
+        if (noOrExpiredRefresh) {
+            // Refresh 재발급 시도 없이 그냥 체인 계속
             filterChain.doFilter(request, response);
             return;
         }
@@ -103,4 +112,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private boolean isEmpty(String str) {
         return str == null || str.isEmpty();
     }
+
+    /**
+     * Async Dispatch(=DeferredResult 재디스패치) 시에도 필터를 실행하도록 허용
+     */
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
 }
