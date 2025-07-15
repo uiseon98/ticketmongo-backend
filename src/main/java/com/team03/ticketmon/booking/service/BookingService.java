@@ -10,6 +10,7 @@ import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.domain.ConcertSeat;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
 import com.team03.ticketmon.concert.repository.ConcertSeatRepository;
+import com.team03.ticketmon.seat.exception.SeatReservationException;
 import com.team03.ticketmon.seat.service.SeatStatusService;
 import com.team03.ticketmon.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
@@ -112,16 +113,22 @@ public class BookingService {
                         ErrorCode.BOOKING_NOT_FOUND,
                         "존재하지 않는 예매 ID: " + bookingId));
 
+        Long concertId = booking.getConcert().getConcertId();
+        
         // 이제 tickets 컬렉션이 session 안에서 안전하게 초기화됩니다.
         // [좌석 반환] 예매된 좌석들을 다시 'AVAILABLE' 상태로 변경하는 로직 추가
-        booking.getTickets().forEach(ticket ->
-                seatStatusService.releaseSeat(
-                        booking.getConcert().getConcertId(),
+        booking.getTickets().forEach(ticket -> {
+            try {
+                Long seatId = ticket.getConcertSeat().getConcertSeatId();
+                seatStatusService.releaseSeat(concertId, seatId, booking.getUserId());
+            } catch (SeatReservationException e) {
+                log.warn("[Cancel] 좌석 해제 스킵: seatId={}, 이유={}",
                         ticket.getConcertSeat().getConcertSeatId(),
-                        booking.getUserId()
-                )
-        );
+                        e.getMessage());
+            }
+        });
 
+        // 예약 상태를 반드시 CANCELED로 변경하고 저장
         booking.cancel();  // 또는 booking.setStatus(CANCELED);
 
         // 히스토리 테이블로 이관하는 로직 호출
