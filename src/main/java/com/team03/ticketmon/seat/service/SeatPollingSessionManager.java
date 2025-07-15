@@ -80,11 +80,7 @@ public class SeatPollingSessionManager {
             return null;
         }
 
-        // 사용자별 활성 세션 제한 확인 (1개로 제한)
-        if (userId != null && hasActiveUserSession(userId, concertId)) {
-            log.warn("사용자 활성 세션 이미 존재: userId={}, concertId={}", userId, concertId);
-            return "USER_SESSION_EXISTS"; // 특별한 반환값으로 구분
-        }
+        // 사용자별 활성 세션 제한 해제 (다중 세션 허용)
 
         // 세션 수 제한 확인
         int maxSessions = seatProperties.getSession().getMaxSessionsPerConcert();
@@ -327,20 +323,21 @@ public class SeatPollingSessionManager {
      * 이벤트 응답 데이터 구성 (개선된 버전)
      */
     private Map<String, Object> createEventResponse(SeatUpdateEventDTO event) {
-        return Map.of(
-                "hasUpdate", true,
-                "updateTime", event.timestamp(),
-                "eventType", "SEAT_STATUS_CHANGE",
-                "seatUpdates", List.of(
-                        Map.of(
-                                "seatId", event.seatId(),
-                                "status", event.status().toString(),
-                                "userId", event.userId(),
-                                "seatInfo", event.seatInfo()
-                        )
-                ),
-                "serverTime", LocalDateTime.now()
-        );
+        Map<String, Object> response = new HashMap<>();
+        response.put("hasUpdate", true);
+        response.put("updateTime", event.timestamp());
+        response.put("eventType", "SEAT_STATUS_CHANGE");
+        
+        Map<String, Object> seatUpdate = new HashMap<>();
+        seatUpdate.put("seatId", event.seatId());
+        seatUpdate.put("status", event.status().toString());
+        seatUpdate.put("userId", event.userId()); // null 값 허용
+        seatUpdate.put("seatInfo", event.seatInfo());
+        
+        response.put("seatUpdates", List.of(seatUpdate));
+        response.put("serverTime", LocalDateTime.now());
+        
+        return response;
     }
 
     /**
