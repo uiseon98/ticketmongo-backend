@@ -45,7 +45,7 @@ public class AdminSellerService {
      * @return 대기 중인 판매자 신청 목록 DTO 리스트
      */
     public List<AdminSellerApplicationListResponseDTO> getPendingSellerApplications() {
-        List<SellerApplication> pendingApplications = sellerApplicationRepository.findByStatus(SellerApplicationStatus.SUBMITTED);
+        List<SellerApplication> pendingApplications = sellerApplicationRepository.findByStatusWithUser(SellerApplicationStatus.SUBMITTED);
 
         return pendingApplications.stream()
                 .map(AdminSellerApplicationListResponseDTO::fromEntity)
@@ -224,22 +224,14 @@ public class AdminSellerService {
      * @return 현재 판매자(Role.SELLER)인 유저 목록 DTO 리스트
      */
     public List<AdminSellerApplicationListResponseDTO> getCurrentSellers() {
-        // Role이 SELLER인 모든 UserEntity를 조회
-        List<UserEntity> sellers = userRepository.findByRole(Role.SELLER);
+        // 1. 상태가 ACCEPTED (승인됨)인 SellerApplication들을 조회
+        // UserEntity 정보를 함께 가져오기 위해 Fetch Join을 사용 (N+1 문제 방지)
+        // SellerApplicationRepository에 findByStatusWithUser 메서드가 필요
+        List<SellerApplication> approvedApplications = sellerApplicationRepository.findByStatusWithUser(SellerApplicationStatus.ACCEPTED);
 
-        // UserEntity 리스트를 AdminSellerApplicationListResponseDTO 리스트로 변환하여 반환
-        // 이 DTO는 신청서 정보와 User 정보를 함께 담도록 설계되었으므로,
-        // 여기서는 User 정보를 기반으로 DTO를 구성하거나, 별도의 더 경량화된 DTO를 사용할 수 있음
-        // 현재는 AdminSellerApplicationListResponseDTO를 재활용하여 User 정보만 채워서 반환
-        return sellers.stream()
-                .map(sellerUser -> AdminSellerApplicationListResponseDTO.builder()
-                        .userId(sellerUser.getId())
-                        .username(sellerUser.getUsername())
-                        .userNickname(sellerUser.getNickname())
-                        // 판매자 목록 조회이므로 companyName, businessNumber 등은 일반적으로 포함되지 않지만,
-                        // 필요하다면 UserEntity나 SellerApplication에서 추가 조회하여 채울 수 있음
-                        // 여기서는 일단 UserEntity가 가진 정보만 DTO에 매핑
-                        .build())
+        // 2. 조회된 SellerApplication 리스트를 DTO로 변환하여 반환
+        return approvedApplications.stream()
+                .map(AdminSellerApplicationListResponseDTO::fromEntity) // DTO의 팩토리 메서드 사용
                 .collect(Collectors.toList());
     }
 
