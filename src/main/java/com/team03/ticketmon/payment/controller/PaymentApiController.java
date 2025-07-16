@@ -1,6 +1,7 @@
 package com.team03.ticketmon.payment.controller;
 
 import com.team03.ticketmon._global.config.AppProperties;
+import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon.auth.jwt.CustomUserDetails;
 import com.team03.ticketmon.payment.dto.PaymentConfirmRequest;
 import com.team03.ticketmon.payment.dto.PaymentHistoryDto;
@@ -20,71 +21,90 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.context.request.async.DeferredResult;
 import org.springframework.web.util.UriUtils;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-@Tag(name = "Payment API", description = "결제 콜백, 내역 조회 관련 API")
-@Slf4j
+@Tag(name = "Payment API", description = "결제 관련 API")
 @Controller
+@Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/payments")
 public class PaymentApiController {
 
     private final PaymentService paymentService;
     private final AppProperties appProperties;
+    private static final long TIMEOUT_MS = 10_000L;
 
     // ==========================================================================================
-    // 💡 [중요] /request, /pending-bookings, /cancel API는 BookingController로 기능이 이전/통합되었으므로 삭제합니다.
+    // /request, /pending-bookings, /cancel API는 BookingController로 기능이 이전/통합되었으므로 삭제합니다.
     // ==========================================================================================
 
-    @Operation(summary = "결제 성공 콜백", description = "토스페이먼츠 결제 성공 시 리다이렉트되는 API (클라이언트 직접 호출 X)", hidden = true)
+    @Operation(
+            summary = "결제 성공 콜백 (non-blocking)",
+            description = "토스페이먼츠가 리다이렉트하는 결제 성공 URL을 비동기로 처리합니다.",
+            hidden = true
+    )
     @GetMapping("/success")
-    public String handlePaymentSuccess(
+    public DeferredResult<String> handlePaymentSuccess(
             @RequestParam String paymentKey,
             @RequestParam String orderId,
             @RequestParam BigDecimal amount
     ) {
-        log.info("결제 성공 리다이렉트 수신: paymentKey={}, orderId={}", paymentKey, orderId);
-        try {
-            // 1) 내부 승인 로직
-            PaymentConfirmRequest confirmRequest = PaymentConfirmRequest.builder()
-                    .paymentKey(paymentKey)
-                    .orderId(orderId)
-                    .amount(amount)
-                    .build();
-            paymentService.confirmPayment(confirmRequest);
+        log.info("결제 성공 콜백 수신: paymentKey={}, orderId={}, amount={}",
+                paymentKey, orderId, amount);
 
-            // 2) 예매번호 조회
-            String bookingNumber = paymentService.getBookingNumberByOrderId(orderId);
+        // 1) DeferredResult 생성 (서블릿 쓰레드 즉시 반환)
+        DeferredResult<String> dr = new DeferredResult<>(TIMEOUT_MS);
 
-            // 3) React 성공 페이지로 리다이렉트 (orderId 와 bookingNumber 포함)
-            String reactSuccessUrl = appProperties.frontBaseUrl() + "/payment/result/success";
-            return "redirect:" + reactSuccessUrl
-                    + "?orderId=" + orderId
-                    + "&bookingNumber=" + bookingNumber;
+        // 2) 기존 DTO 빌드
+        PaymentConfirmRequest confirmRequest = PaymentConfirmRequest.builder()
+                .paymentKey(paymentKey)
+                .orderId(orderId)
+                .amount(amount)
+                .build();
 
-        } catch (Exception e) {
-            log.error("결제 승인 처리 중 오류 발생: orderId={}, error={}", orderId, e.getMessage());
-            String encodedMessage = UriUtils.encode(e.getMessage(), StandardCharsets.UTF_8);
-            String reactFailUrl = appProperties.frontBaseUrl() + "/payment/result/fail";
-            return "redirect:" + reactFailUrl
-                    + "?orderId=" + orderId
-                    + "&message=" + encodedMessage;
-        }
+        // 3) Reactive 흐름으로 기존 비즈니스 로직 실행
+        paymentService.confirmPayment(confirmRequest)
+                // 4) 성공 콜백: DB에서 bookingNumber 조회 → redirect URL 생성
+                .doOnSuccess(v -> {
+                    String bookingNumber = paymentService.getBookingNumberByOrderId(orderId);
+                    String base = appProperties.frontBaseUrl() + "/payment/result/success";
+                    String url = base +
+                            "?orderId=" + UriUtils.encode(orderId, StandardCharsets.UTF_8) +
+                            "&bookingNumber=" + UriUtils.encode(bookingNumber, StandardCharsets.UTF_8);
+                    dr.setResult("redirect:" + url);
+                })
+                // 5) 에러 콜백: 실패 페이지로 redirect
+                .doOnError(e -> {
+                    log.error("결제 승인 처리 중 오류: {}", e.getMessage(), e);
+                    String msg = (e instanceof BusinessException)
+                            ? e.getMessage()
+                            : "결제 처리 중 오류가 발생했습니다.";
+                    String failBase = appProperties.frontBaseUrl() + "/payment/result/fail";
+                    String url = failBase +
+                            "?orderId=" + UriUtils.encode(orderId, StandardCharsets.UTF_8) +
+                            "&message=" + UriUtils.encode(msg, StandardCharsets.UTF_8);
+                    dr.setResult("redirect:" + url);
+                })
+                // 6) 실제 구독 시작
+                .subscribe();
+
+        return dr;
     }
 
-    @Operation(summary = "결제 실패 콜백", description = "토스페이먼츠 결제 실패 시 리다이렉트되는 API (클라이언트 직접 호출 X)", hidden = true)
+    @Operation(summary = "결제 실패 콜백", description = "토스페이먼츠 결제 실패 시 리다이렉트되는 API", hidden = true)
     @GetMapping("/fail")
     public String handlePaymentFail(@RequestParam String code, @RequestParam String message,
                                     @RequestParam String orderId) {
         log.warn("결제 실패 리다이렉트 수신: orderId={}, code={}, message={}", orderId, code, message);
         paymentService.handlePaymentFailure(orderId, code, message);
         String encodedMessage = UriUtils.encode(message, StandardCharsets.UTF_8);
-        String reactFailUrl = appProperties.frontBaseUrl() + "/payment/result/fail";
-        return "redirect:" + reactFailUrl + "?orderId=" + orderId + "&code=" + code + "&message=" + encodedMessage;
+        String Url = appProperties.frontBaseUrl() + "/payment/result/fail" + "?orderId=" + orderId + "&code=" + code + "&message=" + encodedMessage;
+        return "redirect:" + Url;
     }
 
     @Operation(summary = "결제 내역 조회", description = "현재 로그인된 사용자의 모든 결제 내역을 조회합니다.")
