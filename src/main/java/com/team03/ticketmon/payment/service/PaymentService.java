@@ -38,10 +38,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -185,6 +182,7 @@ public class PaymentService {
 
                                 // 좌석 상태 BOOKED로 전환
                                 Long concertId = booking.getConcert().getConcertId();
+                                List<Long> failedSeats = new ArrayList<>();
                                 booking.getTickets().forEach(ticket -> {
                                     try {
                                         seatStatusService.bookSeat(
@@ -194,9 +192,16 @@ public class PaymentService {
                                     } catch (Exception e) {
                                         log.error("좌석 BOOKED 처리 실패: ticketId={}, error={}",
                                                 ticket.getTicketId(), e.getMessage(), e);
+                                        failedSeats.add(ticket.getConcertSeat().getConcertSeatId());
                                     }
                                 });
+                                if (!failedSeats.isEmpty()) {
+                                    // 일부 좌석 처리 실패 시 보상 처리 또는 예외 발생
+                                    throw new BusinessException(ErrorCode.SEAT_BOOKING_FAILED,
+                                            "일부 좌석 예약에 실패했습니다: " + failedSeats);
+                                }
                             })
+
                             .subscribeOn(Schedulers.boundedElastic());
                 })
                 .then();  // Mono<Void> 반환
