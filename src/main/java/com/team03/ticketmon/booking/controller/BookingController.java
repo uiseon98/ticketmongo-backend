@@ -121,29 +121,40 @@ public class BookingController {
             @Parameter(description = "취소할 예매의 ID", required = true)
             @PathVariable Long bookingId,
             @AuthenticationPrincipal CustomUserDetails user) {
-
         log.info("예매 취소 시도 booking ID: {} for user: {}", bookingId, user);
-
         Long userId = user.getUserId();
         DeferredResult<ResponseEntity<SuccessResponse<Void>>> dr = new DeferredResult<>(TIMEOUT_MS);
-
-        bookingFacadeService.cancelBookingAndPayment(bookingId, userId)
-                .doOnSuccess(v -> {
-                    dr.setResult(ResponseEntity.ok(
-                            SuccessResponse.of("예매가 성공적으로 취소되었습니다.", null)
-                    ));
-                })
-                .doOnError(e -> {
-                    log.error("예매 취소 중 오류 발생: bookingId={}, error={}", bookingId, e.getMessage(), e);
-                    HttpStatus status = (e instanceof BusinessException)
-                            ? HttpStatus.BAD_REQUEST
-                            : HttpStatus.INTERNAL_SERVER_ERROR;
-                    dr.setResult(ResponseEntity.status(status).body(
-                            SuccessResponse.of("예매 취소 실패: " + e.getMessage(), null)
-                    ));
-                })
-                .subscribe();
-
+        // 타임아웃 처리
+        dr.onTimeout(() -> {
+            log.warn("예약 취소 요청 타임아웃: bookingId={}", bookingId);
+            dr.setResult(ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).body(
+                    SuccessResponse.of("요청 처리 시간이 초과되었습니다.", null)
+            ));
+        });
+        // 구독을 저장하여 필요시 취소 가능하도록
+        var subscription =
+                bookingFacadeService.cancelBookingAndPayment(bookingId, userId)
+                        .doOnSuccess(v -> {
+                            dr.setResult(ResponseEntity.ok(
+                                    SuccessResponse.of("예매가 성공적으로 취소되었습니다.", null)
+                            ));
+                        })
+                        .doOnError(e -> {
+                            log.error("예매 취소 중 오류 발생: bookingId={}, error={}", bookingId, e.getMessage(), e);
+                            HttpStatus status = (e instanceof BusinessException)
+                                    ? HttpStatus.BAD_REQUEST
+                                    : HttpStatus.INTERNAL_SERVER_ERROR;
+                            dr.setResult(ResponseEntity.status(status).body(
+                                    SuccessResponse.of("예매 취소 실패: " + e.getMessage(), null)
+                            ));
+                        })
+                        .subscribe();
+        // 클라이언트 연결 해제 시 구독 취소
+        dr.onCompletion(() -> {
+            if (subscription != null && !subscription.isDisposed()) {
+                subscription.dispose();
+            }
+        });
         return dr;
     }
 
