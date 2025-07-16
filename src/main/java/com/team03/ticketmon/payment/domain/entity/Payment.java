@@ -64,7 +64,7 @@ public class Payment {
     )
     private PaymentCancelHistory cancelHistory;
 
-    
+
     // 취소 시 호출될 수 있는 헬퍼
     public void setCancelHistory(PaymentCancelHistory history) {
         this.cancelHistory = history;
@@ -102,5 +102,6 @@ public class Payment {
 
     public void cancel() {
         this.status = PaymentStatus.CANCELED;
+        this.updatedAt = LocalDateTime.now();
     }
 }
