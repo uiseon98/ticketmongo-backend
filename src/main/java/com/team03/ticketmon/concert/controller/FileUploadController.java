@@ -58,9 +58,9 @@ public class FileUploadController {
 		if (concertId != null) {
 			return storagePathProvider.getPosterPath(concertId, extension);
 		} else {
-			String timestamp = String.valueOf(System.currentTimeMillis());
-			String uuid = UUID.randomUUID().toString().substring(0, 8);
-			return String.format("temp/poster/%s_%s.%s", timestamp, uuid, extension);
+			// 등록 모드: 임시 ID로 정규 경로 생성 (나중에 실제 ID로 교체)
+			Long tempId = System.currentTimeMillis(); // 임시 고유 ID
+			return storagePathProvider.getPosterPath(tempId, extension);
 		}
 	}
 
