@@ -130,8 +130,8 @@ logging:
   level:
     root: WARN  # 기본 로그 레벨을 WARN으로 설정
     # HTTP 요청/응답 및 웹 관련 로깅 상세화
-    org.springframework.web: WARN
-    com.team03: WARN  # 팀 패키지의 로그 레벨을 INFO로 설정합니다. (필요시 WARN 또는 ERROR로 더 제한 가능)
+    org.springframework.web: DEBUG
+    com.team03: DEBUG  # 팀 패키지의 로그 레벨을 INFO로 설정합니다. (필요시 WARN 또는 ERROR로 더 제한 가능)
     # WARN -> 실시간 모니터링 툴이 있지 않다면, 불필요한 로그까지 나오는 걸 방지할 수 있음
 
 # 📚 Swagger API 문서 설정
