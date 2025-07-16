@@ -2,11 +2,13 @@ package com.team03.ticketmon.concert.repository;
 
 import com.team03.ticketmon.concert.domain.ConcertSeat;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
+import com.team03.ticketmon.concert.domain.ConcertSeat;
 
 /**
  * Concert Seat Repository
@@ -116,4 +118,14 @@ public interface ConcertSeatRepository extends JpaRepository<ConcertSeat, Long> 
 			"AND b.userId = :userId")
 	List<ConcertSeat> findByConcertIdAndUserId(@Param("concertId") Long concertId,
 											   @Param("userId") Long userId);
+
+
+	/**
+	 * 특정 콘서트의 모든 좌석에서 티켓 삭제 (AVAILABLE 상태로 초기화)
+	 * 예매 시작 전 초기화용
+	 */
+	@Modifying
+	@Query("DELETE FROM Ticket t " +
+			"WHERE t.concertSeat.concert.concertId = :concertId")
+	int bulkUpdateAllSeatsToAvailable(@Param("concertId") Long concertId);
 }

@@ -5,12 +5,12 @@ import com.team03.ticketmon._global.util.uploader.supabase.SupabaseUploader;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
@@ -49,28 +49,34 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     protected ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
-        log.warn("BusinessException 발생: {}", e.getMessage()); // 비즈니스 예외 로그 기록 (WARN 레벨)
+        log.warn("BusinessException 발생: {}", e.getMessage());
+
         ErrorResponse response = ErrorResponse.of(errorCode);
+        // ★ 이미 취소된 예매는 409 Conflict 로 리턴
+        if (errorCode == ErrorCode.ALREADY_CANCELED_BOOKING) {
+            return new ResponseEntity<>(response, HttpStatus.CONFLICT);
+        }
+        // 그 외는 기존 매핑된 상태코드(대부분 400 Bad Request)
         return new ResponseEntity<>(response, HttpStatus.valueOf(errorCode.getStatus()));
     }
 
     /**
      * 🆕 @Valid 검증 실패 예외 처리
      * <p>
-     * @RequestBody @Valid ReviewDTO에서 검증 실패 시 발생하는 예외를 처리합니다.<br>
-     * @NotBlank, @NotNull, @Min, @Max 등의 검증 어노테이션 실패를 400 Bad Request로 처리합니다.
      *
      * @param e MethodArgumentNotValidException (@Valid 검증 실패 예외)
      * @return 400 에러 응답 (ResponseEntity<ErrorResponse>)
+     * @RequestBody @Valid ReviewDTO에서 검증 실패 시 발생하는 예외를 처리합니다.<br>
+     * @NotBlank, @NotNull, @Min, @Max 등의 검증 어노테이션 실패를 400 Bad Request로 처리합니다.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     protected ResponseEntity<ErrorResponse> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
         // 🎯 검증 실패 필드들의 에러 메시지 수집
         String errorMessage = e.getBindingResult()
-            .getFieldErrors()
-            .stream()
-            .map(error -> error.getField() + ": " + error.getDefaultMessage())
-            .collect(Collectors.joining(", "));
+                .getFieldErrors()
+                .stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .collect(Collectors.joining(", "));
 
         // 🔥 @Valid 검증 실패를 INVALID_INPUT 에러 코드로 매핑
         ErrorResponse response = ErrorResponse.of(ErrorCode.INVALID_INPUT);
@@ -80,11 +86,11 @@ public class GlobalExceptionHandler {
     /**
      * 🆕 JSON 파싱 실패 예외 처리
      * <p>
-     * @RequestBody로 전달된 JSON이 올바르지 않은 형식일 때 발생하는 예외를 처리합니다.<br>
-     * 잘못된 JSON 구문, 타입 불일치 등을 400 Bad Request로 처리합니다.
      *
      * @param e HttpMessageNotReadableException (JSON 파싱 실패 예외)
      * @return 400 에러 응답 (ResponseEntity<ErrorResponse>)
+     * @RequestBody로 전달된 JSON이 올바르지 않은 형식일 때 발생하는 예외를 처리합니다.<br>
+     * 잘못된 JSON 구문, 타입 불일치 등을 400 Bad Request로 처리합니다.
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     protected ResponseEntity<ErrorResponse> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {

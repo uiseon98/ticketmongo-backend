@@ -23,7 +23,7 @@ public class CookieUtil {
                 .secure(true)
                 .path("/")
                 .maxAge(Duration.ofMillis(expiration)) // 밀리초를 초로 변환
-                .sameSite("Lax")
+                .sameSite("None")
                 .build();
     }
 
@@ -34,7 +34,7 @@ public class CookieUtil {
                 .secure(true)
                 .path("/")
                 .maxAge(0)
-                .sameSite("Lax")
+                .sameSite("None")
                 .build();
     }
 
@@ -51,9 +51,9 @@ public class CookieUtil {
         String newAccessToken = generateAccessToken(userId, username, role);
         String newRefreshToken = generateRefreshTokenAndSave(userId, username, role);
 
-        if(newAccessToken == null || newAccessToken.isEmpty())
+        if (newAccessToken == null || newAccessToken.isEmpty())
             throw new IllegalArgumentException("Access Token 재발급이 실패했습니다.");
-        if(newRefreshToken == null || newRefreshToken.isEmpty())
+        if (newRefreshToken == null || newRefreshToken.isEmpty())
             throw new IllegalArgumentException("Refresh Token 재발급이 실패했습니다.");
 
         ResponseCookie accessCookie = createJwtCookie(jwtTokenProvider.CATEGORY_ACCESS, newAccessToken);

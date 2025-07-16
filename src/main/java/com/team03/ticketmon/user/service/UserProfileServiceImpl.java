@@ -1,8 +1,9 @@
 package com.team03.ticketmon.user.service;
 
-import com.team03.ticketmon._global.config.supabase.SupabaseProperties;
+import com.team03.ticketmon._global.service.UrlConversionService;
+import com.team03.ticketmon._global.util.FileUtil;
 import com.team03.ticketmon._global.util.FileValidator;
-import com.team03.ticketmon._global.util.UploadPathUtil;
+import com.team03.ticketmon._global.util.StoragePathProvider;
 import com.team03.ticketmon._global.util.uploader.StorageUploader;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,7 +17,8 @@ import java.util.UUID;
 public class UserProfileServiceImpl implements UserProfileService {
 
     private final StorageUploader storageUploader;
-    private final SupabaseProperties supabaseProperties;
+    private final StoragePathProvider storagePathProvider;
+    private final UrlConversionService urlConversionService;
 
     @Override
     public Optional<String> uploadProfileAndReturnUrl(MultipartFile profileImage) {
@@ -26,8 +28,11 @@ public class UserProfileServiceImpl implements UserProfileService {
         FileValidator.validate(profileImage);
 
         String filePath = buildFilePath(profileImage);
-        String fileUrl = storageUploader.uploadFile(profileImage, supabaseProperties.getProfileBucket(), filePath);
-        return Optional.of(fileUrl);
+        String fileUrl = storageUploader.uploadFile(profileImage, storagePathProvider.getProfileBucketName(), filePath);
+
+        String convertedUrl = urlConversionService.convertToCloudFrontUrl(fileUrl);
+
+        return Optional.of(convertedUrl);
     }
 
     @Override
@@ -35,13 +40,13 @@ public class UserProfileServiceImpl implements UserProfileService {
         if (profileImageUrl == null || profileImageUrl.isEmpty())
             return;
 
-        storageUploader.deleteFile(supabaseProperties.getProfileBucket(), profileImageUrl);
+        storageUploader.deleteFile(storagePathProvider.getProfileBucketName(), profileImageUrl);
     }
 
     private String buildFilePath(MultipartFile file) {
         String fileUUID = UUID.randomUUID().toString();
         String contentType = file.getContentType();
-        String fileExtension = UploadPathUtil.getExtensionFromMimeType(contentType);
-        return UploadPathUtil.getProfilePath(fileUUID, fileExtension);
+        String fileExtension = FileUtil.getExtensionFromMimeType(contentType);
+        return storagePathProvider.getProfilePath(fileUUID, fileExtension);
     }
 }

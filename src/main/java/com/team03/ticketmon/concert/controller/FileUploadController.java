@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.team03.ticketmon._global.service.UrlConversionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +22,9 @@ import com.team03.ticketmon._global.exception.BusinessException;
 import com.team03.ticketmon._global.exception.ErrorCode;
 import com.team03.ticketmon._global.exception.StorageUploadException;
 import com.team03.ticketmon._global.exception.SuccessResponse;
+import com.team03.ticketmon._global.util.FileUtil;
 import com.team03.ticketmon._global.util.FileValidator;
+import com.team03.ticketmon._global.util.StoragePathProvider;
 import com.team03.ticketmon._global.util.uploader.StorageUploader; // 🔄 인터페이스 의존
 import com.team03.ticketmon.concert.domain.Concert;
 import com.team03.ticketmon.concert.repository.ConcertRepository;
@@ -36,12 +39,11 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class FileUploadController {
 
-	// 🔄 핵심 변경: 인터페이스 의존으로 환경별 자동 전환
 	private final StorageUploader storageUploader; // Spring이 @Profile에 따라 자동 주입
-	// - @Profile("supabase") → SupabaseUploader 주입
-	// - @Profile("s3") → S3Uploader 주입
 	private final SellerConcertRepository sellerConcertRepository;
 	private final ConcertRepository concertRepository;
+	private final StoragePathProvider storagePathProvider;
+	private final UrlConversionService urlConversionService;
 
 	/**
 	 * ✅ 고유 파일명 생성 (환경별 폴더 구조 고려)
@@ -49,20 +51,16 @@ public class FileUploadController {
 	 * @param originalFilename 원본 파일명
 	 * @return 고유 파일명
 	 */
-	private String generateUniqueFilename(Long concertId, String originalFilename) {
-		String extension = "";
-		if (originalFilename != null && originalFilename.contains(".")) {
-			extension = originalFilename.substring(originalFilename.lastIndexOf('.'));
-		}
+	private String generateUniqueFilename(Long concertId, String originalFilename, String contentType) {
 
-		String timestamp = String.valueOf(System.currentTimeMillis());
-		String uuid = UUID.randomUUID().toString().substring(0, 8);
-
+		String extension = FileUtil.getExtensionFromMimeType(contentType);
+		// 콘서트 ID가 있으면 포스터 경로, 없으면 임시 경로 사용
 		if (concertId != null) {
-			// 🔄 현재는 Supabase 구조, 추후 S3 전환 시 조정
-			return String.format("concert/poster/%d_%s_%s%s", concertId, timestamp, uuid, extension);
+			return storagePathProvider.getPosterPath(concertId, extension);
 		} else {
-			return String.format("temp/poster/%s_%s%s", timestamp, uuid, extension);
+			String timestamp = String.valueOf(System.currentTimeMillis());
+			String uuid = UUID.randomUUID().toString().substring(0, 8);
+			return String.format("temp/poster/%s_%s.%s", timestamp, uuid, extension);
 		}
 	}
 
@@ -76,14 +74,14 @@ public class FileUploadController {
 		try {
 			FileValidator.validate(file);
 
-			String uniquePath = generateUniqueFilename(concertId, file.getOriginalFilename());
+			String bucket = storagePathProvider.getPosterBucketName(); // StoragePathProvider에서 버킷 이름 가져오기
+			String uniquePath = generateUniqueFilename(concertId, file.getOriginalFilename(), file.getContentType());
 			log.info("📁 고유 파일명 생성: {}", uniquePath);
 
-			// 🔄 환경별 자동 처리: 현재 Supabase 버킷명 사용
-			String bucket = "ticketmon-dev-poster-imgs";
-			uploadedUrl = storageUploader.uploadFile(file, bucket, uniquePath);
+			uploadedUrl = storageUploader.uploadFile(file, bucket, uniquePath); // 버킷 이름 전달
 
-			log.info("✅ 파일 업로드 성공 - URL: {}", uploadedUrl);
+			String cloudFrontUrl = urlConversionService.convertToCloudFrontUrl(uploadedUrl);
+			log.info("✅ 파일 업로드 성공 - 원본 URL: {}, CloudFront URL: {}", uploadedUrl, cloudFrontUrl);
 
 			// concertId가 있으면 DB에 URL 저장
 			if (concertId != null) {
@@ -103,13 +101,13 @@ public class FileUploadController {
 				}
 
 				Concert concert = concertOpt.get();
-				concert.setPosterImageUrl(uploadedUrl);
+				concert.setPosterImageUrl(cloudFrontUrl);
 				concertRepository.save(concert);
 
-				log.info("✅ DB에 포스터 URL 저장 완료 - concertId: {}, URL: {}", concertId, uploadedUrl);
+				log.info("✅ DB에 포스터 URL 저장 완료 - concertId: {}, URL: {}", concertId, cloudFrontUrl);
 			}
 
-			return ResponseEntity.ok(SuccessResponse.of("파일 업로드 성공", uploadedUrl));
+			return ResponseEntity.ok(SuccessResponse.of("파일 업로드 성공", cloudFrontUrl));
 
 		} catch (BusinessException e) {
 			if (uploadedUrl != null) {
@@ -130,17 +128,12 @@ public class FileUploadController {
 	 */
 	private void rollbackUploadedFile(String uploadedUrl) {
 		try {
-			String bucket = "ticketmon-dev-poster-imgs"; // 현재 Supabase 실제 버킷명
+			String bucket = storagePathProvider.getPosterBucketName(); // StoragePathProvider에서 버킷 이름 가져오기
 			storageUploader.deleteFile(bucket, uploadedUrl);
 			log.info("🔄 업로드 실패로 인한 파일 롤백 완료 - URL: {}", uploadedUrl);
 		} catch (Exception rollbackException) {
 			log.error("❌ 파일 롤백 실패 - URL: {}", uploadedUrl, rollbackException);
 		}
-	}
-
-	private String getFileExtension(MultipartFile file) {
-		String filename = file.getOriginalFilename();
-		return filename.substring(filename.lastIndexOf(".") + 1);
 	}
 
 	@DeleteMapping("/poster/{concertId}")
@@ -152,7 +145,6 @@ public class FileUploadController {
 		try {
 			log.info("🗑️ 콘서트 포스터 삭제 요청 - concertId: {}, sellerId: {}", concertId, sellerId);
 
-			// 1. 권한 검증
 			log.info("🔍 단계 1: 권한 검증 시작");
 			if (!sellerConcertRepository.existsByConcertIdAndSellerId(concertId, sellerId)) {
 				log.warn("❌ 권한 검증 실패 - concertId: {}, sellerId: {}", concertId, sellerId);
@@ -164,7 +156,6 @@ public class FileUploadController {
 			}
 			log.info("✅ 단계 1: 권한 검증 완료");
 
-			// 2. 콘서트 정보 조회해서 현재 포스터 URL 확인
 			log.info("🔍 단계 2: 콘서트 조회 시작");
 			Optional<Concert> concertOpt = concertRepository.findById(concertId);
 			if (concertOpt.isEmpty()) {
@@ -188,10 +179,9 @@ public class FileUploadController {
 			}
 			log.info("✅ 단계 3: 포스터 URL 확인 완료 - URL 존재함");
 
-			// 3. 스토리지에서 파일 삭제 (환경별 자동 처리)
 			log.info("🔍 단계 4: 스토리지 파일 삭제 시작");
 			try {
-				String bucket = "ticketmon-dev-poster-imgs"; // 현재 Supabase 실제 버킷명
+				String bucket = storagePathProvider.getPosterBucketName(); // StoragePathProvider에서 버킷 이름 가져오기
 				storageUploader.deleteFile(bucket, currentPosterUrl);
 				log.info("✅ 스토리지 파일 삭제 완료 - URL: {}", currentPosterUrl);
 			} catch (Exception storageException) {
@@ -242,9 +232,6 @@ public class FileUploadController {
 		}
 	}
 
-	/**
-	 * ✅ 특정 파일 URL로 직접 삭제 (환경별 자동 처리)
-	 */
 	@DeleteMapping("/poster/specific")
 	@Transactional
 	public ResponseEntity<?> deleteSpecificFile(
@@ -268,7 +255,7 @@ public class FileUploadController {
 
 			// 스토리지에서 특정 파일 삭제 (환경별 자동 처리)
 			try {
-				String bucket = "ticketmon-dev-poster-imgs"; // 현재 Supabase 실제 버킷명
+				String bucket = storagePathProvider.getPosterBucketName(); // StoragePathProvider에서 버킷 이름 가져오기
 				storageUploader.deleteFile(bucket, fileUrl);
 				log.info("✅ 스토리지 특정 파일 삭제 완료 - URL: {}", fileUrl);
 			} catch (Exception storageException) {
@@ -280,25 +267,41 @@ public class FileUploadController {
 					));
 			}
 
+			// 2. DB에서 posterImageUrl 필드를 null로 업데이트
+			log.info("🔍 단계 3: DB에서 포스터 URL 제거 시작");
+			int updatedRows = sellerConcertRepository.updatePosterImageUrl(concertId, sellerId, null);
+			log.info("🔍 DB 업데이트 결과: {} rows affected", updatedRows);
+
+			if (updatedRows == 0) {
+				log.warn("⚠️ DB 업데이트 실패 - 권한 없음 또는 존재하지 않는 콘서트: concertId={}, sellerId={}",
+						concertId, sellerId);
+				return ResponseEntity.status(HttpStatus.FORBIDDEN)
+						.body(Map.of(
+								"success", false,
+								"message", "DB 업데이트 권한이 없거나 존재하지 않는 콘서트입니다."
+						));
+			}
+			log.info("✅ 단계 3: DB 업데이트 완료");
+
+			log.info("✅ 특정 파일 삭제 및 DB 업데이트 완료 - concertId: {}", concertId);
+
 			return ResponseEntity.ok(Map.of(
-				"success", true,
-				"message", "파일이 삭제되었습니다.",
-				"deletedUrl", fileUrl
+					"success", true,
+					"message", "파일이 삭제되고 DB가 업데이트되었습니다.",
+					"deletedUrl", fileUrl,
+					"concertId", concertId
 			));
 
 		} catch (Exception e) {
 			log.error("❌ 특정 파일 삭제 실패", e);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-				.body(Map.of(
-					"success", false,
-					"message", "파일 삭제 중 오류가 발생했습니다: " + e.getMessage()
-				));
+					.body(Map.of(
+							"success", false,
+							"message", "파일 삭제 중 오류가 발생했습니다: " + e.getMessage()
+					));
 		}
 	}
 
-	/**
-	 * ✅ 임시 파일 삭제 (환경별 자동 처리)
-	 */
 	@DeleteMapping("/temp")
 	@Transactional
 	public ResponseEntity<?> deleteTempFile(
@@ -319,7 +322,7 @@ public class FileUploadController {
 
 			// 스토리지에서 임시 파일 삭제 (환경별 자동 처리)
 			try {
-				String bucket = "ticketmon-dev-poster-imgs"; // 현재 Supabase 실제 버킷명
+				String bucket = storagePathProvider.getPosterBucketName();
 				storageUploader.deleteFile(bucket, fileUrl);
 				log.info("✅ 스토리지 임시 파일 삭제 완료 - URL: {}", fileUrl);
 			} catch (Exception storageException) {
@@ -347,9 +350,6 @@ public class FileUploadController {
 		}
 	}
 
-	/**
-	 * ✅ 원본 포스터 URL로 복구 (환경별 자동 처리)
-	 */
 	@PatchMapping("/poster/{concertId}/restore")
 	@Transactional
 	public ResponseEntity<?> restoreOriginalPoster(
@@ -370,7 +370,6 @@ public class FileUploadController {
 					));
 			}
 
-			// 권한 검증
 			if (!sellerConcertRepository.existsByConcertIdAndSellerId(concertId, sellerId)) {
 				log.warn("❌ 권한 검증 실패 - concertId: {}, sellerId: {}", concertId, sellerId);
 				return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -380,8 +379,11 @@ public class FileUploadController {
 					));
 			}
 
+			String cloudFrontUrl = urlConversionService.convertToCloudFrontUrl(originalUrl);
+			log.info("🔄 URL 변환: {} -> {}", originalUrl, cloudFrontUrl);
+
 			// DB에서 원본 URL로 복구 (스토리지는 건드리지 않음)
-			int updatedRows = sellerConcertRepository.updatePosterImageUrl(concertId, sellerId, originalUrl);
+			int updatedRows = sellerConcertRepository.updatePosterImageUrl(concertId, sellerId, cloudFrontUrl);
 
 			if (updatedRows == 0) {
 				log.warn("⚠️ DB 업데이트 실패 - concertId: {}, sellerId: {}", concertId, sellerId);
@@ -392,12 +394,12 @@ public class FileUploadController {
 					));
 			}
 
-			log.info("✅ 원본 포스터 복구 완료 - concertId: {}, originalUrl: {}", concertId, originalUrl);
+			log.info("✅ 원본 포스터 복구 완료 - concertId: {}, cloudFrontUrl: {}", concertId, cloudFrontUrl);
 
 			return ResponseEntity.ok(Map.of(
 				"success", true,
 				"message", "원본 포스터로 복구되었습니다.",
-				"restoredUrl", originalUrl,
+				"restoredUrl", cloudFrontUrl,
 				"concertId", concertId
 			));
 
