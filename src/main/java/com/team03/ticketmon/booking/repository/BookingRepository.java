@@ -1,15 +1,13 @@
 package com.team03.ticketmon.booking.repository;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
+import com.team03.ticketmon.booking.domain.Booking;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import com.team03.ticketmon.booking.domain.Booking;
-import com.team03.ticketmon.booking.domain.BookingStatus;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * 예매(Booking) 엔티티에 대한 데이터 접근을 처리
@@ -36,7 +34,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             """)
     List<Booking> findByUserId(@Param("userId") Long userId);
 
-    List<Booking> findByStatus(BookingStatus status);
+    @Query("SELECT b FROM Booking b JOIN FETCH b.concert WHERE b.id = :id")
+    Optional<Booking> findWithConcertById(@Param("id") Long id);
 
     @Query("""
                 select distinct b from Booking b
@@ -48,4 +47,16 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                   and b.createdAt <= :expirationTime
             """)
     List<Booking> findExpiredPendingBookings(@Param("expirationTime") LocalDateTime expirationTime);
+
+    /**
+     * concert와 tickets 컬렉션을 함께 페치
+     */
+    @Query("""
+            SELECT DISTINCT b
+              FROM Booking b
+             JOIN FETCH b.concert
+             JOIN FETCH b.tickets
+             WHERE b.id = :id
+            """)
+    Optional<Booking> findWithConcertAndTicketsById(@Param("id") Long id);
 }
