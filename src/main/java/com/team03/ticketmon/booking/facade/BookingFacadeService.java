@@ -7,6 +7,7 @@ import com.team03.ticketmon.payment.dto.PaymentCancelRequest;
 import com.team03.ticketmon.payment.dto.PaymentExecutionResponse;
 import com.team03.ticketmon.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
@@ -16,6 +17,7 @@ import reactor.core.scheduler.Schedulers;
  * 예매‑결제 유즈케이스를 하나의 트랜잭션으로 오케스트레이션
  * 하나의 유스케이스를 위한 트랜잭션 단위를 정의
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BookingFacadeService {
@@ -56,9 +58,17 @@ public class BookingFacadeService {
                                         userId
                                 )
                                 // 3) 취소 후 내부 DB 상태 반영(finalizeCancellation)
-                                .then(Mono.fromRunnable(() ->
-                                        bookingService.finalizeCancellation(booking.getBookingId())
-                                ).subscribeOn(Schedulers.boundedElastic()))
+                                .then(
+                                        Mono.fromRunnable(() ->
+                                                        bookingService.finalizeCancellation(booking.getBookingId())
+                                                )
+                                                .subscribeOn(Schedulers.boundedElastic())
+                                                .onErrorResume(error -> {
+                                                    log.error("예약 취소 finalization 실패, 보상 트랜잭션 필요: {}", error.getMessage());
+                                                    // TODO: 결제 취소 롤백 또는 보상 로직
+                                                    return Mono.error(error);
+                                                })
+                                )
                 )
                 .then(); // Mono<Void> 반환
     }
