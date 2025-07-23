@@ -40,9 +40,9 @@ spring:
   application:
     name: ticketmon-go
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:prod}  # 환경 변수 'SPRING_PROFILES_ACTIVE' 값(.env) 사용, 없으면 'dev'를 기본값으로 설정
+    active: ${SPRING_PROFILES_ACTIVE:dev}  # 환경 변수 'SPRING_PROFILES_ACTIVE' 값(.env) 사용, 없으면 'dev'를 기본값으로 설정
     # 로컬 개발 시 'dev' 프로필이 기본으로 활성화됩니다. 배포 시에도 변경 X -> .env에서 SPRING_PROFILES_ACTIVE를 prod로 변경
-    # include: supabase # 'supabase' 관련 빈(StorageUploader, StorageClient)을 활성화된 프로필과 함께 로드
+    include: supabase # 'supabase' 관련 빈(StorageUploader, StorageClient)을 활성화된 프로필과 함께 로드
   config:
     import: optional:application-${spring.profiles.active}.yml # 활성화된 프로필에 맞는 추가 설정 파일 로드
 
@@ -76,11 +76,11 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}  # .env에서 설정한 포트 사용, 기본은 8080
-    #  ssl:
-    #    enabled: true # HTTPS 활성화
-    #    # .pem 파일 직접 사용 시 필요한 설정들
-    #    certificate: classpath:certs/localhost.pem
-    #    certificate-private-key: classpath:certs/localhost-key.pem
+  ssl:
+    enabled: true # HTTPS 활성화
+    # .pem 파일 직접 사용 시 필요한 설정들
+    certificate: classpath:certs/localhost.pem
+    certificate-private-key: classpath:certs/localhost-key.pem
     # key-store-type을 명시적으로 지정해주는 것이 좋습니다.
     # PEM 파일을 사용할 경우, key-store-type을 비워두거나 특정 타입을 지정하지 않습니다.
     # 하지만 Spring Boot 버전에 따라서는 아래 설정이 필요할 수 있습니다.
