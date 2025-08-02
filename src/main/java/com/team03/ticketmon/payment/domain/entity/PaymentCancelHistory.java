@@ -9,8 +9,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-// import com.team03.ticketmon.payment.domain.Payment; // 💡 [확인] 이 임포트가 필요할 수 있습니다.
-
 @Entity
 @Table(name = "payment_cancel_history")
 @Getter
@@ -52,11 +50,6 @@ public class PaymentCancelHistory {
         this.cancelAmount = cancelAmount;
         this.cancelReason = cancelReason;
         this.canceledAt = canceledAt;
-    }
-
-    // 추가: JPA 내부에서만 사용하므로 protected
-    protected void setPayment(Payment payment) {
-        this.payment = payment;
     }
 
 }

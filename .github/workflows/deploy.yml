@@ -7,10 +7,13 @@ on:
     types:
       - completed # 'Backend CI Pipeline'이 완료되었을 때만 실행 (성공/실패 무관)
 
+  # 여기에 수동 실행을 위한 '비상 버튼'을 추가합니다!
+  workflow_dispatch:
+
 jobs:
   deploy:
     # 'Backend CI Pipeline' 워크플로우의 결과가 'success'일 때만 'deploy' job 실행
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     name: Deploy Backend to EC2
     runs-on: ubuntu-latest # AWS EC2 인스턴스에 연결하기 위한 실행 환경
 

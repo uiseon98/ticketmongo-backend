@@ -25,7 +25,7 @@ public class Payment {
     @JoinColumn(name = "booking_id", nullable = false, unique = true)
     private Booking booking;
 
-    // 💡 [수정] user_id 컬럼에 직접 매핑될 필드 추가
+    // user_id 컬럼에 직접 매핑될 필드 추가
     @Column(name = "user_id", nullable = false, updatable = false)
     private Long userId;
 
