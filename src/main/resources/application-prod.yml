@@ -155,8 +155,8 @@ ai:
 # 🌍 CORS 설정
 cors:
   allowed-origins:
-    - "https://ticket-mon.o-r.kr"          # 프론트엔드 도메인
-    - "https://api.ticket-mon.o-r.kr"      # API 도메인
+    - "http://3.36.130.171:8080"          # 프론트엔드 도메인
+    - "http://localhost:3000"      # API 도메인
 
 onesignal:
   app-id: ${ONESIGNAL_APP_ID}        # 운영 환경에서 환경 변수로 관리

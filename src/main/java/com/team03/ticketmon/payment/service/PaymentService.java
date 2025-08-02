@@ -58,6 +58,8 @@ public class PaymentService {
 
     @Transactional
     public PaymentExecutionResponse initiatePayment(Booking booking, Long currentUserId) {
+        // 예매 정보와 사용자 ID를 이용해 결제 정보를 생성 또는 조회합니다.
+        // 1. 유효성 검사 (존재, 사용자 소유, 대기상태, 콘서트 연결 유무)
         if (booking == null) {
             throw new BusinessException(ErrorCode.BOOKING_NOT_FOUND);
         }
@@ -72,6 +74,7 @@ public class PaymentService {
             throw new IllegalStateException("예매에 연결된 콘서트 정보가 없습니다. Booking ID: " + booking.getBookingId());
         }
 
+        // 2. 기존에 결제 대기(PENDING) 내역이 있으면 재활용, 아니면 새로 생성합니다
         Payment paymentToUse = paymentRepository.findByBooking(booking)
                 .filter(p -> p.getStatus() == PaymentStatus.PENDING)
                 .orElseGet(() -> {
@@ -87,10 +90,12 @@ public class PaymentService {
                     return paymentRepository.save(newPayment);
                 });
 
+        // 3. 프론트에서 결제 진행화면에 표시할 고객명(닉네임 등) 조회
         String customerName = userRepository.findById(currentUserId)
                 .map(user -> user.getNickname())
                 .orElse("사용자 " + currentUserId);
 
+        // 4. 결제 정보와 리다이렉트 정보 등 클라이언트에 반환
         return PaymentExecutionResponse.builder()
                 .orderId(paymentToUse.getOrderId())
                 .bookingNumber(booking.getBookingNumber())
@@ -105,15 +110,15 @@ public class PaymentService {
 
     @Transactional
     public void savePayment(Payment payment) {
+        // 결제 정보를 DB에 저장하고, 해당 예매(Booking)을 확정 상태로 만듭니다.
         paymentRepository.save(payment);
         bookingRepository.findById(payment.getBooking().getBookingId())
-                .ifPresent(b -> b.confirm());   // 이 시점엔 세션이 열려 있어 안전
+                .ifPresent(b -> b.confirm());
     }
-
 
     @Transactional
     public Mono<Void> confirmPayment(PaymentConfirmRequest req) {
-        // 1) DB에서 Payment 로드 & 검증
+        // 1. 주문ID로 DB의 결제 정보 조회 및 상태, 금액 검증
         return Mono.fromCallable(() ->
                         paymentRepository.findByOrderId(req.getOrderId())
                                 .orElseThrow(() -> new BusinessException(
@@ -122,13 +127,13 @@ public class PaymentService {
                 )
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(payment -> {
-                    // 상태 검증
+                    // 결제 대기(PENDING) 상태만 승인 허용
                     if (payment.getStatus() != PaymentStatus.PENDING) {
                         return Mono.error(new BusinessException(
                                 ErrorCode.ALREADY_PROCESSED_PAYMENT,
                                 "이미 처리된 결제입니다."));
                     }
-                    // 금액 검증
+                    // 결제 금액이 실제 결제 요청금액과 일치하는지 체크
                     if (payment.getAmount().compareTo(req.getAmount()) != 0) {
                         payment.fail();
                         return Mono.error(new BusinessException(
@@ -137,21 +142,19 @@ public class PaymentService {
                     }
                     return Mono.just(payment);
                 })
-                // 2) Toss 승인 API 호출
                 .flatMap(payment -> {
+                    // 2. 외부 결제사(TOSS) 결제 승인 API 호출 - HTTP 인증 포함
                     String rawKey = tossPaymentsProperties.secretKey() + ":";
                     String encodedKey = Base64.getEncoder()
                             .encodeToString(rawKey.getBytes(StandardCharsets.UTF_8));
                     return callTossConfirmApi(req, encodedKey, req.getOrderId())
                             .map(resp -> Tuples.of(payment, resp));
                 })
-                // 3) 응답 검사 & 저장
                 .flatMap(tuple -> {
+                    // 3. 외부 결제 승인 응답의 상태 등 검증 및 DB 반영
                     Payment payment = tuple.getT1();
                     @SuppressWarnings("unchecked")
                     Map<String, Object> resp = (Map<String, Object>) tuple.getT2();
-
-                    // Toss 응답 검증
                     String status = (String) resp.get("status");
                     if (!"DONE".equals(status)) {
                         payment.fail();
@@ -159,20 +162,13 @@ public class PaymentService {
                                 ErrorCode.PAYMENT_VALIDATION_FAILED,
                                 "Toss 승인 상태가 DONE이 아닙니다: " + status));
                     }
-
-                    // 파싱
                     LocalDateTime approvedAt = parseDateTime(resp.get("approvedAt"));
-
-                    // ① 클라이언트가 선택한 결제수단을 먼저 저장
                     payment.setPaymentMethod(req.getOriginalMethod());
-
-                    // 4) 영속성 작업
                     return Mono.fromRunnable(() -> {
-                                // 결제 상태 갱신
                                 payment.complete(req.getPaymentKey(), approvedAt);
                                 paymentRepository.save(payment);
 
-                                // 예매 상태 갱신 (concert + tickets 함께 로딩)
+                                // 연관 예매(Booking) 역시 CONFIRMED로 변경
                                 Long bookingId = payment.getBooking().getBookingId();
                                 Booking booking = bookingRepository
                                         .findWithConcertAndTicketsById(bookingId)
@@ -183,7 +179,7 @@ public class PaymentService {
                                 booking.confirm();
                                 bookingRepository.save(booking);
 
-                                // 좌석 상태 BOOKED로 전환
+                                // 좌석 정보도 BOOKED로 최종 변경
                                 Long concertId = booking.getConcert().getConcertId();
                                 List<Long> failedSeats = new ArrayList<>();
                                 booking.getTickets().forEach(ticket -> {
@@ -199,19 +195,18 @@ public class PaymentService {
                                     }
                                 });
                                 if (!failedSeats.isEmpty()) {
-                                    // 일부 좌석 처리 실패 시 보상 처리 또는 예외 발생
                                     throw new BusinessException(ErrorCode.SEAT_BOOKING_FAILED,
                                             "일부 좌석 예약에 실패했습니다: " + failedSeats);
                                 }
                             })
-
                             .subscribeOn(Schedulers.boundedElastic());
                 })
-                .then();  // Mono<Void> 반환
+                .then();
     }
 
     @Transactional
     public void handlePaymentFailure(String orderId, String errorCode, String errorMessage) {
+        // 결제 실패 웹에서 호출시, 해당 결제/예매를 실패 및 취소 상태로 DB 처리함.
         paymentRepository.findByOrderId(orderId).ifPresent(payment -> {
             if (payment.getStatus() == PaymentStatus.PENDING) {
                 payment.fail();
@@ -225,8 +220,8 @@ public class PaymentService {
     public Mono<Void> cancelPayment(Booking booking,
                                     PaymentCancelRequest cancelRequest,
                                     Long currentUserId) {
+        // 결제 취소 요청 처리: 본인 소유, DONE/부분취소 상태만 취소 가능
         return Mono.defer(() -> {
-                    // 1) 검증 로직은 기존 메서드 그대로
                     if (booking == null) {
                         return Mono.error(new BusinessException(ErrorCode.BOOKING_NOT_FOUND));
                     }
@@ -246,17 +241,13 @@ public class PaymentService {
                                 payment.getStatus(), payment.getOrderId());
                         return Mono.empty();
                     }
-
-                    // 2) Toss 취소 API 호출 (논블록)
                     String raw = tossPaymentsProperties.secretKey() + ":";
                     String encodedKey = Base64.getEncoder()
                             .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
                     return callTossCancelApi(payment.getPaymentKey(),
                             cancelRequest.getCancelReason(),
                             encodedKey)
-                            // 3) 응답 받으면 블로킹 풀에서 DB 업데이트
                             .flatMap(tossResponse -> Mono.fromRunnable(() -> {
-                                // 기존 동기 로직 그대로
                                 payment.cancel();
                                 List<Map<String, Object>> cancels =
                                         (List<Map<String, Object>>) tossResponse.get("cancels");
@@ -273,61 +264,45 @@ public class PaymentService {
                                 }
                                 log.info("결제 취소 완료 (async): orderId={}", payment.getOrderId());
                             }).subscribeOn(Schedulers.boundedElastic()))
-                            // 4) Mono<Void> 로 끝맺음
                             .then();
                 })
-                // 전체를 블로킹 풀에서 시작
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     @Transactional(readOnly = true)
     public List<PaymentHistoryDto> getPaymentHistoryByUserId(Long userId) {
+        // 특정 사용자 ID로 결제 내역을 모두 조회하여 반환합니다.
         return paymentRepository.findByUserId(userId)
                 .stream()
                 .map(PaymentHistoryDto::new)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 💡 [핵심 수정] 웹훅을 통해 결제 상태를 안전하게 업데이트합니다.
-     *
-     * @param orderId 업데이트할 주문 ID
-     * @param status  새로운 결제 상태 문자열 (예: "DONE", "CANCELED")
-     */
     @Transactional
     public void updatePaymentStatusByWebhook(String orderId, String status) {
+        // 웹훅 콜백을 통해 결제 상태 정보를 안전하게 DB에 반영합니다.(외부 API 기준으로 상태 동기화)
         log.info("웹훅을 통한 결제 상태 업데이트 시도: orderId={}, status={}", orderId, status);
 
-        // 1. 💡 [수정] DB에서 Payment와 연관된 Booking을 함께 조회 (N+1 문제 방지 및 상태 변경 용이)
-        Payment payment = paymentRepository.findWithBookingByOrderId(orderId) // Repository에 메서드 추가 필요
+        Payment payment = paymentRepository.findWithBookingByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
                         "웹훅 처리: 결제 정보를 찾을 수 없습니다. orderId=" + orderId));
-
         PaymentStatus newStatus;
         try {
-            // 2. 💡 [수정] 처리할 수 없는 상태값이 들어올 경우에 대비한 예외 처리
             newStatus = PaymentStatus.valueOf(status.toUpperCase());
         } catch (IllegalArgumentException e) {
             log.warn("웹훅 처리: 지원하지 않는 결제 상태값({})을 수신하여 처리를 건너뜁니다. orderId={}", status, orderId);
-            return; // 500 에러를 발생시키지 않고 정상 종료
+            return;
         }
-
-        // 3. 💡 [수정] 이미 최종 상태(DONE, CANCELED 등)이거나, 요청된 상태와 현재 상태가 같으면 처리하지 않음
         if (payment.getStatus().isFinalState() || payment.getStatus() == newStatus) {
             log.info("웹훅 처리: 이미 최종 상태이거나 상태 변경이 불필요하여 건너뜁니다. orderId={}, 현재상태={}, 요청상태={}",
                     orderId, payment.getStatus(), newStatus);
             return;
         }
-
-        // 4. 💡 [수정] 상태 전이(State Transition) 로직 강화
         switch (newStatus) {
             case DONE:
-                // 오직 PENDING 상태일 때만 DONE으로 변경 가능
                 if (payment.getStatus() == PaymentStatus.PENDING) {
                     payment.complete(payment.getPaymentKey(), LocalDateTime.now());
                     payment.getBooking().confirm();
-
-                    // 웹훅으로 결제 완료 후 예매의 모든 좌석을 BOOKED 상태로 변경
                     payment.getBooking().getTickets().forEach(ticket -> {
                         try {
                             seatStatusService.bookSeat(
@@ -343,15 +318,12 @@ public class PaymentService {
                                     ticket.getConcertSeat().getConcertSeatId(), e.getMessage());
                         }
                     });
-
                     log.info("웹훅: 결제 {} 상태 PENDING -> DONE 업데이트 완료", orderId);
                 } else {
                     log.warn("웹훅: 잘못된 상태 전이 시도(DONE). orderId={}, 현재상태={}", orderId, payment.getStatus());
                 }
                 break;
-
             case CANCELED:
-                // DONE 또는 PENDING 상태에서 CANCELED로 변경 가능
                 if (payment.getStatus() == PaymentStatus.DONE || payment.getStatus() == PaymentStatus.PENDING) {
                     payment.cancel();
                     payment.getBooking().cancel();
@@ -360,35 +332,25 @@ public class PaymentService {
                     log.warn("웹훅: 잘못된 상태 전이 시도(CANCELED). orderId={}, 현재상태={}", orderId, payment.getStatus());
                 }
                 break;
-
             case FAILED:
             case EXPIRED:
-                // 오직 PENDING 상태일 때만 FAILED 또는 EXPIRED로 변경 가능
                 if (payment.getStatus() == PaymentStatus.PENDING) {
-                    payment.fail(); // FAILED, EXPIRED 모두 fail() 메서드로 처리
+                    payment.fail();
                     payment.getBooking().cancel();
                     log.info("웹훅: 결제 {} 상태 PENDING -> {} 업데이트 완료", orderId, newStatus);
                 } else {
                     log.warn("웹훅: 잘못된 상태 전이 시도({}). orderId={}, 현재상태={}", newStatus, orderId, payment.getStatus());
                 }
                 break;
-
             default:
                 log.warn("웹훅 처리: 정의되지 않은 상태({})에 대한 로직이 없습니다. orderId={}", newStatus, orderId);
                 break;
         }
     }
 
-    /**
-     * 💡 [복원 및 수정] 토스페이먼츠의 "결제 승인 API"를 호출하는 private 헬퍼 메서드
-     *
-     * @param confirmRequest   결제 승인 요청 DTO
-     * @param encodedSecretKey 인코딩된 시크릿 키
-     * @param idempotencyKey   멱등성 키
-     * @return 토스페이먼츠 API 응답을 담은 Mono<Map>
-     */
     private Mono<Map<String, Object>> callTossConfirmApi(PaymentConfirmRequest confirmRequest, String encodedSecretKey,
                                                          String idempotencyKey) {
+        // 토스 결제 승인 API를 외부 호출하여 응답을 가져옵니다.
         return webClient.post()
                 .uri("https://api.tosspayments.com/v1/payments/confirm")
                 .header(HttpHeaders.AUTHORIZATION, "Basic " + encodedSecretKey)
@@ -409,6 +371,7 @@ public class PaymentService {
 
     private Mono<Map<String, Object>> callTossCancelApi(String paymentKey, String cancelReason,
                                                         String encodedSecretKey) {
+        // 토스 결제 취소 API를 외부 호출하여 응답을 가져옵니다.
         return webClient.post()
                 .uri("https://api.tosspayments.com/v1/payments/{paymentKey}/cancel", paymentKey)
                 .header(HttpHeaders.AUTHORIZATION, "Basic " + encodedSecretKey)
@@ -418,20 +381,18 @@ public class PaymentService {
                 .onStatus(HttpStatusCode::isError, response -> response.bodyToMono(String.class)
                         .flatMap(errorBody -> Mono.error(
                                 new BusinessException(ErrorCode.TOSS_API_ERROR, "토스페이먼츠 취소 API 호출 실패: " + errorBody))))
-                .bodyToMono(new ParameterizedTypeReference<>() {
-                }); // 💡 컴파일 에러 해결
+                .bodyToMono(new ParameterizedTypeReference<>() {});
     }
 
     private LocalDateTime parseDateTime(Object dateTimeObj) {
+        // 응답 데이터의 날짜/시간(문자열)을 LocalDateTime 객체로 변환합니다.
         String dateTimeStr = dateTimeObj.toString();
         try {
-            // ① 오프셋 포함 포맷(예: 2025-07-14T03:00:50+09:00) 파싱
             return OffsetDateTime.parse(
                     dateTimeStr,
                     DateTimeFormatter.ISO_OFFSET_DATE_TIME
             ).toLocalDateTime();
         } catch (DateTimeParseException ex) {
-            // ② 순수 LocalDateTime 포맷(예: 2025-07-14T03:00:50)으로 다시 시도
             return LocalDateTime.parse(
                     dateTimeStr,
                     DateTimeFormatter.ISO_LOCAL_DATE_TIME
@@ -439,14 +400,8 @@ public class PaymentService {
         }
     }
 
-    /**
-     * 주문 ID로 결제 정보를 조회하여 연결된 예매번호를 반환합니다.
-     *
-     * @param orderId TossPayments 주문 ID
-     * @return 예매번호
-     * @throws BusinessException 결제 정보나 예매가 없을 때
-     */
     public String getBookingNumberByOrderId(String orderId) {
+        // 주문ID에서 결제 엔티티를 조회하고, 해당 예매번호를 반환합니다.
         Payment payment = paymentRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND,
                         "존재하지 않는 주문 ID 입니다: " + orderId));
