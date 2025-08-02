@@ -120,3 +120,4 @@ jobs:
 #            <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Workflow Run>
 #          # 색상 설정 (선택 사항, job.status에 따라 변경 가능)
 #          # color: ${{ job.status == 'success' && '#00FF00' || job.status == 'failure' && '#FF0000' || '#FFFF00' }}
+
