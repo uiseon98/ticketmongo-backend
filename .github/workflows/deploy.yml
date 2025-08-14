@@ -6,14 +6,12 @@ on:
     workflows: [ "Backend CI Pipeline" ]  # backend-ci.yml 파일의 'name' 속성 값
     types:
       - completed # 'Backend CI Pipeline'이 완료되었을 때만 실행 (성공/실패 무관)
-
-  # 여기에 수동 실행을 위한 '비상 버튼'을 추가합니다!
   workflow_dispatch:
 
 jobs:
   deploy:
     # 'Backend CI Pipeline' 워크플로우의 결과가 'success'일 때만 'deploy' job 실행
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     name: Deploy Backend to EC2
     runs-on: ubuntu-latest # AWS EC2 인스턴스에 연결하기 위한 실행 환경
 
@@ -31,8 +29,8 @@ jobs:
           script: |
             set -xe
             echo "EC2 접속 완료. 기존 컨테이너 중지 중..."
-            docker stop ticketmongo-backend || true
-            docker rm ticketmongo-backend || true
+            docker stop ticketmon-backend || true
+            docker rm ticketmon-backend || true
 
             echo "🗑️ 이전 Docker 이미지 삭제 중..."
             # 주의: 이 명령은 'ticketmon-backend'와 관련된 이미지만 삭제합니다.
