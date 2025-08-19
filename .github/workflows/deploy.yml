@@ -2,13 +2,13 @@ name: Deploy to EC2
 
 on:
   workflow_run:
-    workflows: [ "Backend CI Pipeline" ]    # CI 성공시 자동 트리거
+    workflows: [ "Backend CI Pipeline" ]
     types: [ completed ]
-  workflow_dispatch:                        # 수동 실행도 가능
+  workflow_dispatch:
 
 jobs:
   deploy:
-    # 자동 실행 시 CI 성공할 때만 진행, 수동 실행은 무조건 진행
+
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
 
@@ -16,16 +16,19 @@ jobs:
       - name: Deploy Docker container to EC2
         uses: appleboy/ssh-action@v0.1.6
         with:
-          host: ${{ secrets.EC2_HOST }}          # EC2 퍼블릭 IP
-          username: ${{ secrets.EC2_USER }}      # EC2 유저명 (ubuntu)
-          key: ${{ secrets.EC2_KEY }}            # EC2 프라이빗 키 (.pem 내용)
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+
           port: 22
           script: |
+            set -xe
             echo "===== Docker Login ====="
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
             echo "===== Docker Pull ====="
-            docker pull ghcr.io/uiseon98/ticketmongo-backend:latest
+            docker pull ghcr.io/${{ github.repository }}:latest
+
 
             echo "===== Stop/Remove Old Container ====="
             docker stop ticketmon-backend || true
@@ -39,6 +42,11 @@ jobs:
               -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
               -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
               -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+              -e JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}" \
+              -e JWT_ACCESS_EXPIRATION_MS="${{ secrets.JWT_ACCESS_EXPIRATION_MS }}" \
+              -e JWT_REFRESH_EXPIRATION_MS="${{ secrets.JWT_REFRESH_EXPIRATION_MS }}" \
               -e BASE_URL="${{ secrets.BASE_URL }}" \
               -e FRONT_BASE_URL="${{ secrets.FRONT_BASE_URL }}" \
-              ghcr.io/uiseon98/ticketmongo-backend:latest
+              ghcr.io/${{ github.repository }}:latest
+            echo "🎉 배포 완료!"
+
