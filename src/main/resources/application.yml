@@ -38,9 +38,9 @@ seat:
       interval-seconds: 10   # 실행 주기 (초)
 spring:
   application:
-    name: ticketmon-go
+    name: ticketmongo
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev}  # 환경 변수 'SPRING_PROFILES_ACTIVE' 값(.env) 사용, 없으면 'dev'를 기본값으로 설정
+    active: ${SPRING_PROFILES_ACTIVE:prod}  # 환경 변수 'SPRING_PROFILES_ACTIVE' 값(.env) 사용, 없으면 'dev'를 기본값으로 설정
   config:
     import: optional:application-${spring.profiles.active}.yml # 활성화된 프로필에 맞는 추가 설정 파일 로드
   jackson:
