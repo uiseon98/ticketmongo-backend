@@ -25,7 +25,6 @@ seat:
     lease-time-seconds: 10 # 락 보유 시간 (초)
   cache:
     warmup-minutes-before: 10 # 캐시 워밍업 시작 시간 (분 전)
-
   # ✅ 새로 추가: 스케줄러 관련 설정 - [좌석 관리 및 예매 모듈]
   scheduler:
     seat-cache-warmup:
@@ -37,33 +36,23 @@ seat:
     waiting-queue:
       enabled: true          # 대기열 스케줄러 활성화 (기존)
       interval-seconds: 10   # 실행 주기 (초)
-
 spring:
   application:
     name: ticketmon-go
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:prod}  # 환경 변수 'SPRING_PROFILES_ACTIVE' 값(.env) 사용, 없으면 'dev'를 기본값으로 설정
-    # 로컬 개발 시 'dev' 프로필이 기본으로 활성화됩니다. 배포 시에도 변경 X -> .env에서 SPRING_PROFILES_ACTIVE를 prod로 변경
-    # include: supabase # 'supabase' 관련 빈(StorageUploader, StorageClient)을 활성화된 프로필과 함께 로드
+    active: ${SPRING_PROFILES_ACTIVE:dev}  # 환경 변수 'SPRING_PROFILES_ACTIVE' 값(.env) 사용, 없으면 'dev'를 기본값으로 설정
   config:
     import: optional:application-${spring.profiles.active}.yml # 활성화된 프로필에 맞는 추가 설정 파일 로드
-
-  autoconfigure:
-    exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration  # 임시로 DB 자동 설정 제외 (설정이 없을 경우 에러 방지)
-    # 실제 DB 사용 시엔 위 라인 제거. 현재는 데이터소스 수동 설정을 의미
-
   jackson:
     time-zone: Asia/Seoul  # [기본 설정] 한국 사용자 대상이므로 KST 기준으로 기본 직렬화 설정함
     # 추후 글로벌 확장 시 UTC 또는 타임존 동적 처리로 대체 가능
   main:
     allow-bean-definition-overriding: true
-
   servlet:
     multipart:
       max-file-size: 11MB  # 단일 파일 최대 크기
       max-request-size: 11MB # 요청 전체의 최대 크기 (일반적으로 동일하게 설정)
-
-    # ✅ 새로 추가: 스케줄러 설정 - [좌석 관리 및 예매 모듈]
+  # ✅ 새로 추가: 스케줄러 설정 - [좌석 관리 및 예매 모듈]
   task:
     scheduling:
       enabled: true  # 스케줄러 활성화 (기본값: true)
@@ -75,31 +64,26 @@ spring:
         core-size: 8      # 비동기 작업 스레드 풀 코어 크기
         max-size: 20      # 비동기 작업 스레드 풀 최대 크기
         queue-capacity: 500  # 대기 큐 크기
-
+  # JPA (Hibernate) 관련 기본 설정
+  jpa:
+    hibernate:
+      ddl-auto: update             # 개발 환경에서는 update, 운영에서는 validate 사용
+    show-sql: true                 # 개발 환경에서는 SQL 쿼리 출력을 활성화
+    properties:
+      hibernate:
+        format_sql: true
 server:
   port: ${SERVER_PORT:8080}  # .env에서 설정한 포트 사용, 기본은 8080
-    #  ssl:
-    #    enabled: true # HTTPS 활성화
-    #    # .pem 파일 직접 사용 시 필요한 설정들
-    #    certificate: classpath:certs/localhost.pem
-    #    certificate-private-key: classpath:certs/localhost-key.pem
-    # key-store-type을 명시적으로 지정해주는 것이 좋습니다.
-    # PEM 파일을 사용할 경우, key-store-type을 비워두거나 특정 타입을 지정하지 않습니다.
-  # 하지만 Spring Boot 버전에 따라서는 아래 설정이 필요할 수 있습니다.
-  # key-store-type: PKCS12 # 또는 JKS. PEM을 직접 사용할 때는 보통 이 줄이 필요 없습니다.
-
 logging:
   level:
     root: ${LOG_LEVEL:INFO}  # 로그 레벨 설정 (INFO / WARN / ERROR)
     com.team03.ticketmon.seat.service.SeatSyncService: DEBUG
     com.team03.ticketmon.seat.scheduler.SeatSyncScheduler: INFO
     com.team03.ticketmon.seat.controller.SeatSyncController: INFO
-
 toss:
   api:
     url: https://api.tosspayments.com/v1/payments/ # 토스페이먼츠 API의 기본 경로
     confirm-url: ${toss.api.url}confirm # 결제 승인 API 엔드포인트 (${toss.api.url} 재사용)
-
 ai:
   together:
     api-key: ${AI_API_KEY}
@@ -111,7 +95,6 @@ ai:
     max-reviews-per-request: 50
     chars-per-token: 2.5
     token-safety-margin: 0.2
-
   summary:
     condition:
       min-review-count: 10

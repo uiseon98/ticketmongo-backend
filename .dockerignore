@@ -44,3 +44,6 @@ swagger-ui/
 
 # Supabase Token
 gradle.properties
+
+#부하테스트용 파일
+application-loadtest.yml
