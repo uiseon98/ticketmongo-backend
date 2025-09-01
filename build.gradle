@@ -22,9 +22,12 @@ configurations {
 repositories {
     mavenCentral()
     maven {
-        name = "SupabasePackages"
+        name = "GitHubPackages" // 이름을 GitHubPackages로 변경
         url = uri("https://maven.pkg.github.com/supabase-community/storage-java")
-        credentials(PasswordCredentials)
+        credentials {
+            username = project.findProperty("gpr.user") ?: System.getenv("gpr_user")
+            password = project.findProperty("gpr.key") ?: System.getenv("gpr_key")
+        }
     }
 }
 
