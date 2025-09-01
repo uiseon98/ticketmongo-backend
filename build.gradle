@@ -24,10 +24,7 @@ repositories {
     maven {
         name = "SupabasePackages"
         url = uri("https://maven.pkg.github.com/supabase-community/storage-java")
-        credentials {
-            username = project.findProperty("gpr.user") ?: System.getenv("GH_PACKAGES_USER")
-            password = project.findProperty("gpr.key") ?: System.getenv("GH_PACKAGES_TOKEN")
-        }
+        credentials(PasswordCredentials)
     }
 }
 
