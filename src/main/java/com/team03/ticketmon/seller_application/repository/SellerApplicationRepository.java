@@ -16,21 +16,19 @@ import java.time.LocalDateTime;
 @Repository
 public interface SellerApplicationRepository extends JpaRepository<SellerApplication, Long> {
 
-    // 특정 userId로 신청 정보를 조회 (유저 당 여러 개의 신청서를 가질 수 있으므로 List 반환)
-//    List<SellerApplication> findByUserId(Long userId);
-    List<SellerApplication> findByUser(UserEntity user); // UserEntity 객체로 조회하도록 변경
+    // 특정 유저의 판매자 신청서 조회
+    List<SellerApplication> findByUser(UserEntity user);
 
-    // 특정 userId의 특정 상태 신청이 존재하는지 확인 (예: SUBMITTED 상태의 신청 여부)
-//    boolean existsByUserIdAndStatus(Long userId, SellerApplicationStatus status);
-    boolean existsByUserAndStatus(UserEntity user, SellerApplicationStatus status); // UserEntity 객체로 조회하도록 변경
+    // 특정 유저의 특정 상태 신청이 존재하는지 확인 (예: SUBMITTED 상태의 신청 여부)
+    boolean existsByUserAndStatus(UserEntity user, SellerApplicationStatus status);
 
-    // 특정 상태의 신청 목록 조회 (관리자 페이지용, 예: SUBMITTED 상태 목록)
-    List<SellerApplication> findByStatus(SellerApplicationStatus status);
+    // 특정 상태의 판매자 신청서들을 UserEntity와 함께 Fetch Join하여 조회
+    // N+1 쿼리 문제를 방지, SellerApplication에서 UserEntity 정보를 효율적으로 가져옴
+    @Query("SELECT sa FROM SellerApplication sa JOIN FETCH sa.user WHERE sa.status = :status")
+    List<SellerApplication> findByStatusWithUser(@Param("status") SellerApplicationStatus status); // 메서드 이름도 명확하게 변경 (기존 findByStatus 대체)
 
     // 가장 최신 (현재 진행 중인 또는 마지막으로 처리된) 신청서 조회
-    // activeStatuses 예시: List.of(SellerApplicationStatus.SUBMITTED, SellerApplicationStatus.ACCEPTED)
-//    Optional<SellerApplication> findTopByUserIdAndStatusInOrderByCreatedAtDesc(Long userId, List<SellerApplicationStatus> statuses);
-    Optional<SellerApplication> findTopByUserAndStatusInOrderByCreatedAtDesc(UserEntity user, List<SellerApplicationStatus> statuses); // UserEntity 객체로 조회하도록 변경
+    Optional<SellerApplication> findTopByUserAndStatusInOrderByCreatedAtDesc(UserEntity user, List<SellerApplicationStatus> statuses);
 
     // 특정 UserEntity에 대한 가장 최신 SellerApplication을 조회 (revokeSellerRole에서 사용)
     Optional<SellerApplication> findTopByUserOrderByCreatedAtDesc(UserEntity user);

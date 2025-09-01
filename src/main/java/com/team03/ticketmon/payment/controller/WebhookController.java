@@ -36,19 +36,17 @@ public class WebhookController {
 	private final PaymentService paymentService;
 	private final TossPaymentsProperties tossPaymentsProperties;
 
-	/**
-	 * 토스페이먼츠 웹훅 수신 API
-	 * - 서명이 있는 웹훅은 검증하고, 없는 웹훅은 예외 처리합니다.
-	 */
 	@PostMapping("/payment-updates")
-	public ResponseEntity<String> handleTossPaymentWebhook(HttpServletRequest request) { // 💡 HttpServletRequest를 직접 받음
+	public ResponseEntity<String> handleTossPaymentWebhook(HttpServletRequest request) {
+		// 토스페이먼츠가 외부에서 보내오는 "웹훅" 이벤트를 처리하는 엔드포인트입니다.
+		// 실제 결제 승인/취소 등 변동사항이 있을 때 서버에서 백엔드 상태를 맞추는 용도입니다.
 		try {
-			// 1. 원본 요청 바디를 읽음
+			// 1. HTTP 요청 바디 전체를 원본 그대로 String으로 읽어옵니다
 			String requestBody = request.getReader().lines().collect(Collectors.joining(System.lineSeparator()));
 			JsonNode jsonNode = objectMapper.readTree(requestBody);
 			String eventType = jsonNode.get("eventType").asText();
 
-			// "PAYMENT_STATUS_CHANGED" 이벤트가 아닌 경우에만 서명을 검증합니다.
+			// 2. "PAYMENT_STATUS_CHANGED" 이벤트가 아니면 서명(HMAC) 검증을 반드시 수행합니다
 			if (!"PAYMENT_STATUS_CHANGED".equals(eventType)) {
 				verifySignature(request, requestBody);
 				log.info("토스페이먼츠 웹훅 서명 검증 성공 (eventType: {})", eventType);
@@ -56,7 +54,7 @@ public class WebhookController {
 				log.info("PAYMENT_STATUS_CHANGED 이벤트이므로 서명 검증을 건너뜁니다.");
 			}
 
-			// 3. 서명 검증 성공 또는 예외 처리 후, 비즈니스 로직 실행
+			// 3. 실제 결제 상태 등 비즈니스 동작 처리
 			if ("PAYMENT_STATUS_CHANGED".equals(eventType)) {
 				JsonNode data = jsonNode.get("data");
 				String orderId = data.get("orderId").asText();
@@ -64,34 +62,33 @@ public class WebhookController {
 				paymentService.updatePaymentStatusByWebhook(orderId, status);
 			}
 
+			// 4. 정상 응답(200 OK) 반환: 토스 서버가 재전송 안하도록
 			return ResponseEntity.ok("Webhook processed successfully.");
 		} catch (SecurityException e) {
+			// HMAC 등 서명 검증 실패 시, 403 에러로 거절
 			log.warn("웹훅 서명 검증 실패: {}", e.getMessage());
 			return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
 		} catch (IOException e) {
+			// JSON 파싱 실패 등 문제가 있어도, 200 OK로 응답(재전송 방지)
 			log.error("웹훅 페이로드 파싱 실패: {}", e.getMessage(), e);
-			// 파싱 실패 시에도 토스 서버에는 2xx 응답을 보내야 재전송을 막을 수 있습니다.
 			return ResponseEntity.ok("Webhook payload parsing error, but acknowledged.");
 		} catch (Exception e) {
+			// 그 외 예기치 않은 에러 처리
 			log.error("웹훅 처리 중 알 수 없는 오류 발생: {}", e.getMessage(), e);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal server error.");
 		}
 	}
 
-	/**
-	 * 토스페이먼츠 웹훅 서명을 검증하는 private 헬퍼 메서드
-	 * @param request HttpServletRequest 객체
-	 * @param payload 웹훅 요청의 원본 바디 (JSON 문자열)
-	 * @throws SecurityException 서명 검증 실패 시
-	 */
 	private void verifySignature(HttpServletRequest request, String payload) throws SecurityException {
+		// 웹훅 서명(HMAC-SHA256) 검증 메서드
+		// 요청 헤더와 body, 비밀키를 사용해서 위조/변조 없이 온 것인지 확인합니다
 		String signature = request.getHeader("tosspayments-webhook-signature");
 		String transmissionTime = request.getHeader("tosspayments-webhook-transmission-time");
 
+		// 둘 중 하나라도 없으면 예외
 		if (signature == null || transmissionTime == null) {
 			throw new SecurityException("웹훅 서명 또는 시간 헤더가 누락되었습니다.");
 		}
-
 		String dataToSign = payload + ":" + transmissionTime;
 		String secretKey = tossPaymentsProperties.secretKey();
 
@@ -103,9 +100,9 @@ public class WebhookController {
 			byte[] hash = sha256_HMAC.doFinal(dataToSign.getBytes(StandardCharsets.UTF_8));
 			String calculatedSignature = Base64.getEncoder().encodeToString(hash);
 
-			// 타이밍 공격에 안전한 비교를 위해 MessageDigest.isEqual 사용
+			// 계산 결과와 실제 헤더 값을 안전하게 비교
 			if (!MessageDigest.isEqual(calculatedSignature.getBytes(StandardCharsets.UTF_8),
-				signature.getBytes(StandardCharsets.UTF_8))) {
+					signature.getBytes(StandardCharsets.UTF_8))) {
 				throw new SecurityException("계산된 서명이 헤더의 서명과 일치하지 않습니다.");
 			}
 		} catch (NoSuchAlgorithmException | InvalidKeyException e) {

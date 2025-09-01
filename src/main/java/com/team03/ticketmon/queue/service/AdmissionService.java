@@ -31,10 +31,11 @@ import java.util.UUID;
 public class AdmissionService {
     private final RedissonClient redissonClient;
     private final RedisKeyGenerator keyGenerator;
-
     private final NotificationService notificationService;
     private final QueueRedisAdapter queueRedisAdapter;
 
+    @Value("${app.queue.access-key-max-ttl-seconds}") // 예: 600 (10분)
+    private long accessKeyMaxTtlSeconds;
     @Value("${app.queue.access-key-ttl-seconds}")
     private long accessKeyTtlSeconds; // 발급된 입장 허가 키의 유효 시간 (분)
     @Value("${app.queue.max-active-users}")
@@ -49,7 +50,7 @@ public class AdmissionService {
      * @return 발급된 AccessKey
      */
     public String grantAccess(Long concertId, Long userId) {
-        List<String> accessKeys = grantAccess(concertId, List.of(userId), false); // 즉시 입장은 알림을 보내지 않음
+        List<String> accessKeys = grantAccess(concertId, List.of(userId), false, false);
         return accessKeys.isEmpty() ? null : accessKeys.get(0);
     }
 
@@ -61,7 +62,7 @@ public class AdmissionService {
      * @param sendNotification Redis Pub/Sub으로 알림을 보낼지 여부
      * @return 발급된 AccessKey 리스트
      */
-    public List<String> grantAccess(Long concertId, List<Long> userIds, boolean sendNotification) {
+    public List<String> grantAccess(Long concertId, List<Long> userIds, boolean sendNotification, boolean incrementCounter) {
         if (userIds == null || userIds.isEmpty()) {
             return Collections.emptyList();
         }
@@ -73,6 +74,8 @@ public class AdmissionService {
 
         long expiryTimestamp = System.currentTimeMillis() + (accessKeyTtlSeconds * 1000);
         Duration ttl = Duration.ofSeconds(accessKeyTtlSeconds);
+        long finalExpiryTimestamp = System.currentTimeMillis() + (accessKeyMaxTtlSeconds * 1000);
+
 
         List<String> issuedKeys = new ArrayList<>();
 
@@ -90,14 +93,21 @@ public class AdmissionService {
             // 2. 만료 시간 관리를 위해 active_sessions Sorted Set에 추가 (Score: 만료시간, Value: userId)
             batch.getScoredSortedSet(activeSessionsKey, LongCodec.INSTANCE).addAsync(expiryTimestamp, userId);
 
+            String finalExpiryKey = keyGenerator.getFinalExpiryKey(concertId, userId);
+            Duration finalKeyTtl = Duration.ofSeconds(finalExpiryTimestamp + 60);
+            batch.getBucket(finalExpiryKey).setAsync(finalExpiryTimestamp, finalKeyTtl);
+
+
             // 3. 알림이 필요한 경우 (스케줄러에 의해 호출될 때) 알림 전송
             if (sendNotification) {
                 notificationService.sendAdmissionNotification(userId, accessKey);
             }
         }
 
-        // 4. 활성 사용자 수 원자적으로 증가
-        batch.getAtomicLong(activeUserCountKey).addAndGetAsync(userIds.size());
+        // 4. 활성 사용자 수 조건부로 원자적으로 증가
+        if (incrementCounter) {
+            batch.getAtomicLong(activeUserCountKey).addAndGetAsync(userIds.size());
+        }
 
         // 5. 준비된 모든 명령을 Redis 서버로 한 번에 전송
         try {

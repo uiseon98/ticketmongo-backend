@@ -174,20 +174,8 @@ public class SeatPollingController {
                 deferredResult.setResult(ResponseEntity.status(503)
                         .body(SuccessResponse.of("서비스 일시 불가", failResponse)));
                 return deferredResult;
-            } else if ("USER_SESSION_EXISTS".equals(sessionId)) {
-                // 사용자 이미 활성 세션 존재 - 409 Conflict 응답
-                Map<String, Object> conflictResponse = Map.of(
-                        "hasUpdate", false,
-                        "message", "이미 활성 폴링 세션이 존재합니다. 기존 세션을 종료하고 새 세션을 시작하려면 replace=true 파라미터를 사용하세요.",
-                        "errorCode", "USER_SESSION_ALREADY_EXISTS",
-                        "userId", userId,
-                        "concertId", concertId,
-                        "suggestedAction", "재시도 시 replace=true 파라미터 추가"
-                );
-                deferredResult.setResult(ResponseEntity.status(409) // Conflict
-                        .body(SuccessResponse.of("세션 충돌", conflictResponse)));
-                return deferredResult;
             }
+            // USER_SESSION_EXISTS 체크 제거 (다중 세션 허용으로 더 이상 불필요)
 
             // ✅ 수정: 타임아웃 핸들러 설정 (final 변수 사용)
             deferredResult.onTimeout(() -> {

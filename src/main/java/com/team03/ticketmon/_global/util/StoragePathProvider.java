@@ -15,4 +15,12 @@ public interface StoragePathProvider {
 
     // Public URL에서 실제 파일 경로(객체 키) 추출
     Optional<String> extractPathFromPublicUrl(String publicUrl, String bucketName);
+
+    /**
+     * S3 직접 URL을 CloudFront를 통한 이미지 URL로 변환합니다.
+     *
+     * @param s3DirectUrl S3 버킷의 직접적인 이미지 URL (예: https://bucket.s3.region.amazonaws.com/key)
+     * @return CloudFront를 통한 이미지 URL (예: https://your-cloudfront-domain.com/key) 또는 null/기본값
+     */
+    String getCloudFrontImageUrl(String s3DirectUrl);
 }

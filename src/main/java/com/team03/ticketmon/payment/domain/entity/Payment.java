@@ -25,7 +25,7 @@ public class Payment {
     @JoinColumn(name = "booking_id", nullable = false, unique = true)
     private Booking booking;
 
-    // 💡 [수정] user_id 컬럼에 직접 매핑될 필드 추가
+    // user_id 컬럼에 직접 매핑될 필드 추가
     @Column(name = "user_id", nullable = false, updatable = false)
     private Long userId;
 
@@ -64,11 +64,11 @@ public class Payment {
     )
     private PaymentCancelHistory cancelHistory;
 
-    
-    // 취소 시 호출될 수 있는 헬퍼
-    public void setCancelHistory(PaymentCancelHistory history) {
-        this.cancelHistory = history;
-        history.setPayment(this);
+    /**
+     * 클라이언트가 선택한 결제수단 ("카드" 또는 "간편결제")
+     */
+    public void setPaymentMethod(String paymentMethod) {
+        this.paymentMethod = paymentMethod;
     }
 
     @PrePersist
@@ -102,5 +102,6 @@ public class Payment {
 
     public void cancel() {
         this.status = PaymentStatus.CANCELED;
+        this.updatedAt = LocalDateTime.now();
     }
 }

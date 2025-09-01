@@ -7,5 +7,7 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(
-	@NotBlank String baseUrl
-) {}
+        @NotBlank String baseUrl,
+        @NotBlank String frontBaseUrl
+) {
+}
