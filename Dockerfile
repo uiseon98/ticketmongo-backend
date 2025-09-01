@@ -19,8 +19,8 @@ COPY . /app
 RUN chmod +x /app/gradlew
 
 # JAR 빌드
-RUN --mount=type=secret,id=gradle,target=/root/.gradle/gradle.properties \
-    ./gradlew clean bootJar --no-daemon
+RUN ./gradlew clean bootJar --no-daemon
+
 
 FROM eclipse-temurin:17-jdk-alpine
 
