@@ -1,5 +1,3 @@
-# Dockerfile
-
 FROM eclipse-temurin:17-jdk AS build
 
 WORKDIR /app
@@ -15,7 +13,8 @@ ARG USERNAME
 ARG TOKEN
 
 # JAR 빌드 시, 전달받은 ARG를 환경변수로 사용하여 Gradle 실행
-RUN --env USERNAME=$USERNAME --env TOKEN=$TOKEN ./gradlew clean bootJar --no-daemon
+# 올바른 문법: RUN 변수명=값 변수명=값 명령어
+RUN USERNAME=$USERNAME TOKEN=$TOKEN ./gradlew clean bootJar --no-daemon
 
 FROM eclipse-temurin:17-jdk-alpine
 
