@@ -1,3 +1,5 @@
+# Dockerfile 최종본
+
 FROM eclipse-temurin:17-jdk AS build
 
 WORKDIR /app
@@ -13,7 +15,6 @@ ARG USERNAME
 ARG TOKEN
 
 # JAR 빌드 시, 전달받은 ARG를 환경변수로 사용하여 Gradle 실행
-# 올바른 문법: RUN 변수명=값 변수명=값 명령어
 RUN USERNAME=$USERNAME TOKEN=$TOKEN ./gradlew clean bootJar --no-daemon
 
 FROM eclipse-temurin:17-jdk-alpine
@@ -24,4 +25,5 @@ COPY --from=build /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+# ✅ prod 프로필을 직접 지정하여 실행
+ENTRYPOINT ["java", "-jar", "-Dspring.profiles.active=prod", "/app/app.jar"]

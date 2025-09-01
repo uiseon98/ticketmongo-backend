@@ -68,7 +68,6 @@ jobs:
 
             # Docker 컨테이너 실행 (prod 프로필 활성화)
             docker run -d --name ticketmongo-backend -p 80:8080 \
-              -e SPRING_PROFILES_ACTIVE=prod \
               -e DB_URL="${{ secrets.DB_URL }}" \
               -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
               -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
