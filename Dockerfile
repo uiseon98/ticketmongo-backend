@@ -25,13 +25,5 @@ COPY --from=build /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", \
-  "-Dspring.profiles.active=prod", \
-  "-Dspring.datasource.url=jdbc:mysql://ticketmongo-db.cpc6yg08m8uo.ap-northeast-2.rds.amazonaws.com:3306/ticketmongo-db", \
-  "-Dspring.datasource.username=admin", \
-  "-Dspring.datasource.password=qsv0nX67ABBfbgf6numz", \
-  "-Djwt.secret.key=5Za2EmQNKgi7YbpWJ/l8BSKYBCyv/YMXU6/GVjdrqfw=", \
-  "/app/app.jar"]
-
 # ✅ prod 프로필을 직접 지정하여 실행
 ENTRYPOINT ["java", "-jar", "-Dspring.profiles.active=prod", "/app/app.jar"]
