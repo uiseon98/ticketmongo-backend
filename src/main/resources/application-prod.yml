@@ -109,3 +109,17 @@ logging:
 # 📚 Swagger API 문서 설정
 swagger:
   enabled: false  # 운영 환경에서는 보안을 위해 Swagger 문서를 비활성화
+
+# 💎 AWS S3 스토리지 설정
+cloud:
+  aws:
+    credentials:
+      access-key: ${AWS_ACCESS_KEY_ID}    # GitHub Secret 변수를 그대로 사용
+      secret-key: ${AWS_SECRET_ACCESS_KEY}  # GitHub Secret 변수를 그대로 사용
+    region:
+      static: ap-northeast-2
+    s3:
+      bucket: ${AWS_S3_BUCKET}             # GitHub Secret 변수를 그대로 사용
+      profile-prefix: profile-imgs/
+      poster-prefix: poster-imgs/
+      seller-docs-prefix: seller-docs/
