@@ -14,7 +14,7 @@ import java.util.UUID;
 
 @Slf4j
 @Component
-@Profile("s3")
+@Profile("prod")
 @RequiredArgsConstructor
 public class S3PathProvider implements StoragePathProvider {
 

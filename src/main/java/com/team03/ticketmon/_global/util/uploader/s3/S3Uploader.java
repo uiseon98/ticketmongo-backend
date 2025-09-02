@@ -18,7 +18,7 @@ import java.io.IOException;
 
 @Slf4j
 @Component
-@Profile("s3")
+@Profile("prod")
 @RequiredArgsConstructor
 public class S3Uploader implements StorageUploader {
 
