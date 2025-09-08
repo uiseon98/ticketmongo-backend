@@ -131,7 +131,7 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/toss/payment-updates").permitAll()
 
                                 // 좌석 폴링 API (Long Polling, DeferredResult 처리를 위해 permitAll)
-                                .requestMatchers(HttpMethod.GET, "/api/seats/concerts/**/polling").permitAll()
+                                .requestMatchers(HttpMethod.GET, "/api/seats/concerts/*/polling").permitAll()
 
 
                                 // 기본 루트 URL
