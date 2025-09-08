@@ -134,7 +134,7 @@ public class SecurityConfig {
 
                                 // 기본 루트 URL
                                 .requestMatchers("/").permitAll()
-                                .requestMatchers("/healthz").permitAll()
+                                .requestMatchers("/health").permitAll()
                                 // .requestMatchers("/index.html").permitAll() // 필요시 주석 해제
 
                                 // 기타
