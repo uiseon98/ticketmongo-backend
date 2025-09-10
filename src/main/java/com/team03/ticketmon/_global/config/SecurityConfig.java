@@ -145,8 +145,10 @@ public class SecurityConfig {
 
                                 //------------특정 역할이 필요한 경로들 (hasRole())------------
                                 // 관리자 전용 경로 - ADMIN 역할만 접근 허용 (관리자 페이지 및 API)
-                                .requestMatchers("/admin/**").hasRole("ADMIN")
-                                .requestMatchers("/api/admin/seats/**").hasRole("ADMIN")
+//                                .requestMatchers("/admin/**").hasRole("ADMIN")
+//                                .requestMatchers("/api/admin/seats/**").hasRole("ADMIN") -> 나중에 다시변경
+                                .requestMatchers("/admin/**").permitAll()
+                                .requestMatchers("/api/admin/seats/**").permitAll()
 
                                 // 실제 판매자 기능 (콘서트 CRUD) - SELLER 역할만 접근 허용
                                 .requestMatchers("/api/seller/concerts/**").hasRole("SELLER")
