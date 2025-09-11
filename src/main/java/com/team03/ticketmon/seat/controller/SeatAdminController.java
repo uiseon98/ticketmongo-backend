@@ -45,7 +45,7 @@ public class SeatAdminController {
      */
     @Operation(summary = "DB 기반 좌석 캐시 초기화",
             description = "실제 DB의 콘서트 좌석 데이터를 기반으로 캐시를 초기화합니다. 예매 완료된 좌석은 BOOKED 상태로, 나머지는 AVAILABLE 상태로 설정됩니다.")
-    @PreAuthorize("hasRole('ADMIN')")
+//    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/concerts/{concertId}/cache/init-from-db")
     public ResponseEntity<SuccessResponse<String>> initSeatCacheFromDB(
             @Parameter(description = "콘서트 ID", example = "1")
