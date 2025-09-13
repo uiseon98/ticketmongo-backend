@@ -14,11 +14,11 @@ COPY . .
 RUN apk add --no-cache bash
 
 # RUN 명령 전체를 bash -c "..." 로 감싸서 bash 쉘에서 실행되도록 변경합니다.
-# 이렇게 하면 'source' 명령어를 정상적으로 사용할 수 있습니다.
+# Gradle 실행 시 --stacktrace와 --info 옵션을 추가하여 상세한 로그를 확인합니다.
 RUN --mount=type=secret,id=github-credentials,target=/tmp/github-credentials \
     bash -c "source /tmp/github-credentials && \
     chmod +x ./gradlew && \
-    ./gradlew clean bootJar --no-daemon"
+    ./gradlew clean bootJar --no-daemon --stacktrace --info"
 
 # 2. Final Stage: 실제 실행될 이미지를 만드는 단계
 FROM eclipse-temurin:17-jdk-alpine
