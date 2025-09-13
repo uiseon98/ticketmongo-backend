@@ -25,8 +25,8 @@ repositories {
         name = "GitHubPackages"
         url = uri("https://maven.pkg.github.com/supabase-community/storage-java")
         credentials {
-            username = project.findProperty('githubUser') ?: System.getenv("USERNAME")
-            password = project.findProperty('githubToken') ?: System.getenv("TOKEN")
+            username = project.findProperty('githubUser')
+            password = project.findProperty('githubToken')
         }
     }
 }
