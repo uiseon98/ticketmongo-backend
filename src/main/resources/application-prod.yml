@@ -18,6 +18,8 @@ ai:
 cors:
   allowed-origins:
     - "https://ticketmongo.store"    # 프론트엔드 서비스 도메인
+    - "http://localhost:3000"
+    - "http://ticketmongo.sotre"
     - "https://api.ticketmongo.store" # 백엔드 API 도메인
 onesignal:
   app-id: ${ONESIGNAL_APP_ID}        # 운영 환경에서 환경 변수로 관리
