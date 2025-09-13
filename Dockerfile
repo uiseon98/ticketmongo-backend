@@ -1,25 +1,27 @@
 # Dockerfile 최종본
 
-# Dockerfile 문법 버전을 명시하여 BuildKit 기능을 활성화합니다.
-# syntax=docker/dockerfile:1
-
-# 1. Build Stage: Gradle을 사용하여 애플리케이션을 빌드하는 단계
+# 1. Build Stage
 FROM gradle:8.5-jdk17-alpine AS builder
 
 WORKDIR /app
+
+# ARG로 GitHub 인증 정보를 받습니다.
+ARG USERNAME
+ARG TOKEN
+
+# 1. 먼저 프로젝트의 모든 파일을 복사합니다.
 COPY . .
 
-# Alpine 이미지에는 bash가 기본 포함되어 있지 않으므로, apk를 이용해 설치합니다.
-# --no-cache 옵션은 이미지 크기를 작게 유지하는 데 도움을 줍니다.
-RUN apk add --no-cache bash
+# 2. 복사된 프로젝트 내의 gradle.properties 파일에 인증 정보를 '덧붙입니다' (>>)
+#    이렇게 하면 기존 파일이 있든 없든, 인증 정보가 확실하게 추가됩니다.
+RUN echo "\ngithubUser=${USERNAME}" >> /app/gradle.properties && \
+    echo "githubToken=${TOKEN}" >> /app/gradle.properties
 
-# RUN 명령 전체를 bash -c "..." 로 감싸서 bash 쉘에서 실행되도록 변경합니다.
-# Gradle 실행 시 --stacktrace와 --info 옵션을 추가하여 상세한 로그를 확인합니다.
-RUN mkdir -p /home/gradle/.gradle && \
-    echo "githubUser=${USERNAME}" >> /home/gradle/.gradle/gradle.properties && \
-    echo "githubToken=${TOKEN}" >> /home/gradle/.gradle/gradle.properties
+# 3. 별도의 인증 정보 전달 없이 Gradle을 실행합니다.
+RUN chmod +x ./gradlew && ./gradlew clean bootJar --no-daemon
 
-# 2. Final Stage: 실제 실행될 이미지를 만드는 단계
+
+# 2. Final Stage
 FROM eclipse-temurin:17-jdk-alpine
 
 WORKDIR /app
@@ -29,5 +31,4 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-# ✅ prod 프로필을 직접 지정하여 실행
 ENTRYPOINT ["java", "-jar", "-Dspring.profiles.active=prod", "/app/app.jar"]
