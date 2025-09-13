@@ -22,10 +22,11 @@ configurations {
 repositories {
     mavenCentral()
     maven {
+        name = "GitHubPackages"
         url = uri("https://maven.pkg.github.com/supabase-community/storage-java")
         credentials {
-            username = System.getenv("USERNAME")
-            password = System.getenv("TOKEN")
+            username = project.findProperty('githubUser') ?: System.getenv("USERNAME")
+            password = project.findProperty('githubToken') ?: System.getenv("TOKEN")
         }
     }
 }
