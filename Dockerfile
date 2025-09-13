@@ -9,11 +9,12 @@ FROM gradle:8.5-jdk17-alpine AS builder
 WORKDIR /app
 COPY . .
 
-# --mount 옵션으로 시크릿을 빌드 시에만 안전하게 사용합니다.
-# GitHub Actions에서 'gradle-properties' ID로 전달된 시크릿을
-# /root/.gradle/gradle.properties 파일로 임시 마운트합니다.
-RUN --mount=type=secret,id=gradle-properties,target=/root/.gradle/gradle.properties \
-    chmod +x ./gradlew && ./gradlew clean bootJar --no-daemon
+# --mount로 시크릿을 임시 파일(/tmp/github-credentials)로 마운트한 뒤,
+# 'source' 명령으로 파일 내용을 현재 쉘의 환경 변수로 로드하고 Gradle을 실행합니다.
+RUN --mount=type=secret,id=github-credentials,target=/tmp/github-credentials \
+    source /tmp/github-credentials && \
+    chmod +x ./gradlew && \
+    ./gradlew clean bootJar --no-daemon
 
 # 2. Final Stage: 실제 실행될 이미지를 만드는 단계
 FROM eclipse-temurin:17-jdk-alpine
