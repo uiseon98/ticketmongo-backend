@@ -44,9 +44,10 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository }}:latest
           no-cache: true
-          build-args: |
-            USERNAME=${{ github.actor }}
-            TOKEN=${{ secrets.GITHUB_TOKEN }}
+          # 'build-args' 대신 'secrets'를 사용하여 안전하게 인증 정보를 전달합니다.
+          # Dockerfile의 --mount=type=secret,id=gradle-properties 와 연동됩니다.
+          secrets: |
+            "gradle-properties=org.gradle.project.githubUser=${{ github.actor }}\norg.gradle.project.githubToken=${{ secrets.GITHUB_TOKEN }}"
 
       # 5. EC2에 접속하여 배포
       - name: Deploy to EC2
