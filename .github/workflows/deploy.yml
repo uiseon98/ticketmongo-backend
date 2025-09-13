@@ -35,7 +35,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 4. Docker 이미지 빌드 및 GHCR에 푸시
+      # 4. Docker 이미지 빌드 및 GHCR에 푸시 (변경 없음)
       - name: Build and push to GitHub Container Registry
         uses: docker/build-push-action@v5
         with:
@@ -44,8 +44,6 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository }}:latest
           no-cache: true
-          # Dockerfile의 id=github-credentials 와 연동됩니다.
-          # 파일 내용은 Gradle 빌드가 기대하는 환경 변수 형식으로 작성합니다.
           secrets: |
             "github-credentials=USERNAME=${{ github.actor }}\nTOKEN=${{ secrets.GITHUB_TOKEN }}"
 

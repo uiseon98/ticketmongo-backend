@@ -9,12 +9,12 @@ FROM gradle:8.5-jdk17-alpine AS builder
 WORKDIR /app
 COPY . .
 
-# --mount로 시크릿을 임시 파일(/tmp/github-credentials)로 마운트한 뒤,
-# 'source' 명령으로 파일 내용을 현재 쉘의 환경 변수로 로드하고 Gradle을 실행합니다.
+# RUN 명령 전체를 bash -c "..." 로 감싸서 bash 쉘에서 실행되도록 변경합니다.
+# 이렇게 하면 'source' 명령어를 정상적으로 사용할 수 있습니다.
 RUN --mount=type=secret,id=github-credentials,target=/tmp/github-credentials \
-    source /tmp/github-credentials && \
+    bash -c "source /tmp/github-credentials && \
     chmod +x ./gradlew && \
-    ./gradlew clean bootJar --no-daemon
+    ./gradlew clean bootJar --no-daemon"
 
 # 2. Final Stage: 실제 실행될 이미지를 만드는 단계
 FROM eclipse-temurin:17-jdk-alpine
