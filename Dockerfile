@@ -9,6 +9,10 @@ FROM gradle:8.5-jdk17-alpine AS builder
 WORKDIR /app
 COPY . .
 
+# Alpine 이미지에는 bash가 기본 포함되어 있지 않으므로, apk를 이용해 설치합니다.
+# --no-cache 옵션은 이미지 크기를 작게 유지하는 데 도움을 줍니다.
+RUN apk add --no-cache bash
+
 # RUN 명령 전체를 bash -c "..." 로 감싸서 bash 쉘에서 실행되도록 변경합니다.
 # 이렇게 하면 'source' 명령어를 정상적으로 사용할 수 있습니다.
 RUN --mount=type=secret,id=github-credentials,target=/tmp/github-credentials \
