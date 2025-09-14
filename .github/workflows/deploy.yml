@@ -27,7 +27,14 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      # 3. GitHub Container Registry (ghcr.io)에 로그인
+
+      # 3. (신규) build.gradle 파일에 인증 정보 임시 주입
+      - name: Inject credentials into build.gradle
+        run: |
+          sed -i "s/username = project.findProperty('githubUser')/username = '${{ github.actor }}'/" build.gradle
+          sed -i "s/password = project.findProperty('githubToken')/password = '${{ secrets.GITHUB_TOKEN }}'/" build.gradle
+
+      # 4. GitHub Container Registry (ghcr.io)에 로그인
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -35,7 +42,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 4. Docker 이미지 빌드 및 GHCR에 푸시 (변경 없음)
+      # 5. Docker 이미지 빌드 및 GHCR에 푸시 (변경 없음)
       - name: Build and push to GitHub Container Registry
         uses: docker/build-push-action@v5
         with:
@@ -44,11 +51,9 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository }}:latest
           no-cache: true
-          build-args: |
-            USERNAME=${{ github.actor }}
-            TOKEN=${{ secrets.GITHUB_TOKEN }}
 
-      # 5. EC2에 접속하여 배포
+
+      # 6. EC2에 접속하여 배포
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
         with:
@@ -95,7 +100,7 @@ jobs:
               -e FRONT_BASE_URL="${{ secrets.FRONT_BASE_URL }}" \
               ghcr.io/${{ github.repository }}:latest
 
-      # 6. Discord 알림
+      # 7. Discord 알림
       - name: Discord Notification
         if: always()
         uses: appleboy/discord-action@master
