@@ -6,10 +6,11 @@ import org.springframework.core.io.Resource;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.resource.PathResourceResolver;
+import java.io.IOException;
 
 @Configuration
-
 public class Webconfig implements WebMvcConfigurer {
+
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/**")
@@ -17,8 +18,7 @@ public class Webconfig implements WebMvcConfigurer {
                 .resourceChain(true)
                 .addResolver(new PathResourceResolver() {
                     @Override
-                    protected Resource getResource(String resourcePath, Resource location) {
-                        // API 경로 요청은 이 로직에서 제외합니다.
+                    protected Resource getResource(String resourcePath, Resource location) throws IOException {
                         if (resourcePath.startsWith("api/")) {
                             return null;
                         }
