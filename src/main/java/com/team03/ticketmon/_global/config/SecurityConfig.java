@@ -221,11 +221,10 @@ public class SecurityConfig {
 
         // 허용할 프론트엔드 도메인 (로컬 개발용 및 ngrok 주소)
         // 운영 환경 배포 시에는 실제 서비스 도메인으로 변경
-        config.setAllowedOrigins(List.of(
-                        Optional.ofNullable(corsProperties.getAllowedOrigins())
-                                .orElse(new String[0])
-                )
-        );
+        List<String> allowedOrigins = corsProperties.getAllowedOrigins();
+        if (allowedOrigins != null && !allowedOrigins.isEmpty()) {
+            config.setAllowedOrigins(allowedOrigins);
+        }
 
         // 허용할 HTTP 메서드
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));

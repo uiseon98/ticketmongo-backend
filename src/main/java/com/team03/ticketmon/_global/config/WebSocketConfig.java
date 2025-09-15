@@ -8,6 +8,8 @@ import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -36,9 +38,6 @@ public class WebSocketConfig implements WebSocketConfigurer {
                 .addInterceptors(webSocketAuthInterceptor)
 
                 // 실제 서비스 도메인(예: "https://ticketmon.com" 등)으로 추후 수정 가능성 있음
-                .setAllowedOrigins(
-                        Optional.ofNullable(corsProperties.getAllowedOrigins())
-                                .orElse(new String[0])
-                );
+                .setAllowedOrigins(allowedOrigins.toArray(new String[0]));
     }
 }
