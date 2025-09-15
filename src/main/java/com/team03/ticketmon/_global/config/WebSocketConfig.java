@@ -23,6 +23,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
     private final CustomWebSocketHandler customWebSocketHandler;
     private final WebSocketAuthInterceptor webSocketAuthInterceptor;
     private final CorsProperties corsProperties;
+
     /**
      * WebSocket 핸들러를 특정 경로에 등록
      *
@@ -31,13 +32,17 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
 
+        // corsProperties에서 허용된 Origin 목록을 가져옵니다.
+        // 이 변수는 반드시 registry를 사용하기 전에 메서드 내부에 선언되어야 합니다.
+        List<String> allowedOrigins = Optional.ofNullable(corsProperties.getAllowedOrigins())
+                .orElse(Collections.emptyList());
+
         registry
                 // 클라이언트가 "/ws/waitqueue" 경로로 WebSocket 연결을 맺을 수 있도록 핸들러를 매핑
                 .addHandler(customWebSocketHandler, "/ws/waitqueue")
                 // 주입받은 인터셉터를 등록
                 .addInterceptors(webSocketAuthInterceptor)
-
-                // 실제 서비스 도메인(예: "https://ticketmon.com" 등)으로 추후 수정 가능성 있음
+                // List<String>을 String[] 배열로 변환하여 설정합니다.
                 .setAllowedOrigins(allowedOrigins.toArray(new String[0]));
     }
 }
