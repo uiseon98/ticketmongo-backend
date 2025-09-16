@@ -135,9 +135,8 @@ public class SecurityConfig {
 
 
                                 // 기본 루트 URL
-                                .requestMatchers("/").permitAll()
+                                .requestMatchers("/","/index.html").permitAll()
                                 .requestMatchers("/health").permitAll()
-                                // .requestMatchers("/index.html").permitAll() // 필요시 주석 해제
 
                                 // 기타
                                 // .requestMatchers("/test/upload/**").permitAll()     // 파일 업로드 테스트용 API 경로 허용 (개발/테스트 목적)

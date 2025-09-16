@@ -35,6 +35,7 @@ public class CookieUtil {
                 .path("/")
                 .maxAge(0)
                 .sameSite("None")
+                .domain(".ticketmongo.store")
                 .build();
     }
 
