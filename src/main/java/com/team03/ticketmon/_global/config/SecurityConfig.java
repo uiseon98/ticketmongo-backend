@@ -1,6 +1,7 @@
 package com.team03.ticketmon._global.config;
 
 import com.team03.ticketmon.auth.Util.CookieUtil;
+import com.team03.ticketmon.auth.handler.CustomAuthenticationEntryPoint;
 import com.team03.ticketmon.auth.jwt.*;
 import com.team03.ticketmon.auth.oauth2.OAuth2LoginFailureHandler;
 import com.team03.ticketmon.auth.oauth2.OAuth2LoginSuccessHandler;
@@ -66,6 +67,7 @@ public class SecurityConfig {
     private final CorsProperties corsProperties;
     private final QueueRedisAdapter queueRedisAdapter;
     private final AppProperties appProperties;
+    private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
 
     /**
      * <b>AuthenticationManager 빈 설정</b> <br>
@@ -191,15 +193,13 @@ public class SecurityConfig {
 
                 // 인증/인가 실패(인증 실패(401), 권한 부족(403)) 시 반환되는 예외 응답 설정
                 .exceptionHandling(exception -> exception
-                        // 인증 실패 (401 Unauthorized) 시 처리
-                        .authenticationEntryPoint((request, response, authException) -> {
-                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);   // HTTP 401 상태 코드
-                            response.getWriter().write("Unauthorized: " + authException.getMessage());  // 응답 메시지
-                        })
+                        // ▼ 인증 실패(401) 시에는 우리가 만든 CustomAuthenticationEntryPoint를 사용하도록 지정
+                        .authenticationEntryPoint(customAuthenticationEntryPoint)
+                        // ▼ 인가 실패(403) 시에는 간단한 텍스트 응답 (이 부분은 원하시면 JSON 응답 핸들러를 따로 만들어 교체해도 됩니다)
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
-                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);   // HTTP 403 상태 코드
-                            response.getWriter().write("Access Denied: " + accessDeniedException.getMessage()); // 응답 메시지
-
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType("application/json;charset=UTF-8"); // JSON 타입 명시
+                            response.getWriter().write("{\"error\":\"Forbidden\", \"message\":\"" + accessDeniedException.getMessage() + "\"}");
                         })
                 );
 
