@@ -145,10 +145,9 @@ public class SecurityConfig {
 
                                 //------------특정 역할이 필요한 경로들 (hasRole())------------
                                 // 관리자 전용 경로 - ADMIN 역할만 접근 허용 (관리자 페이지 및 API)
-//                                .requestMatchers("/admin/**").hasRole("ADMIN")
-//                                .requestMatchers("/api/admin/seats/**").hasRole("ADMIN") -> 나중에 다시변경
-                                .requestMatchers("/admin/**").permitAll()
-                                .requestMatchers("/api/admin/seats/**").permitAll()
+                                .requestMatchers("/admin/**").hasRole("ADMIN")
+                                .requestMatchers("/api/admin/seats/**").hasRole("ADMIN")
+
 
                                 // 실제 판매자 기능 (콘서트 CRUD) - SELLER 역할만 접근 허용
                                 .requestMatchers("/api/seller/concerts/**").hasRole("SELLER")
@@ -186,12 +185,9 @@ public class SecurityConfig {
                         .failureHandler(oAuth2LoginFailureHandler()))
 
                 // Login Filter 적용
-                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, reissueService, cookieUtil),
-                        LoginFilter.class)
-                .addFilterBefore(new CustomLogoutFilter(jwtTokenProvider, refreshTokenService, cookieUtil),
-                        LogoutFilter.class)
-                .addFilterAt(new LoginFilter(authenticationManager(authenticationConfiguration), cookieUtil),
-                        UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new CustomLogoutFilter(jwtTokenProvider, refreshTokenService, cookieUtil), LogoutFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, reissueService, cookieUtil), UsernamePasswordAuthenticationFilter.class)
+                .addFilterAt(new LoginFilter(authenticationManager(authenticationConfiguration), cookieUtil), UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(new AccessKeyFilter(queueRedisAdapter), JwtAuthenticationFilter.class)
 
                 // 인증/인가 실패(인증 실패(401), 권한 부족(403)) 시 반환되는 예외 응답 설정
