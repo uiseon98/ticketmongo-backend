@@ -119,7 +119,7 @@ public class SecurityConfig {
                                 // 로그인/회원가입/토큰 갱신 등 인증 관련 API 및 페이지
                                 .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll() // 인증(로그인, 회원가입) 관련 API 경로 허용 (인증 불필요)
                                 .requestMatchers("/auth/**", "/api/auth/register/social").permitAll()
-                                .requestMatchers("/api/auth/me").authenticated()
+                                .requestMatchers("/api/auth/me").permitAll()
                                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // Swagger UI 및 API 문서
 
                                 // 콘서트 정보 조회 (목록, 검색, 필터링, 상세, AI 요약, 리뷰/기대평 목록) - 공개 API
