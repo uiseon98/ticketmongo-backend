@@ -32,6 +32,14 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+    hikari:
+      # 커넥션을 사용하기 전에 유효한지 1초 안에 확인
+      connection-test-query: "SELECT 1"
+      # 사용되지 않는 커넥션을 풀에서 제거하기까지 대기하는 시간 (10분)
+      idle-timeout: 600000
+      # 커넥션의 최대 수명 (30분). 이 시간이 지나면 새 커넥션으로 교체
+      max-lifetime: 1800000
   # JPA (Hibernate) 관련 설정
   jpa:
     hibernate:
