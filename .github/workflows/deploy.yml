@@ -72,7 +72,7 @@ jobs:
             docker pull ghcr.io/${{ github.repository }}:latest
 
             # Docker 컨테이너 실행 (프로필 지정은 Dockerfile에서 처리)
-            docker run -d --name ticketmongo-backend -p 80:8080 \
+            docker run -d --name ticketmongo-backend -p 80:8080 --restart unless-stopped \
               -e DB_URL="${{ secrets.DB_URL }}" \
               -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
               -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
