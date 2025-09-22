@@ -17,4 +17,5 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-Xms256m", "-Xmx448m", "-XX:MaxMetaspaceSize=96m", "-jar", "-Dspring.profiles.active=prod", "/app/app.jar"]
+ENTRYPOINT ["java", "-Xms256m", "-Xmx400m", "-XX:MaxMetaspaceSize=160m", "-jar", "-Dspring.profiles.active=prod", "/app/app.jar"]
+
